@@ -24,17 +24,18 @@ label{font-size:.85rem;color:#94a3b8}
 <h2>体重の推移</h2>
 <canvas id="chart" width="600" height="250" style="width:100%;border-radius:6px;background:rgba(0,0,0,.2)"></canvas>
 <div id="stats" style="display:flex;justify-content:space-around;margin-top:1rem;flex-wrap:wrap;gap:.5rem"></div>
-</div></main><script>
+</div></main><script type="module">
+import{validateWeight,upsertRecord,trimRecords,calcStats}from"./src/logic.js";
 function save(){
-  const wt=parseFloat(document.getElementById("wt").value);
+  const result=validateWeight(document.getElementById("wt").value);
   const dt=document.getElementById("dt").value||new Date().toISOString().slice(0,10);
-  if(!wt){alert("体重を入力してください");return;}
-  const d=JSON.parse(localStorage.getItem("weightLog")||"[]");
-  const existing=d.findIndex(r=>r.dt===dt);
-  if(existing>=0)d[existing].wt=wt;else d.push({dt,wt});
-  d.sort((a,b)=>a.dt.localeCompare(b.dt));
-  if(d.length>90)d.shift();
-  localStorage.setItem("weightLog",JSON.stringify(d));render();
+  if(!result.valid){alert(result.error);return;}
+  let d=JSON.parse(localStorage.getItem("weightLog")||"[]");
+  d=upsertRecord(d,dt,result.weight);
+  d=trimRecords(d,90);
+  localStorage.setItem("weightLog",JSON.stringify(d));
+  document.getElementById("wt").value="";
+  render();
 }
 function render(){
   const d=JSON.parse(localStorage.getItem("weightLog")||"[]");
@@ -43,7 +44,8 @@ function render(){
   const W=c.width,H=c.height,PAD=40;
   ctx.clearRect(0,0,W,H);
   const weights=d.map(r=>r.wt);
-  const min=Math.min(...weights)-1,max=Math.max(...weights)+1;
+  const stats=calcStats(weights);
+  const min=stats.min-1,max=stats.max+1;
   function py(w){return H-PAD-(w-min)/(max-min)*(H-PAD*2);}
   function px(i){return PAD+(i/(d.length-1||1))*(W-PAD*2);}
   ctx.strokeStyle="rgba(255,255,255,.05)";ctx.lineWidth=1;
@@ -55,14 +57,13 @@ function render(){
   [0,Math.floor(d.length/2),d.length-1].filter((v,i,a)=>a.indexOf(v)===i).forEach(i=>{
     if(i<d.length)ctx.fillText(d[i].dt.slice(5),px(i),H-5);
   });
-  const diff=weights[weights.length-1]-weights[0];
-  const avg=(weights.reduce((s,v)=>s+v,0)/weights.length).toFixed(1);
   document.getElementById("stats").innerHTML=[
-    {label:"最新",val:weights[weights.length-1]+"kg"},
-    {label:"最小",val:Math.min(...weights)+"kg"},
-    {label:"最大",val:Math.max(...weights)+"kg"},
-    {label:"変化",val:(diff>=0?"+":"")+diff.toFixed(1)+"kg"},
-    {label:"平均",val:avg+"kg"},
+    {label:"最新",val:stats.latest+"kg"},
+    {label:"最小",val:stats.min+"kg"},
+    {label:"最大",val:stats.max+"kg"},
+    {label:"変化",val:(stats.change>=0?"+":"")+stats.change.toFixed(1)+"kg"},
+    {label:"平均",val:stats.avg+"kg"},
   ].map(s=>'<div style="text-align:center;padding:.5rem 1rem;background:rgba(255,255,255,.03);border-radius:6px;font-size:.85rem"><div style="color:#94a3b8">'+s.label+'</div><div style="font-weight:700;color:#6366f1">'+s.val+'</div></div>').join("");
 }
+window.save=save;
 render();</script></body></html>

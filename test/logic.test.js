@@ -21,8 +21,7 @@ describe("validateWeight", () => {
     expect(result.valid).toBe(false);
   });
 
-  it("rejects zero weight (current behavior — potential bug)", () => {
-    // parseFloat("0") is falsy, so the current logic rejects it
+  it("rejects zero weight", () => {
     const result = validateWeight("0");
     expect(result.valid).toBe(false);
   });
@@ -32,11 +31,17 @@ describe("validateWeight", () => {
     expect(result.valid).toBe(false);
   });
 
-  it("parses weight from string with trailing text like '65abc'", () => {
-    // parseFloat("65abc") returns 65 — this is silently accepted
+  it("rejects string with trailing text like '65abc'", () => {
     const result = validateWeight("65abc");
-    expect(result.valid).toBe(true);
-    expect(result.weight).toBe(65);
+    expect(result.valid).toBe(false);
+  });
+
+  it("accepts weight with decimal point", () => {
+    expect(validateWeight("0.5")).toEqual({ valid: true, weight: 0.5 });
+  });
+
+  it("rejects whitespace-only input", () => {
+    expect(validateWeight("  ")).toEqual({ valid: false, error: "体重を入力してください" });
   });
 });
 

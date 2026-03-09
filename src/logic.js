@@ -8,11 +8,12 @@
  * @returns {{ valid: boolean, weight?: number, error?: string }}
  */
 export function validateWeight(value) {
-  const wt = parseFloat(value);
-  if (!wt || isNaN(wt)) {
+  const str = String(value).trim();
+  if (!str || !/^\d+(\.\d+)?$/.test(str)) {
     return { valid: false, error: "体重を入力してください" };
   }
-  if (wt < 0) {
+  const wt = parseFloat(str);
+  if (wt <= 0) {
     return { valid: false, error: "体重は正の値を入力してください" };
   }
   return { valid: true, weight: wt };
