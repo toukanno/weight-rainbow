@@ -51,6 +51,7 @@ import {
   calcGoalMilestones,
   calcRecordingTimeStats,
   calcConsistencyStreak,
+  calcDataHealth,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -262,6 +263,10 @@ describe("calcGoalPrediction", () => {
     expect(calcGoalPrediction([], 60)).toBeNull();
   });
 
+  it("returns null without valid goal", () => {
+    expect(calcGoalPrediction([{ dt: "2025-01-01", wt: 70 }], NaN)).toBeNull();
+  });
+
   it("returns achieved when already at goal", () => {
     const today = new Date().toISOString().slice(0, 10);
     const records = [{ dt: today, wt: 58 }];
@@ -418,6 +423,22 @@ describe("buildCalendarMonth", () => {
     const cal = buildCalendarMonth([], 2026, 2);
     expect(cal.recordCount).toBe(0);
     expect(cal.days.every((d) => d.wt === null)).toBe(true);
+  });
+
+  it("returns null for invalid year/month", () => {
+    expect(buildCalendarMonth([], NaN, 0)).toBeNull();
+    expect(buildCalendarMonth([], 2025, NaN)).toBeNull();
+  });
+
+  it("returns null intensity for days without records", () => {
+    const records = [
+      { dt: "2025-03-01", wt: 60 },
+      { dt: "2025-03-15", wt: 70 },
+    ];
+    const result = buildCalendarMonth(records, 2025, 2);
+    expect(result.days[0].intensity).toBe(0);
+    expect(result.days[14].intensity).toBe(1);
+    expect(result.days[1].intensity).toBeNull();
   });
 });
 
@@ -654,6 +675,16 @@ describe("filterRecords", () => {
     expect(result).toHaveLength(1);
     expect(result[0].dt).toBe("2026-02-01");
   });
+
+  it("handles records with null note", () => {
+    const recordsWithNull = [
+      { dt: "2025-01-01", wt: 70, note: "morning", source: "manual" },
+      { dt: "2025-01-02", wt: 68.5, note: null, source: "photo" },
+    ];
+    expect(filterRecords(recordsWithNull, "morning")).toHaveLength(1);
+    expect(filterRecords(recordsWithNull, "photo")).toHaveLength(1);
+    expect(filterRecords(recordsWithNull, "")).toEqual(recordsWithNull);
+  });
 });
 
 describe("calcBMIZoneWeights", () => {
@@ -763,6 +794,7 @@ describe("toggleNoteTag", () => {
     expect(result.length).toBeLessThanOrEqual(100);
   });
 });
+
 
 describe("NOTE_TAGS", () => {
   it("has all expected tags", () => {
@@ -958,128 +990,7 @@ describe("calcDayOfWeekAvg", () => {
   });
 });
 
-describe("buildCalendarMonth", () => {
-  it("builds correct structure for a month", () => {
-    const records = [
-      { dt: "2025-01-05", wt: 70 },
-      { dt: "2025-01-15", wt: 68 },
-    ];
-    const result = buildCalendarMonth(records, 2025, 0); // January
-    expect(result.year).toBe(2025);
-    expect(result.month).toBe(0);
-    expect(result.daysInMonth).toBe(31);
-    expect(result.days).toHaveLength(31);
-    expect(result.recordCount).toBe(2);
-    expect(result.days[4].wt).toBe(70); // Jan 5
-    expect(result.days[14].wt).toBe(68); // Jan 15
-    expect(result.days[0].wt).toBeNull(); // Jan 1 - no record
-  });
 
-  it("returns null for invalid year/month", () => {
-    expect(buildCalendarMonth([], NaN, 0)).toBeNull();
-    expect(buildCalendarMonth([], 2025, NaN)).toBeNull();
-  });
-
-  it("computes intensity based on weight range", () => {
-    const records = [
-      { dt: "2025-03-01", wt: 60 },
-      { dt: "2025-03-15", wt: 70 },
-    ];
-    const result = buildCalendarMonth(records, 2025, 2); // March
-    expect(result.days[0].intensity).toBe(0); // min weight
-    expect(result.days[14].intensity).toBe(1); // max weight
-    expect(result.days[1].intensity).toBeNull(); // no record
-  });
-});
-
-describe("calcGoalPrediction", () => {
-  it("returns null without records", () => {
-    expect(calcGoalPrediction([], 60)).toBeNull();
-  });
-
-  it("returns null without valid goal", () => {
-    expect(calcGoalPrediction([{ dt: "2025-01-01", wt: 70 }], NaN)).toBeNull();
-  });
-
-  it("returns achieved if already at goal", () => {
-    const records = [{ dt: "2025-01-01", wt: 60 }];
-    const result = calcGoalPrediction(records, 65);
-    expect(result.achieved).toBe(true);
-  });
-});
-
-describe("toggleNoteTag", () => {
-  it("adds a tag to empty note", () => {
-    expect(toggleNoteTag("", "exercise")).toBe("#exercise");
-  });
-
-  it("adds a tag to existing note", () => {
-    expect(toggleNoteTag("morning run", "exercise")).toBe("morning run #exercise");
-  });
-
-  it("removes a tag when already present", () => {
-    expect(toggleNoteTag("#exercise #diet", "exercise")).toBe("#diet");
-  });
-
-  it("truncates to 100 chars", () => {
-    const longNote = "a".repeat(95);
-    const result = toggleNoteTag(longNote, "exercise");
-    expect(result.length).toBeLessThanOrEqual(100);
-  });
-});
-
-describe("filterRecords", () => {
-  const records = [
-    { dt: "2025-01-01", wt: 70, note: "morning", source: "manual" },
-    { dt: "2025-01-02", wt: 68.5, note: "after lunch", source: "voice" },
-    { dt: "2025-01-03", wt: 69, note: null, source: "photo" },
-  ];
-
-  it("returns all records with empty query", () => {
-    expect(filterRecords(records, "")).toEqual(records);
-    expect(filterRecords(records, null)).toEqual(records);
-  });
-
-  it("filters by date", () => {
-    expect(filterRecords(records, "01-02")).toHaveLength(1);
-  });
-
-  it("filters by note content", () => {
-    expect(filterRecords(records, "morning")).toHaveLength(1);
-  });
-
-  it("filters by source", () => {
-    expect(filterRecords(records, "voice")).toHaveLength(1);
-  });
-
-  it("filters by weight", () => {
-    expect(filterRecords(records, "68.5")).toHaveLength(1);
-  });
-});
-
-describe("calcMonthlyStats", () => {
-  it("returns empty for no records", () => {
-    expect(calcMonthlyStats([])).toEqual([]);
-  });
-
-  it("groups by month and calculates stats", () => {
-    const records = [
-      { dt: "2025-01-05", wt: 70 },
-      { dt: "2025-01-15", wt: 68 },
-      { dt: "2025-02-01", wt: 67 },
-    ];
-    const result = calcMonthlyStats(records);
-    expect(result).toHaveLength(2);
-    // Most recent month first
-    expect(result[0].month).toBe("2025-02");
-    expect(result[0].count).toBe(1);
-    expect(result[1].month).toBe("2025-01");
-    expect(result[1].count).toBe(2);
-    expect(result[1].avg).toBe(69);
-    expect(result[1].min).toBe(68);
-    expect(result[1].max).toBe(70);
-  });
-});
 
 describe("calcWeightStability", () => {
   it("returns null for fewer than 3 records", () => {
@@ -1322,6 +1233,30 @@ describe("calcLongestStreak", () => {
     ];
     expect(calcLongestStreak(records)).toBe(4);
   });
+
+  it("finds longest streak with gaps favoring longer run", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70 },
+      { dt: "2025-01-03", wt: 70 },
+      // gap
+      { dt: "2025-01-10", wt: 70 },
+      { dt: "2025-01-11", wt: 70 },
+      { dt: "2025-01-12", wt: 70 },
+      { dt: "2025-01-13", wt: 70 },
+      { dt: "2025-01-14", wt: 70 },
+    ];
+    expect(calcLongestStreak(records)).toBe(5);
+  });
+
+  it("handles duplicate dates", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-01", wt: 71 },
+      { dt: "2025-01-02", wt: 69 },
+    ];
+    expect(calcLongestStreak(records)).toBe(2);
+  });
 });
 
 describe("calcTrendForecast", () => {
@@ -1347,6 +1282,7 @@ describe("calcTrendForecast", () => {
     expect(result).not.toBeNull();
     expect(result.slope).toBeLessThan(0);
     expect(result.forecast.length).toBeGreaterThan(1);
+    expect(result.forecast[0].dayOffset).toBe(0);
     // Forecast weights should decrease
     expect(result.forecast[result.forecast.length - 1].weight).toBeLessThan(result.forecast[0].weight);
   });
@@ -1626,71 +1562,6 @@ describe("calcWeightPercentile", () => {
   });
 });
 
-describe("calcLongestStreak", () => {
-  it("returns 0 for empty records", () => {
-    expect(calcLongestStreak([])).toBe(0);
-  });
-
-  it("returns 1 for a single record", () => {
-    expect(calcLongestStreak([{ dt: "2025-01-01", wt: 70 }])).toBe(1);
-  });
-
-  it("finds longest streak with gaps", () => {
-    const records = [
-      { dt: "2025-01-01", wt: 70 },
-      { dt: "2025-01-02", wt: 70 },
-      { dt: "2025-01-03", wt: 70 },
-      // gap
-      { dt: "2025-01-10", wt: 70 },
-      { dt: "2025-01-11", wt: 70 },
-      { dt: "2025-01-12", wt: 70 },
-      { dt: "2025-01-13", wt: 70 },
-      { dt: "2025-01-14", wt: 70 },
-    ];
-    expect(calcLongestStreak(records)).toBe(5);
-  });
-
-  it("handles duplicate dates", () => {
-    const records = [
-      { dt: "2025-01-01", wt: 70 },
-      { dt: "2025-01-01", wt: 71 },
-      { dt: "2025-01-02", wt: 69 },
-    ];
-    expect(calcLongestStreak(records)).toBe(2);
-  });
-});
-
-describe("calcTrendForecast", () => {
-  it("returns null for fewer than 7 records", () => {
-    const records = Array.from({ length: 6 }, (_, i) => ({
-      dt: `2025-03-${String(i + 1).padStart(2, "0")}`,
-      wt: 70 - i * 0.1,
-    }));
-    expect(calcTrendForecast(records)).toBeNull();
-  });
-
-  it("produces forecast points for downward trend", () => {
-    // Use dates relative to today so they fall within the 14-day filter
-    const today = new Date();
-    const records = Array.from({ length: 14 }, (_, i) => {
-      const d = new Date(today);
-      d.setDate(d.getDate() - 13 + i);
-      const dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      return { dt, wt: 75 - i * 0.2 };
-    });
-    const result = calcTrendForecast(records);
-    expect(result).not.toBeNull();
-    expect(result.slope).toBeLessThan(0);
-    expect(result.forecast.length).toBeGreaterThan(1);
-    expect(result.forecast[0].dayOffset).toBe(0);
-  });
-});
-
-describe("calcDaysSinceLastRecord", () => {
-  it("returns null for empty records", () => {
-    expect(calcDaysSinceLastRecord([])).toBeNull();
-  });
-});
 
 describe("calcWeightComparison edge cases", () => {
   it("returns null when all records share the same date as latest", () => {
@@ -2213,5 +2084,76 @@ describe("calcConsistencyStreak", () => {
     ];
     expect(calcConsistencyStreak(records, 0.5).streak).toBe(1);
     expect(calcConsistencyStreak(records, 1.0).streak).toBe(2);
+  });
+});
+
+describe("calcDataHealth", () => {
+  it("returns null for fewer than 2 records", () => {
+    expect(calcDataHealth([])).toBeNull();
+    expect(calcDataHealth([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns perfect score for clean data", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bmi: 24 },
+      { dt: "2025-01-02", wt: 70.2, bmi: 24.1 },
+      { dt: "2025-01-03", wt: 69.8, bmi: 23.9 },
+    ];
+    const result = calcDataHealth(records);
+    expect(result.score).toBe(100);
+    expect(result.issues).toHaveLength(0);
+    expect(result.total).toBe(3);
+  });
+
+  it("detects large gaps (>7 days)", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bmi: 24 },
+      { dt: "2025-01-15", wt: 70.5, bmi: 24.2 },
+    ];
+    const result = calcDataHealth(records);
+    expect(result.issues.some((i) => i.type === "gap")).toBe(true);
+    expect(result.issues.find((i) => i.type === "gap").days).toBe(14);
+  });
+
+  it("detects outliers (>3kg from neighbors)", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bmi: 24 },
+      { dt: "2025-01-02", wt: 80, bmi: 27.5 },
+      { dt: "2025-01-03", wt: 70.2, bmi: 24.1 },
+    ];
+    const result = calcDataHealth(records);
+    expect(result.issues.some((i) => i.type === "outlier")).toBe(true);
+    const outlier = result.issues.find((i) => i.type === "outlier");
+    expect(outlier.date).toBe("2025-01-02");
+    expect(outlier.weight).toBe(80);
+  });
+
+  it("detects missing BMI when all records lack it", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70.5 },
+    ];
+    const result = calcDataHealth(records);
+    expect(result.issues.some((i) => i.type === "noBMI")).toBe(true);
+  });
+
+  it("does not flag noBMI when some records have BMI", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bmi: 24 },
+      { dt: "2025-01-02", wt: 70.5 },
+    ];
+    const result = calcDataHealth(records);
+    expect(result.issues.some((i) => i.type === "noBMI")).toBe(false);
+  });
+
+  it("reduces score per issue", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-20", wt: 80 },
+      { dt: "2025-02-10", wt: 70.5 },
+    ];
+    const result = calcDataHealth(records);
+    expect(result.score).toBeLessThan(100);
+    expect(result.issues.length).toBeGreaterThanOrEqual(2);
   });
 });

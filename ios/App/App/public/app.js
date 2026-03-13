@@ -1557,6 +1557,31 @@ function calcConsistencyStreak(records, tolerance = 0.5) {
   }
   return { streak, best, tolerance, latest };
 }
+function calcDataHealth(records) {
+  if (records.length < 2) return null;
+  const issues = [];
+  for (let i = 1; i < records.length; i++) {
+    const prev = /* @__PURE__ */ new Date(records[i - 1].dt + "T00:00:00");
+    const curr = /* @__PURE__ */ new Date(records[i].dt + "T00:00:00");
+    const gap = Math.round((curr - prev) / (1e3 * 60 * 60 * 24));
+    if (gap > 7) {
+      issues.push({ type: "gap", days: gap, from: records[i - 1].dt, to: records[i].dt });
+    }
+  }
+  for (let i = 1; i < records.length - 1; i++) {
+    const avg = (records[i - 1].wt + records[i + 1].wt) / 2;
+    const diff = Math.abs(records[i].wt - avg);
+    if (diff > 3) {
+      issues.push({ type: "outlier", date: records[i].dt, weight: records[i].wt, expected: Math.round(avg * 10) / 10 });
+    }
+  }
+  const missingBMI = records.filter((r) => r.bmi == null).length;
+  if (missingBMI > 0 && missingBMI === records.length) {
+    issues.push({ type: "noBMI", count: missingBMI });
+  }
+  const score = Math.max(0, 100 - issues.length * 15);
+  return { score, issues, total: records.length };
+}
 function csvEscape(val) {
   const str = String(val ?? "");
   if (/[,"\r\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
@@ -1773,6 +1798,12 @@ var translations = {
     "consistency.great": "\u5B89\u5B9A\u3092\u7DAD\u6301\u3057\u3066\u3044\u307E\u3059\uFF01",
     "entry.duplicate.warn": "\u26A0\uFE0F \u3053\u306E\u65E5\u4ED8\u306B\u306F\u65E2\u306B\u8A18\u9332\u304C\u3042\u308A\u307E\u3059:",
     "entry.duplicate.overwrite": "\u4FDD\u5B58\u3059\u308B\u3068\u4E0A\u66F8\u304D\u3055\u308C\u307E\u3059",
+    "health.title": "\u30C7\u30FC\u30BF\u54C1\u8CEA",
+    "health.score": "\u30B9\u30B3\u30A2: {score}/100",
+    "health.perfect": "\u30C7\u30FC\u30BF\u54C1\u8CEA\u306F\u5B8C\u74A7\u3067\u3059\uFF01",
+    "health.gap": "{from} \u301C {to} \u306B{days}\u65E5\u9593\u306E\u7A7A\u767D\u304C\u3042\u308A\u307E\u3059",
+    "health.outlier": "{date}\u306E{weight}kg\u306F\u5916\u308C\u5024\u306E\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\uFF08\u524D\u5F8C\u5E73\u5747: {expected}kg\uFF09",
+    "health.noBMI": "BMI\u304C\u8A08\u7B97\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002\u8EAB\u9577\u3092\u8A2D\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
     "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01\uFF08-{diff}kg\uFF09",
     "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
@@ -2172,6 +2203,12 @@ var translations = {
     "consistency.great": "Maintaining consistency!",
     "entry.duplicate.warn": "\u26A0\uFE0F A record already exists for this date:",
     "entry.duplicate.overwrite": "Saving will overwrite the existing record",
+    "health.title": "Data Quality",
+    "health.score": "Score: {score}/100",
+    "health.perfect": "Your data quality is perfect!",
+    "health.gap": "{days}-day gap between {from} and {to}",
+    "health.outlier": "{weight}kg on {date} may be an outlier (neighbor avg: {expected}kg)",
+    "health.noBMI": "BMI not calculated \u2014 please set your height",
     "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
@@ -23467,6 +23504,7 @@ function render() {
             </div>
             ${renderSourceBreakdown()}
             ${renderRecordingTime()}
+            ${renderDataHealth()}
             <div class="export-grid">
               <button type="button" class="btn secondary" data-action="export-excel">\u{1F4CA} ${t("export.excel")}</button>
               <button type="button" class="btn secondary" data-action="export-csv">\u{1F4C4} ${t("export.csv")}</button>
@@ -23833,6 +23871,29 @@ function renderSourceBreakdown() {
     const pct = Math.round(count / state.records.length * 100);
     return `<span class="source-chip"><span class="source-icon">${icon}</span> ${t("entry.source." + src)} <strong>${count}</strong> (${pct}%)</span>`;
   }).join("")}
+      </div>
+    </div>
+  `;
+}
+function renderDataHealth() {
+  const health = calcDataHealth(state.records);
+  if (!health) return "";
+  const level = health.score >= 80 ? "high" : health.score >= 50 ? "medium" : "low";
+  const issueHtml = health.issues.length === 0 ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("health.perfect")}</div>` : health.issues.slice(0, 3).map((issue) => {
+    if (issue.type === "gap") return `<div class="health-issue">\u{1F4C5} ${t("health.gap").replace("{days}", issue.days).replace("{from}", issue.from).replace("{to}", issue.to)}</div>`;
+    if (issue.type === "outlier") return `<div class="health-issue">\u{1F4CA} ${t("health.outlier").replace("{date}", issue.date).replace("{weight}", issue.weight).replace("{expected}", issue.expected)}</div>`;
+    if (issue.type === "noBMI") return `<div class="health-issue">\u{1F4CF} ${t("health.noBMI")}</div>`;
+    return "";
+  }).join("");
+  return `
+    <div class="health-section">
+      <div class="helper">${t("health.title")}</div>
+      <div class="health-display">
+        <div class="health-score ${level}">${health.score}</div>
+        <div class="health-details">
+          <div class="helper hint-small">${t("health.score").replace("{score}", health.score)}</div>
+          ${issueHtml}
+        </div>
       </div>
     </div>
   `;
