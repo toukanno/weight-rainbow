@@ -191,6 +191,10 @@ function formatBMI(bmi) {
   return bmi ? bmi.toFixed(1) : t("chart.none");
 }
 
+function formatNote(note) {
+  return escapeAttr(note).replace(/#(\w+)/g, '<span class="note-hashtag">#$1</span>');
+}
+
 function getMotivationalMessage(streak, trend, records, goalProgress) {
   if (records.length === 1) return t("motivation.firstRecord");
   if (goalProgress && goalProgress.remaining > 0 && goalProgress.remaining <= 2) return t("motivation.goalClose");
@@ -912,10 +916,10 @@ function renderRecord(record, prevRecord, badge) {
         <div class="tag tag-${record.source}">${t(`entry.source.${record.source}`)}${badgeHtml}</div>
         <div>
           <div class="record-weight">${formatWeight(record.wt)} ${diffHtml}</div>
-          <div class="helper">${escapeAttr(record.dt)}${record.imageName ? ` / ${escapeAttr(record.imageName)}` : ""}</div>
+          <div class="helper">${escapeAttr(record.dt)} (${t("day." + new Date(record.dt + "T00:00:00").getDay())})${record.imageName ? ` / ${escapeAttr(record.imageName)}` : ""}</div>
         </div>
         <div class="helper">${t("bmi.title")}: ${bmiText}${record.bf ? ` / ${t("bodyFat.label")}: ${Number(record.bf).toFixed(1)}%` : ""}</div>
-        ${record.note ? `<div class="helper record-note">📝 ${escapeAttr(record.note)}</div>` : ""}
+        ${record.note ? `<div class="helper record-note">📝 ${formatNote(record.note)}</div>` : ""}
       </div>
       <button type="button" class="record-delete" data-delete-date="${escapeAttr(record.dt)}" aria-label="${t("records.delete")} ${escapeAttr(record.dt)} ${record.wt.toFixed(1)}kg">${t("records.delete")}</button>
     </div>
