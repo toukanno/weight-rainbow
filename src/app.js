@@ -2359,7 +2359,11 @@ function handlePhotoZoom() {
 }
 
 
-window.addEventListener("resize", () => drawChart());
+let resizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(drawChart, 150);
+});
 window.addEventListener("beforeunload", () => {
   if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
 });
