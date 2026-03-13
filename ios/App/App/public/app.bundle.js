@@ -3765,6 +3765,61 @@ function calcRecentWeightBars(records, goalWeight = 0, count = 7) {
   const goalPct = goalWeight > 0 ? +((goalWeight - min) / range * 100).toFixed(1) : null;
   return { bars, min, max, goalPct };
 }
+function calcWeightAnniversary(records) {
+  if (!records || records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const startDate = sorted[0].dt;
+  const startWeight = sorted[0].wt;
+  const currentWeight = sorted[sorted.length - 1].wt;
+  const totalChange = +(currentWeight - startWeight).toFixed(1);
+  const start = /* @__PURE__ */ new Date(startDate + "T00:00:00");
+  const latest = /* @__PURE__ */ new Date(sorted[sorted.length - 1].dt + "T00:00:00");
+  const trackingDays = Math.round((latest - start) / 864e5);
+  const milestoneDefs = [
+    { label: "1week", days: 7 },
+    { label: "1month", days: 30 },
+    { label: "3months", days: 90 },
+    { label: "6months", days: 180 },
+    { label: "1year", days: 365 },
+    { label: "2years", days: 730 }
+  ];
+  const milestones = milestoneDefs.map((m) => {
+    const reached = trackingDays >= m.days;
+    let weightAtMilestone = null;
+    let changeAtMilestone = null;
+    if (reached) {
+      const targetDate = new Date(start);
+      targetDate.setDate(targetDate.getDate() + m.days);
+      const targetStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, "0")}-${String(targetDate.getDate()).padStart(2, "0")}`;
+      let closest = sorted[0];
+      let closestDiff = Infinity;
+      for (const r of sorted) {
+        const diff = Math.abs(/* @__PURE__ */ new Date(r.dt + "T00:00:00") - targetDate);
+        if (diff < closestDiff) {
+          closestDiff = diff;
+          closest = r;
+        }
+      }
+      weightAtMilestone = closest.wt;
+      changeAtMilestone = +(closest.wt - startWeight).toFixed(1);
+    }
+    return {
+      label: m.label,
+      days: m.days,
+      reached,
+      weightAtMilestone,
+      changeAtMilestone
+    };
+  });
+  return {
+    trackingDays,
+    startDate,
+    startWeight,
+    currentWeight,
+    totalChange,
+    milestones
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -4665,7 +4720,19 @@ var translations = {
     "sfreeze.days": "\u65E5",
     "sfreeze.info": "7\u65E5\u9023\u7D9A\u8A18\u9332\u30671\u56DE\u5206\u306E\u30D5\u30EA\u30FC\u30BA\u3092\u7372\u5F97",
     "rbars.title": "\u6700\u8FD1\u306E\u4F53\u91CD\u63A8\u79FB",
-    "rbars.goal": "\u76EE\u6A19"
+    "rbars.goal": "\u76EE\u6A19",
+    "anniv.title": "\u8A18\u9332\u306E\u6B69\u307F",
+    "anniv.tracking": "\u8A18\u9332\u958B\u59CB\u304B\u3089 {days}\u65E5\u76EE",
+    "anniv.start": "\u958B\u59CB\u6642",
+    "anniv.total": "\u5408\u8A08\u5909\u5316",
+    "anniv.1week": "1\u9031\u9593",
+    "anniv.1month": "1\u30F6\u6708",
+    "anniv.3months": "3\u30F6\u6708",
+    "anniv.6months": "\u534A\u5E74",
+    "anniv.1year": "1\u5E74",
+    "anniv.2years": "2\u5E74",
+    "anniv.reached": "\u9054\u6210",
+    "anniv.upcoming": "\u307E\u3082\u306A\u304F"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5564,7 +5631,19 @@ var translations = {
     "sfreeze.days": "days",
     "sfreeze.info": "Earn 1 freeze for every 7 consecutive days",
     "rbars.title": "Recent Weight Trend",
-    "rbars.goal": "Goal"
+    "rbars.goal": "Goal",
+    "anniv.title": "Your Journey",
+    "anniv.tracking": "Day {days} of tracking",
+    "anniv.start": "Start",
+    "anniv.total": "Total change",
+    "anniv.1week": "1 Week",
+    "anniv.1month": "1 Month",
+    "anniv.3months": "3 Months",
+    "anniv.6months": "6 Months",
+    "anniv.1year": "1 Year",
+    "anniv.2years": "2 Years",
+    "anniv.reached": "Reached",
+    "anniv.upcoming": "Upcoming"
   }
 };
 function createTranslator(language) {
@@ -26521,7 +26600,7 @@ function render() {
                 </div>
                 <div class="field">
                   <label for="recordDate">${t("entry.date")}</label>
-                  <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" min="2000-01-01" max="${todayLocal()}" />
+                  <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" min="2000-01-01" max="${todayLocal()}" autocomplete="off" />
                   <div class="date-shortcuts">
                     <button type="button" class="date-shortcut" data-date-shortcut="today">${t("diff.today")}</button>
                     <button type="button" class="date-shortcut" data-date-shortcut="yesterday">${t("diff.yesterday")}</button>
@@ -26719,6 +26798,7 @@ function render() {
             ${renderMonthPhaseAvg()}
             ${renderStreakFreeze()}
             ${renderRecentWeightBars()}
+            ${renderWeightAnniversary()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -28633,6 +28713,34 @@ function renderRecentWeightBars() {
         ${goalLine}
         ${barsHtml}
       </div>
+    </div>
+  `;
+}
+function renderWeightAnniversary() {
+  const data = calcWeightAnniversary(state.records);
+  if (!data || data.trackingDays < 7) return "";
+  const changeSign = data.totalChange > 0 ? "+" : "";
+  const changeCls = data.totalChange < 0 ? "av-loss" : data.totalChange > 0 ? "av-gain" : "";
+  const milestoneHtml = data.milestones.map((m) => {
+    if (!m.reached && data.trackingDays < m.days * 0.8) return "";
+    const label = t(`anniv.${m.label}`);
+    if (m.reached) {
+      const mChangeSign = m.changeAtMilestone > 0 ? "+" : "";
+      const mCls = m.changeAtMilestone < 0 ? "av-loss" : m.changeAtMilestone > 0 ? "av-gain" : "";
+      return `<div class="av-milestone av-done"><span class="av-ms-label">${label}</span><span class="av-ms-val ${mCls}">${mChangeSign}${m.changeAtMilestone}kg</span></div>`;
+    }
+    const daysLeft = m.days - data.trackingDays;
+    return `<div class="av-milestone av-pending"><span class="av-ms-label">${label}</span><span class="av-ms-soon">${t("anniv.upcoming")} (${daysLeft}${t("sfreeze.days")})</span></div>`;
+  }).filter(Boolean).join("");
+  return `
+    <div class="av-section">
+      <div class="helper">${t("anniv.title")}</div>
+      <div class="av-header">${t("anniv.tracking").replace("{days}", data.trackingDays)}</div>
+      <div class="av-summary">
+        <span>${t("anniv.start")}: ${data.startWeight.toFixed(1)}kg</span>
+        <span class="${changeCls}">${t("anniv.total")}: ${changeSign}${data.totalChange}kg</span>
+      </div>
+      <div class="av-milestones">${milestoneHtml}</div>
     </div>
   `;
 }

@@ -120,6 +120,7 @@ import {
   calcMonthPhaseAvg,
   calcStreakFreezeInfo,
   calcRecentWeightBars,
+  calcWeightAnniversary,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -610,7 +611,7 @@ function render() {
                 </div>
                 <div class="field">
                   <label for="recordDate">${t("entry.date")}</label>
-                  <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" min="2000-01-01" max="${todayLocal()}" />
+                  <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" min="2000-01-01" max="${todayLocal()}" autocomplete="off" />
                   <div class="date-shortcuts">
                     <button type="button" class="date-shortcut" data-date-shortcut="today">${t("diff.today")}</button>
                     <button type="button" class="date-shortcut" data-date-shortcut="yesterday">${t("diff.yesterday")}</button>
@@ -818,6 +819,7 @@ function render() {
             ${renderMonthPhaseAvg()}
             ${renderStreakFreeze()}
             ${renderRecentWeightBars()}
+            ${renderWeightAnniversary()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -2884,6 +2886,38 @@ function renderRecentWeightBars() {
         ${goalLine}
         ${barsHtml}
       </div>
+    </div>
+  `;
+}
+
+function renderWeightAnniversary() {
+  const data = calcWeightAnniversary(state.records);
+  if (!data || data.trackingDays < 7) return "";
+
+  const changeSign = data.totalChange > 0 ? "+" : "";
+  const changeCls = data.totalChange < 0 ? "av-loss" : data.totalChange > 0 ? "av-gain" : "";
+
+  const milestoneHtml = data.milestones.map((m) => {
+    if (!m.reached && data.trackingDays < m.days * 0.8) return "";
+    const label = t(`anniv.${m.label}`);
+    if (m.reached) {
+      const mChangeSign = m.changeAtMilestone > 0 ? "+" : "";
+      const mCls = m.changeAtMilestone < 0 ? "av-loss" : m.changeAtMilestone > 0 ? "av-gain" : "";
+      return `<div class="av-milestone av-done"><span class="av-ms-label">${label}</span><span class="av-ms-val ${mCls}">${mChangeSign}${m.changeAtMilestone}kg</span></div>`;
+    }
+    const daysLeft = m.days - data.trackingDays;
+    return `<div class="av-milestone av-pending"><span class="av-ms-label">${label}</span><span class="av-ms-soon">${t("anniv.upcoming")} (${daysLeft}${t("sfreeze.days")})</span></div>`;
+  }).filter(Boolean).join("");
+
+  return `
+    <div class="av-section">
+      <div class="helper">${t("anniv.title")}</div>
+      <div class="av-header">${t("anniv.tracking").replace("{days}", data.trackingDays)}</div>
+      <div class="av-summary">
+        <span>${t("anniv.start")}: ${data.startWeight.toFixed(1)}kg</span>
+        <span class="${changeCls}">${t("anniv.total")}: ${changeSign}${data.totalChange}kg</span>
+      </div>
+      <div class="av-milestones">${milestoneHtml}</div>
     </div>
   `;
 }

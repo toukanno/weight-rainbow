@@ -11,6 +11,10 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./assets/icon.svg" />
+    <meta property="og:title" content="Rainbow Weight Log" />
+    <meta property="og:description" content="Track your weight with photo, voice, or manual input. Local-first, privacy-focused." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="./assets/icon.svg" />
     <title>レインボー体重管理</title>
     <style>
       :root {
@@ -3185,6 +3189,40 @@
         color: var(--ok);
         font-weight: 600;
       }
+
+      .av-section { margin-top: 14px; }
+      .av-header {
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin: 6px 0;
+      }
+      .av-summary {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        margin-bottom: 8px;
+      }
+      .av-loss { color: var(--ok); }
+      .av-gain { color: var(--danger); }
+      .av-milestones {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .av-milestone {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-size: 0.78rem;
+        min-width: 70px;
+      }
+      .av-done { background: color-mix(in srgb, var(--ok) 12%, transparent); }
+      .av-pending { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+      .av-ms-label { font-weight: 600; font-size: 0.72rem; color: var(--muted); }
+      .av-ms-val { font-weight: 700; }
+      .av-ms-soon { font-size: 0.68rem; color: var(--muted); font-style: italic; }
 
       .wc-section { margin-top: 14px; }
       .wc-header, .wc-row {
