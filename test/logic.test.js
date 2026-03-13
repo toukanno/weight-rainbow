@@ -117,6 +117,8 @@ import {
   calcMonthPhaseAvg,
   calcStreakFreezeInfo,
   calcRecentWeightBars,
+  calcWeightAnniversary,
+  calcDailyChangeDist,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -8782,5 +8784,116 @@ describe("calcRecentWeightBars", () => {
     const result = calcRecentWeightBars(records, 0, 7);
     expect(result.bars[1].change).toBe(-0.5);
     expect(result.bars[2].change).toBe(0.7);
+  });
+});
+
+describe("calcWeightAnniversary", () => {
+  it("returns null for fewer than 2 records", () => {
+    expect(calcWeightAnniversary([])).toBeNull();
+    expect(calcWeightAnniversary(null)).toBeNull();
+    expect(calcWeightAnniversary([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("calculates tracking days and total change", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-01-15", wt: 73.5 },
+    ];
+    const result = calcWeightAnniversary(records);
+    expect(result.trackingDays).toBe(14);
+    expect(result.startWeight).toBe(75);
+    expect(result.currentWeight).toBe(73.5);
+    expect(result.totalChange).toBe(-1.5);
+  });
+
+  it("marks milestones as reached or not", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-02-15", wt: 73 },
+    ];
+    const result = calcWeightAnniversary(records);
+    const weekMs = result.milestones.find((m) => m.label === "1week");
+    const monthMs = result.milestones.find((m) => m.label === "1month");
+    const yearMs = result.milestones.find((m) => m.label === "1year");
+    expect(weekMs.reached).toBe(true);
+    expect(monthMs.reached).toBe(true);
+    expect(yearMs.reached).toBe(false);
+  });
+
+  it("calculates weight at milestone correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-01-08", wt: 74.5 },
+      { dt: "2025-02-01", wt: 73 },
+    ];
+    const result = calcWeightAnniversary(records);
+    const weekMs = result.milestones.find((m) => m.label === "1week");
+    expect(weekMs.reached).toBe(true);
+    expect(weekMs.weightAtMilestone).toBe(74.5);
+    expect(weekMs.changeAtMilestone).toBe(-0.5);
+  });
+
+  it("returns all 6 milestone definitions", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-01-02", wt: 74.9 },
+    ];
+    const result = calcWeightAnniversary(records);
+    expect(result.milestones).toHaveLength(6);
+  });
+});
+
+describe("calcDailyChangeDist", () => {
+  const makeDailyRecords = (weights) =>
+    weights.map((wt, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt,
+    }));
+
+  it("returns null for fewer than 3 records", () => {
+    expect(calcDailyChangeDist([])).toBeNull();
+    expect(calcDailyChangeDist(null)).toBeNull();
+    expect(calcDailyChangeDist([{ dt: "2025-01-01", wt: 70 }, { dt: "2025-01-02", wt: 69 }])).toBeNull();
+  });
+
+  it("calculates buckets for consecutive records", () => {
+    const records = makeDailyRecords([70, 69.8, 70.1, 69.5, 69.9, 70.2, 69.7]);
+    const result = calcDailyChangeDist(records);
+    expect(result).not.toBeNull();
+    expect(result.buckets.length).toBeGreaterThan(0);
+    expect(result.totalChanges).toBe(6);
+  });
+
+  it("calculates avg and median change", () => {
+    const records = makeDailyRecords([70, 69.5, 69.0, 68.5, 68.0]);
+    const result = calcDailyChangeDist(records);
+    expect(result.avgChange).toBe(-0.5);
+    expect(result.medianChange).toBe(-0.5);
+  });
+
+  it("calculates normal range", () => {
+    const records = makeDailyRecords([70, 69.8, 70.1, 69.5, 69.9, 70.3, 69.6, 70.0, 69.7, 70.2]);
+    const result = calcDailyChangeDist(records);
+    expect(result.normalRange).toHaveProperty("low");
+    expect(result.normalRange).toHaveProperty("high");
+    expect(result.normalRange.low).toBeLessThan(result.normalRange.high);
+  });
+
+  it("ignores non-consecutive records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-10", wt: 69 },
+      { dt: "2025-01-20", wt: 68 },
+    ];
+    const result = calcDailyChangeDist(records);
+    expect(result).toBeNull();
+  });
+
+  it("bucket percentages sum to approximately 100", () => {
+    const records = makeDailyRecords([70, 69.8, 70.1, 69.5, 69.9, 70.2, 69.7, 70.0]);
+    const result = calcDailyChangeDist(records);
+    const totalPct = result.buckets.reduce((s, b) => s + b.pct, 0);
+    expect(totalPct).toBeGreaterThan(95);
+    expect(totalPct).toBeLessThanOrEqual(101);
   });
 });

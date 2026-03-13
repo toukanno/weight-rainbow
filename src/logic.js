@@ -3750,3 +3750,137 @@ export function calcRecentWeightBars(records, goalWeight = 0, count = 7) {
 
   return { bars, min, max, goalPct };
 }
+
+/**
+ * Calculate weight tracking anniversary milestones.
+ * Shows how long the user has been tracking and weight change since start.
+ * Returns { trackingDays, startDate, startWeight, currentWeight, totalChange,
+ *           milestones: [{ label, days, reached, weightAtMilestone, changeAtMilestone }] }
+ */
+export function calcWeightAnniversary(records) {
+  if (!records || records.length < 2) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const startDate = sorted[0].dt;
+  const startWeight = sorted[0].wt;
+  const currentWeight = sorted[sorted.length - 1].wt;
+  const totalChange = +(currentWeight - startWeight).toFixed(1);
+
+  const start = new Date(startDate + "T00:00:00");
+  const latest = new Date(sorted[sorted.length - 1].dt + "T00:00:00");
+  const trackingDays = Math.round((latest - start) / 86400000);
+
+  const milestoneDefs = [
+    { label: "1week", days: 7 },
+    { label: "1month", days: 30 },
+    { label: "3months", days: 90 },
+    { label: "6months", days: 180 },
+    { label: "1year", days: 365 },
+    { label: "2years", days: 730 },
+  ];
+
+  const milestones = milestoneDefs.map((m) => {
+    const reached = trackingDays >= m.days;
+    let weightAtMilestone = null;
+    let changeAtMilestone = null;
+
+    if (reached) {
+      const targetDate = new Date(start);
+      targetDate.setDate(targetDate.getDate() + m.days);
+      const targetStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, "0")}-${String(targetDate.getDate()).padStart(2, "0")}`;
+      // Find closest record to the milestone date
+      let closest = sorted[0];
+      let closestDiff = Infinity;
+      for (const r of sorted) {
+        const diff = Math.abs(new Date(r.dt + "T00:00:00") - targetDate);
+        if (diff < closestDiff) {
+          closestDiff = diff;
+          closest = r;
+        }
+      }
+      weightAtMilestone = closest.wt;
+      changeAtMilestone = +(closest.wt - startWeight).toFixed(1);
+    }
+
+    return {
+      label: m.label,
+      days: m.days,
+      reached,
+      weightAtMilestone,
+      changeAtMilestone,
+    };
+  });
+
+  return {
+    trackingDays,
+    startDate,
+    startWeight,
+    currentWeight,
+    totalChange,
+    milestones,
+  };
+}
+
+/**
+ * Calculate distribution of day-to-day weight changes.
+ * Groups changes into buckets (e.g., -1.0 to -0.5, -0.5 to 0, 0 to 0.5, etc.)
+ * Returns { buckets: [{ label, min, max, count, pct }], avgChange, medianChange, normalRange }
+ */
+export function calcDailyChangeDist(records) {
+  if (!records || records.length < 3) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const changes = [];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(sorted[i - 1].dt + "T00:00:00");
+    const curr = new Date(sorted[i].dt + "T00:00:00");
+    const daysDiff = Math.round((curr - prev) / 86400000);
+    // Only include consecutive or near-consecutive days (1-2 days apart)
+    if (daysDiff >= 1 && daysDiff <= 2) {
+      changes.push(+(sorted[i].wt - sorted[i - 1].wt).toFixed(2));
+    }
+  }
+
+  if (changes.length < 3) return null;
+
+  // Create buckets of 0.5kg width
+  const bucketSize = 0.5;
+  const minChange = Math.min(...changes);
+  const maxChange = Math.max(...changes);
+  const startBucket = Math.floor(minChange / bucketSize) * bucketSize;
+  const endBucket = Math.ceil(maxChange / bucketSize) * bucketSize;
+
+  const buckets = [];
+  for (let b = startBucket; b < endBucket; b += bucketSize) {
+    const bMin = +b.toFixed(1);
+    const bMax = +(b + bucketSize).toFixed(1);
+    const count = changes.filter((c) => c >= bMin && c < bMax).length;
+    buckets.push({
+      label: `${bMin >= 0 ? "+" : ""}${bMin}`,
+      min: bMin,
+      max: bMax,
+      count,
+      pct: +(count / changes.length * 100).toFixed(1),
+    });
+  }
+
+  // Stats
+  const sortedChanges = [...changes].sort((a, b) => a - b);
+  const medianChange = sortedChanges.length % 2 === 0
+    ? +((sortedChanges[sortedChanges.length / 2 - 1] + sortedChanges[sortedChanges.length / 2]) / 2).toFixed(2)
+    : +sortedChanges[Math.floor(sortedChanges.length / 2)].toFixed(2);
+  const avgChange = +(changes.reduce((s, c) => s + c, 0) / changes.length).toFixed(2);
+
+  // Normal range: middle 80% (10th to 90th percentile)
+  const p10 = sortedChanges[Math.floor(sortedChanges.length * 0.1)];
+  const p90 = sortedChanges[Math.floor(sortedChanges.length * 0.9)];
+
+  return {
+    buckets,
+    avgChange,
+    medianChange,
+    normalRange: { low: +p10.toFixed(2), high: +p90.toFixed(2) },
+    totalChanges: changes.length,
+  };
+}

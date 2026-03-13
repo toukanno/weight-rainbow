@@ -3820,6 +3820,50 @@ function calcWeightAnniversary(records) {
     milestones
   };
 }
+function calcDailyChangeDist(records) {
+  if (!records || records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const changes = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = /* @__PURE__ */ new Date(sorted[i - 1].dt + "T00:00:00");
+    const curr = /* @__PURE__ */ new Date(sorted[i].dt + "T00:00:00");
+    const daysDiff = Math.round((curr - prev) / 864e5);
+    if (daysDiff >= 1 && daysDiff <= 2) {
+      changes.push(+(sorted[i].wt - sorted[i - 1].wt).toFixed(2));
+    }
+  }
+  if (changes.length < 3) return null;
+  const bucketSize = 0.5;
+  const minChange = Math.min(...changes);
+  const maxChange = Math.max(...changes);
+  const startBucket = Math.floor(minChange / bucketSize) * bucketSize;
+  const endBucket = Math.ceil(maxChange / bucketSize) * bucketSize;
+  const buckets = [];
+  for (let b = startBucket; b < endBucket; b += bucketSize) {
+    const bMin = +b.toFixed(1);
+    const bMax = +(b + bucketSize).toFixed(1);
+    const count = changes.filter((c) => c >= bMin && c < bMax).length;
+    buckets.push({
+      label: `${bMin >= 0 ? "+" : ""}${bMin}`,
+      min: bMin,
+      max: bMax,
+      count,
+      pct: +(count / changes.length * 100).toFixed(1)
+    });
+  }
+  const sortedChanges = [...changes].sort((a, b) => a - b);
+  const medianChange = sortedChanges.length % 2 === 0 ? +((sortedChanges[sortedChanges.length / 2 - 1] + sortedChanges[sortedChanges.length / 2]) / 2).toFixed(2) : +sortedChanges[Math.floor(sortedChanges.length / 2)].toFixed(2);
+  const avgChange = +(changes.reduce((s, c) => s + c, 0) / changes.length).toFixed(2);
+  const p10 = sortedChanges[Math.floor(sortedChanges.length * 0.1)];
+  const p90 = sortedChanges[Math.floor(sortedChanges.length * 0.9)];
+  return {
+    buckets,
+    avgChange,
+    medianChange,
+    normalRange: { low: +p10.toFixed(2), high: +p90.toFixed(2) },
+    totalChanges: changes.length
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -4740,7 +4784,12 @@ var translations = {
     "tfc.in14days": "14\u65E5\u5F8C",
     "tfc.losing": "\u6E1B\u5C11\u4E2D",
     "tfc.gaining": "\u5897\u52A0\u4E2D",
-    "tfc.stable": "\u5B89\u5B9A"
+    "tfc.stable": "\u5B89\u5B9A",
+    "cdist.title": "\u65E5\u3005\u306E\u5909\u52D5\u5206\u5E03",
+    "cdist.avg": "\u5E73\u5747\u5909\u52D5",
+    "cdist.median": "\u4E2D\u592E\u5024",
+    "cdist.normal": "\u901A\u5E38\u7BC4\u56F2",
+    "cdist.to": "\u301C"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5659,7 +5708,12 @@ var translations = {
     "tfc.in14days": "In 14 days",
     "tfc.losing": "Losing",
     "tfc.gaining": "Gaining",
-    "tfc.stable": "Stable"
+    "tfc.stable": "Stable",
+    "cdist.title": "Daily Change Distribution",
+    "cdist.avg": "Avg change",
+    "cdist.median": "Median",
+    "cdist.normal": "Normal range",
+    "cdist.to": "to"
   }
 };
 function createTranslator(language) {
@@ -26857,6 +26911,7 @@ function render() {
                 ${renderWeightJourney()}
                 ${renderMovingAvgCrossover()}
                 ${renderPredictionAccuracy()}
+                ${renderDailyChangeDist()}
               </div>
               ` : ""}
             </div>
@@ -28768,29 +28823,57 @@ function renderTrendForecast() {
   const data = calcTrendForecast(state.records, 14);
   if (!data || data.forecast.length < 8) return "";
   const weeklyChange = +(data.slope * 7).toFixed(2);
-  const trendLabel = weeklyChange < -0.05 ? t("forecast.losing") : weeklyChange > 0.05 ? t("forecast.gaining") : t("forecast.stable");
+  const trendLabel = weeklyChange < -0.05 ? t("tfc.losing") : weeklyChange > 0.05 ? t("tfc.gaining") : t("tfc.stable");
   const trendCls = weeklyChange < -0.05 ? "fc-loss" : weeklyChange > 0.05 ? "fc-gain" : "fc-stable";
   const day7 = data.forecast.find((f) => f.dayOffset === 7);
   const day14 = data.forecast.find((f) => f.dayOffset === 14);
   const current = data.forecast[0]?.weight;
   return `
     <div class="fc-section">
-      <div class="helper">${t("forecast.title")}</div>
+      <div class="helper">${t("tfc.title")}</div>
       <div class="fc-trend ${trendCls}">
-        ${trendLabel} \xB7 ${weeklyChange > 0 ? "+" : ""}${weeklyChange}kg ${t("forecast.perWeek")}
+        ${trendLabel} \xB7 ${weeklyChange > 0 ? "+" : ""}${weeklyChange}kg ${t("tfc.perWeek")}
       </div>
       <div class="fc-grid">
         ${day7 ? `<div class="fc-cell">
-          <span class="fc-label">${t("forecast.in7days")}</span>
+          <span class="fc-label">${t("tfc.in7days")}</span>
           <span class="fc-val">${day7.weight.toFixed(1)}kg</span>
           <span class="fc-diff ${day7.weight - current < 0 ? "fc-loss" : "fc-gain"}">${day7.weight - current > 0 ? "+" : ""}${(day7.weight - current).toFixed(1)}</span>
         </div>` : ""}
         ${day14 ? `<div class="fc-cell">
-          <span class="fc-label">${t("forecast.in14days")}</span>
+          <span class="fc-label">${t("tfc.in14days")}</span>
           <span class="fc-val">${day14.weight.toFixed(1)}kg</span>
           <span class="fc-diff ${day14.weight - current < 0 ? "fc-loss" : "fc-gain"}">${day14.weight - current > 0 ? "+" : ""}${(day14.weight - current).toFixed(1)}</span>
         </div>` : ""}
       </div>
+    </div>
+  `;
+}
+function renderDailyChangeDist() {
+  const data = calcDailyChangeDist(state.records);
+  if (!data || data.buckets.length < 2) return "";
+  const maxCount = Math.max(...data.buckets.map((b) => b.count));
+  const barsHtml = data.buckets.map((b) => {
+    const height = maxCount > 0 ? Math.max(b.count / maxCount * 100, 3) : 3;
+    const cls = b.min >= 0 ? "cd-pos" : "cd-neg";
+    return `
+      <div class="cd-col">
+        <div class="cd-bar-wrap"><div class="cd-bar ${cls}" style="height:${height}%"></div></div>
+        <div class="cd-blabel">${b.label}</div>
+      </div>
+    `;
+  }).join("");
+  const avgSign = data.avgChange > 0 ? "+" : "";
+  const medSign = data.medianChange > 0 ? "+" : "";
+  return `
+    <div class="cd-section">
+      <div class="helper">${t("cdist.title")}</div>
+      <div class="cd-chart">${barsHtml}</div>
+      <div class="cd-stats">
+        <span>${t("cdist.avg")}: ${avgSign}${data.avgChange}kg</span>
+        <span>${t("cdist.median")}: ${medSign}${data.medianChange}kg</span>
+      </div>
+      <div class="cd-range">${t("cdist.normal")}: ${data.normalRange.low > 0 ? "+" : ""}${data.normalRange.low} ${t("cdist.to")} ${data.normalRange.high > 0 ? "+" : ""}${data.normalRange.high}kg</div>
     </div>
   `;
 }
@@ -30722,7 +30805,12 @@ async function googleBackup() {
     setStatus(t("google.notConfigured"), "error");
     return;
   }
-  app.querySelector('[data-action="google-backup"]')?.classList.add("loading");
+  const backupBtn = app.querySelector('[data-action="google-backup"]');
+  if (backupBtn?.disabled) return;
+  if (backupBtn) {
+    backupBtn.disabled = true;
+    backupBtn.classList.add("loading");
+  }
   try {
     const tk = await googleGetToken();
     const data = {
@@ -30774,7 +30862,10 @@ ${bd}\r
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
   } finally {
-    app.querySelector('[data-action="google-backup"]')?.classList.remove("loading");
+    if (backupBtn) {
+      backupBtn.disabled = false;
+      backupBtn.classList.remove("loading");
+    }
   }
 }
 async function googleRestore() {
@@ -30782,7 +30873,12 @@ async function googleRestore() {
     setStatus(t("google.notConfigured"), "error");
     return;
   }
-  app.querySelector('[data-action="google-restore"]')?.classList.add("loading");
+  const restoreBtn = app.querySelector('[data-action="google-restore"]');
+  if (restoreBtn?.disabled) return;
+  if (restoreBtn) {
+    restoreBtn.disabled = true;
+    restoreBtn.classList.add("loading");
+  }
   try {
     const tk = await googleGetToken();
     const sr = await fetchWithTimeout(
@@ -30848,7 +30944,10 @@ async function googleRestore() {
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
   } finally {
-    app.querySelector('[data-action="google-restore"]')?.classList.remove("loading");
+    if (restoreBtn) {
+      restoreBtn.disabled = false;
+      restoreBtn.classList.remove("loading");
+    }
   }
 }
 if (GOOGLE_CLIENT_ID) {
@@ -30865,6 +30964,7 @@ function handlePhotoZoom() {
   const ov = document.createElement("div");
   ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;cursor:zoom-out;animation:fadeIn 0.2s ease-out";
   ov.setAttribute("role", "dialog");
+  ov.setAttribute("aria-modal", "true");
   ov.setAttribute("aria-label", t("photo.zoomHint"));
   const im = document.createElement("img");
   im.src = imagePreviewUrl;
@@ -30872,9 +30972,11 @@ function handlePhotoZoom() {
   im.style.cssText = "max-width:95vw;max-height:95dvh;object-fit:contain;border-radius:12px";
   ov.appendChild(im);
   ov.tabIndex = -1;
+  const triggerEl = document.activeElement;
   const dismiss = () => {
     ov.remove();
     document.removeEventListener("keydown", onKey);
+    if (triggerEl && document.contains(triggerEl)) triggerEl.focus();
   };
   const onKey = (e) => {
     if (e.key === "Escape") dismiss();

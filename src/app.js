@@ -121,6 +121,7 @@ import {
   calcStreakFreezeInfo,
   calcRecentWeightBars,
   calcWeightAnniversary,
+  calcDailyChangeDist,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -862,6 +863,7 @@ function render() {
                 ${renderWeightJourney()}
                 ${renderMovingAvgCrossover()}
                 ${renderPredictionAccuracy()}
+                ${renderDailyChangeDist()}
               </div>
               ` : ""}
             </div>
@@ -2960,6 +2962,39 @@ function renderTrendForecast() {
   `;
 }
 
+function renderDailyChangeDist() {
+  const data = calcDailyChangeDist(state.records);
+  if (!data || data.buckets.length < 2) return "";
+
+  const maxCount = Math.max(...data.buckets.map((b) => b.count));
+
+  const barsHtml = data.buckets.map((b) => {
+    const height = maxCount > 0 ? Math.max((b.count / maxCount) * 100, 3) : 3;
+    const cls = b.min >= 0 ? "cd-pos" : "cd-neg";
+    return `
+      <div class="cd-col">
+        <div class="cd-bar-wrap"><div class="cd-bar ${cls}" style="height:${height}%"></div></div>
+        <div class="cd-blabel">${b.label}</div>
+      </div>
+    `;
+  }).join("");
+
+  const avgSign = data.avgChange > 0 ? "+" : "";
+  const medSign = data.medianChange > 0 ? "+" : "";
+
+  return `
+    <div class="cd-section">
+      <div class="helper">${t("cdist.title")}</div>
+      <div class="cd-chart">${barsHtml}</div>
+      <div class="cd-stats">
+        <span>${t("cdist.avg")}: ${avgSign}${data.avgChange}kg</span>
+        <span>${t("cdist.median")}: ${medSign}${data.medianChange}kg</span>
+      </div>
+      <div class="cd-range">${t("cdist.normal")}: ${data.normalRange.low > 0 ? "+" : ""}${data.normalRange.low} ${t("cdist.to")} ${data.normalRange.high > 0 ? "+" : ""}${data.normalRange.high}kg</div>
+    </div>
+  `;
+}
+
 function renderRecentEntries() {
   const entries = getRecentEntries(state.records, 5);
   if (entries.length === 0) return "";
@@ -5025,7 +5060,9 @@ function googleGetToken() {
 
 async function googleBackup() {
   if (!GOOGLE_CLIENT_ID) { setStatus(t("google.notConfigured"), "error"); return; }
-  app.querySelector('[data-action="google-backup"]')?.classList.add("loading");
+  const backupBtn = app.querySelector('[data-action="google-backup"]');
+  if (backupBtn?.disabled) return;
+  if (backupBtn) { backupBtn.disabled = true; backupBtn.classList.add("loading"); }
   try {
     const tk = await googleGetToken();
     const data = {
@@ -5066,13 +5103,15 @@ async function googleBackup() {
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
   } finally {
-    app.querySelector('[data-action="google-backup"]')?.classList.remove("loading");
+    if (backupBtn) { backupBtn.disabled = false; backupBtn.classList.remove("loading"); }
   }
 }
 
 async function googleRestore() {
   if (!GOOGLE_CLIENT_ID) { setStatus(t("google.notConfigured"), "error"); return; }
-  app.querySelector('[data-action="google-restore"]')?.classList.add("loading");
+  const restoreBtn = app.querySelector('[data-action="google-restore"]');
+  if (restoreBtn?.disabled) return;
+  if (restoreBtn) { restoreBtn.disabled = true; restoreBtn.classList.add("loading"); }
   try {
     const tk = await googleGetToken();
     const sr = await fetchWithTimeout(
@@ -5126,7 +5165,7 @@ async function googleRestore() {
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
   } finally {
-    app.querySelector('[data-action="google-restore"]')?.classList.remove("loading");
+    if (restoreBtn) { restoreBtn.disabled = false; restoreBtn.classList.remove("loading"); }
   }
 }
 
@@ -5147,6 +5186,7 @@ function handlePhotoZoom() {
   const ov = document.createElement("div");
   ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;cursor:zoom-out;animation:fadeIn 0.2s ease-out";
   ov.setAttribute("role", "dialog");
+  ov.setAttribute("aria-modal", "true");
   ov.setAttribute("aria-label", t("photo.zoomHint"));
   const im = document.createElement("img");
   im.src = imagePreviewUrl;
@@ -5154,7 +5194,8 @@ function handlePhotoZoom() {
   im.style.cssText = "max-width:95vw;max-height:95dvh;object-fit:contain;border-radius:12px";
   ov.appendChild(im);
   ov.tabIndex = -1;
-  const dismiss = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
+  const triggerEl = document.activeElement;
+  const dismiss = () => { ov.remove(); document.removeEventListener("keydown", onKey); if (triggerEl && document.contains(triggerEl)) triggerEl.focus(); };
   const onKey = (e) => { if (e.key === "Escape") dismiss(); };
   ov.addEventListener("click", dismiss);
   document.addEventListener("keydown", onKey);
