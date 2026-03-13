@@ -121,6 +121,7 @@ import {
   calcDailyChangeDist,
   calcGoalStreak,
   calcThenVsNow,
+  calcQuickWeightPresets,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -8999,5 +9000,78 @@ describe("calcThenVsNow", () => {
     const result = calcThenVsNow(records, 7);
     expect(result.then.period).toContain("2025-01-01");
     expect(result.now.period).toContain("2025-01-14");
+  });
+});
+
+describe("calcQuickWeightPresets", () => {
+  it("returns empty array for null or empty records", () => {
+    expect(calcQuickWeightPresets(null)).toEqual([]);
+    expect(calcQuickWeightPresets([])).toEqual([]);
+  });
+
+  it("returns last weight for single record", () => {
+    const records = [{ dt: "2025-01-01", wt: 70.5 }];
+    const result = calcQuickWeightPresets(records);
+    expect(result).toHaveLength(1);
+    expect(result[0].label).toBe("last");
+    expect(result[0].weight).toBe(70.5);
+  });
+
+  it("returns last and trend for 2 records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70.0 },
+      { dt: "2025-01-02", wt: 69.5 },
+    ];
+    const result = calcQuickWeightPresets(records);
+    expect(result.length).toBeGreaterThanOrEqual(2);
+    expect(result.some((p) => p.label === "last")).toBe(true);
+    expect(result.some((p) => p.label === "trend")).toBe(true);
+  });
+
+  it("returns up to 3 presets for sufficient records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72.0 },
+      { dt: "2025-01-02", wt: 71.0 },
+      { dt: "2025-01-03", wt: 70.5 },
+      { dt: "2025-01-04", wt: 70.0 },
+    ];
+    const result = calcQuickWeightPresets(records);
+    expect(result.length).toBeLessThanOrEqual(3);
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("deduplicates presets with same weight", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70.0 },
+      { dt: "2025-01-02", wt: 70.0 },
+      { dt: "2025-01-03", wt: 70.0 },
+    ];
+    const result = calcQuickWeightPresets(records);
+    const weights = result.map((p) => p.weight);
+    const unique = [...new Set(weights)];
+    expect(weights.length).toBe(unique.length);
+  });
+
+  it("sorts presets by weight ascending", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72.0 },
+      { dt: "2025-01-02", wt: 71.0 },
+      { dt: "2025-01-03", wt: 70.0 },
+    ];
+    const result = calcQuickWeightPresets(records);
+    for (let i = 1; i < result.length; i++) {
+      expect(result[i].weight).toBeGreaterThanOrEqual(result[i - 1].weight);
+    }
+  });
+
+  it("does not include out-of-range trend predictions", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 22.0 },
+      { dt: "2025-01-02", wt: 21.0 },
+    ];
+    const result = calcQuickWeightPresets(records);
+    // Trend would predict 20.0, which is at the boundary
+    // No prediction below 20 should appear
+    expect(result.every((p) => p.label !== "trend" || p.weight >= 20)).toBe(true);
   });
 });
