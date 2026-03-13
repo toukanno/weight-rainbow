@@ -1974,6 +1974,42 @@
         margin-top: 6px;
       }
 
+      .body-comp-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .body-comp-trend {
+        font-weight: 700;
+        font-size: 0.9rem;
+        margin-top: 4px;
+      }
+      .body-comp-bf {
+        font-size: 0.82rem;
+        color: var(--text);
+        margin-top: 4px;
+      }
+      .body-comp-masses {
+        display: flex;
+        gap: 12px;
+        margin-top: 6px;
+      }
+      .body-comp-mass {
+        flex: 1;
+        padding: 6px 8px;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: 600;
+      }
+      .body-comp-mass.fat {
+        background: color-mix(in srgb, #ef4444 10%, transparent);
+        color: #ef4444;
+      }
+      .body-comp-mass.lean {
+        background: color-mix(in srgb, #3b82f6 10%, transparent);
+        color: #3b82f6;
+      }
+
       .analytics-toggle-section {
         margin-top: 14px;
         padding-top: 12px;
@@ -3649,6 +3685,10 @@
       body[data-theme="midnight"] .forecast-section,
       body[data-theme="midnight"] .progress-section,
       body[data-theme="midnight"] .timeline-section,
+      body[data-theme="midnight"] .volatility-section,
+      body[data-theme="midnight"] .compare-section,
+      body[data-theme="midnight"] .countdown-section,
+      body[data-theme="midnight"] .body-comp-section,
       body[data-theme="midnight"] .analytics-toggle-section {
         border-color: rgba(139, 146, 176, 0.14);
       }
@@ -3659,7 +3699,8 @@
         background: rgba(139, 146, 176, 0.08);
         border-color: rgba(139, 146, 176, 0.14);
       }
-      body[data-theme="midnight"] .momentum-bar-track {
+      body[data-theme="midnight"] .momentum-bar-track,
+      body[data-theme="midnight"] .countdown-bar-track {
         background: rgba(139, 146, 176, 0.15);
       }
 

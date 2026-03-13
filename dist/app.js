@@ -2442,6 +2442,42 @@ function calcGoalCountdown(records, goalWeight) {
     direction: remaining > 0 ? "lose" : "gain"
   };
 }
+function calcBodyComposition(records) {
+  const withBf = records.filter((r) => r.bf != null && Number.isFinite(r.bf) && r.bf > 0);
+  if (withBf.length < 3) return null;
+  const sorted = [...withBf].sort((a, b) => a.dt.localeCompare(b.dt));
+  const first = sorted[0];
+  const latest = sorted[sorted.length - 1];
+  const bfChange = Math.round((latest.bf - first.bf) * 10) / 10;
+  const wtChange = Math.round((latest.wt - first.wt) * 10) / 10;
+  const firstFatMass = Math.round(first.wt * first.bf / 100 * 10) / 10;
+  const latestFatMass = Math.round(latest.wt * latest.bf / 100 * 10) / 10;
+  const firstLeanMass = Math.round((first.wt - firstFatMass) * 10) / 10;
+  const latestLeanMass = Math.round((latest.wt - latestFatMass) * 10) / 10;
+  const fatMassChange = Math.round((latestFatMass - firstFatMass) * 10) / 10;
+  const leanMassChange = Math.round((latestLeanMass - firstLeanMass) * 10) / 10;
+  let trend = "mixed";
+  if (fatMassChange < -0.3 && leanMassChange >= 0) trend = "fatLoss";
+  else if (fatMassChange >= 0 && leanMassChange > 0.3) trend = "muscleGain";
+  else if (fatMassChange < -0.3 && leanMassChange > 0.3) trend = "recomp";
+  else if (fatMassChange > 0.3 && leanMassChange < 0) trend = "decline";
+  const avgBf = Math.round(sorted.reduce((s, r) => s + r.bf, 0) / sorted.length * 10) / 10;
+  return {
+    firstBf: first.bf,
+    latestBf: latest.bf,
+    bfChange,
+    wtChange,
+    fatMassChange,
+    leanMassChange,
+    firstFatMass,
+    latestFatMass,
+    firstLeanMass,
+    latestLeanMass,
+    trend,
+    avgBf,
+    dataPoints: sorted.length
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -24812,6 +24848,7 @@ function render() {
                 ${renderMilestoneTimeline()}
                 ${renderVolatilityIndex()}
                 ${renderPeriodComparison()}
+                ${renderBodyComposition()}
               </div>
               ` : ""}
             </div>
@@ -25880,6 +25917,27 @@ function renderGoalCountdown() {
       </div>
       <div class="countdown-pct">${t("countdown.pct").replace("{pct}", gc.pct)}</div>
       <div class="countdown-eta">${gc.etaDays ? t("countdown.eta").replace("{days}", gc.etaDays) : t("countdown.noEta")}</div>
+    </div>
+  `;
+}
+function renderBodyComposition() {
+  const bc = calcBodyComposition(state.records);
+  if (!bc) return "";
+  const trendColors = { fatLoss: "#10b981", muscleGain: "#3b82f6", recomp: "#8b5cf6", decline: "#ef4444", mixed: "#f59e0b" };
+  const trendColor = trendColors[bc.trend] || trendColors.mixed;
+  const bfStr = bc.bfChange > 0 ? "+" + bc.bfChange : String(bc.bfChange);
+  const fatStr = bc.fatMassChange > 0 ? "+" + bc.fatMassChange : String(bc.fatMassChange);
+  const leanStr = bc.leanMassChange > 0 ? "+" + bc.leanMassChange : String(bc.leanMassChange);
+  return `
+    <div class="body-comp-section">
+      <div class="helper">${t("bodyComp.title")}</div>
+      <div class="body-comp-trend" style="color:${trendColor}">${t("bodyComp." + bc.trend)}</div>
+      <div class="body-comp-bf">${t("bodyComp.bf").replace("{first}", bc.firstBf).replace("{latest}", bc.latestBf).replace("{change}", bfStr)}</div>
+      <div class="body-comp-masses">
+        <div class="body-comp-mass fat">${t("bodyComp.fatMass").replace("{change}", fatStr)}</div>
+        <div class="body-comp-mass lean">${t("bodyComp.leanMass").replace("{change}", leanStr)}</div>
+      </div>
+      <div class="helper hint-small">${t("bodyComp.hint").replace("{n}", bc.dataPoints)}</div>
     </div>
   `;
 }
