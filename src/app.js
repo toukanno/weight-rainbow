@@ -4362,6 +4362,9 @@ function downloadFile(content, filename, mimeType) {
 async function shareChart() {
   const canvas = document.getElementById("chart");
   if (!canvas) return;
+  const shareBtn = app.querySelector('[data-action="share-chart"]');
+  if (shareBtn?.disabled) return;
+  if (shareBtn) { shareBtn.disabled = true; shareBtn.classList.add("loading"); }
   try {
     const blob = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("toBlob timeout")), 5000);
@@ -4389,6 +4392,8 @@ async function shareChart() {
     setStatus(t("share.done"));
   } catch {
     setStatus(t("share.error"), "error");
+  } finally {
+    if (shareBtn) { shareBtn.disabled = false; shareBtn.classList.remove("loading"); }
   }
 }
 
