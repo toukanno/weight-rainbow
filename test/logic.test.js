@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   buildRecord,
   calcStats,
@@ -505,5 +505,43 @@ describe("calcWeeklyRate", () => {
     const result = calcWeeklyRate(records);
     expect(result.weeklyRate).toBe(1);
     expect(result.totalChange).toBe(3);
+  });
+});
+
+describe("i18n ARIA keys", () => {
+  // Import translations to verify ARIA-related keys exist in both languages
+  let translations;
+  beforeAll(async () => {
+    const mod = await import("../src/i18n.js");
+    translations = mod.translations;
+  });
+
+  const ariaKeys = [
+    "section.entry",
+    "section.chart",
+    "summary.title",
+    "settings.theme",
+    "quick.title",
+    "rainbow.congrats",
+    "chart.period.7",
+    "chart.period.30",
+    "chart.period.90",
+    "chart.period.all",
+    "summary.week",
+    "summary.month",
+  ];
+
+  it("has all ARIA-related keys in Japanese", () => {
+    for (const key of ariaKeys) {
+      expect(translations.ja[key], `Missing ja key: ${key}`).toBeDefined();
+      expect(translations.ja[key]).not.toBe("");
+    }
+  });
+
+  it("has all ARIA-related keys in English", () => {
+    for (const key of ariaKeys) {
+      expect(translations.en[key], `Missing en key: ${key}`).toBeDefined();
+      expect(translations.en[key]).not.toBe("");
+    }
   });
 });

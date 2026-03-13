@@ -22388,6 +22388,7 @@ function render() {
               <span class="pill">${t("badge.local")}</span>
               <span class="pill">${t("badge.free")}</span>
               <span class="pill">${t("badge.safe")}</span>
+              ${state.records.length ? `<span class="pill">${t("summary.count")}: ${state.records.length}</span>` : ""}
               ${streak > 0 ? `<span class="streak-badge${streak >= 7 ? " rainbow" : ""}">\u{1F525} ${streak}${t("streak.days")}</span>` : ""}
               ${trend ? `<span class="trend-indicator ${trend}">${trend === "down" ? "\u{1F4C9}" : trend === "up" ? "\u{1F4C8}" : "\u27A1\uFE0F"} ${t("trend." + trend)}</span>` : ""}
             </div>
@@ -22728,10 +22729,10 @@ function render() {
               </div>
             </div>
             <div class="row" style="margin-top: 16px; grid-template-columns: 1fr 1fr auto;">
-              <button type="button" class="btn secondary" data-action="export-data">${t("settings.export")}</button>
-              <label class="btn secondary" for="importInput" style="text-align:center;cursor:pointer;">${t("import.button")}</label>
+              <button type="button" class="btn secondary" data-action="export-data">\u{1F4BE} ${t("settings.export")}</button>
+              <label class="btn secondary" for="importInput" style="text-align:center;cursor:pointer;">\u{1F4E5} ${t("import.button")}</label>
               <input id="importInput" type="file" accept=".json" class="hidden" />
-              <button type="button" class="btn ghost" data-action="reset-data">${t("settings.reset")}</button>
+              <button type="button" class="btn ghost" data-action="reset-data">\u{1F5D1}\uFE0F ${t("settings.reset")}</button>
             </div>
           </section>
 
@@ -22930,7 +22931,7 @@ function renderRecord(record, prevRecord) {
   return `
     <div class="record-item">
       <div class="record-row">
-        <div class="tag">${t(`entry.source.${record.source}`)}</div>
+        <div class="tag tag-${record.source}">${t(`entry.source.${record.source}`)}</div>
         <div>
           <div class="record-weight">${formatWeight(record.wt)} ${diffHtml}</div>
           <div class="helper">${escapeAttr(record.dt)}${record.imageName ? ` / ${escapeAttr(record.imageName)}` : ""}</div>
