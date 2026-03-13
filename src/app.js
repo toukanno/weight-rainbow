@@ -57,6 +57,7 @@ import {
   calcWeekdayVsWeekend,
   calcWeightRangePosition,
   calcTagImpact,
+  calcBestPeriod,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -660,6 +661,7 @@ function render() {
             ${renderMovingAverages()}
             ${renderWeightRange()}
             ${renderTagImpact()}
+            ${renderBestPeriod()}
             ${renderBodyFatStats()}
           </section>
 
@@ -1192,6 +1194,30 @@ function renderTagImpact() {
       <div class="helper">${t("tagImpact.title")}</div>
       <div class="helper hint-small" style="margin-bottom:6px;">${t("tagImpact.hint")}</div>
       ${rows}
+    </div>
+  `;
+}
+
+function renderBestPeriod() {
+  const best = calcBestPeriod(state.records);
+  if (!best) return "";
+  const renderRow = (key, data) => {
+    if (!data || data.change >= 0) return "";
+    return `
+      <div class="best-period-row">
+        <div class="best-period-label">${t("bestPeriod." + key)}</div>
+        <div class="best-period-change">${t("bestPeriod.change").replace("{change}", data.change.toFixed(1))}</div>
+        <div class="hint-small">${t("bestPeriod.range").replace("{from}", data.from).replace("{to}", data.to)}</div>
+        <div class="hint-small">${t("bestPeriod.weight").replace("{start}", data.startWeight.toFixed(1)).replace("{end}", data.endWeight.toFixed(1))}</div>
+      </div>`;
+  };
+  const weekRow = renderRow("week", best[7]);
+  const monthRow = renderRow("month", best[30]);
+  if (!weekRow && !monthRow) return "";
+  return `
+    <div class="best-period-section">
+      <div class="helper">${t("bestPeriod.title")}</div>
+      ${weekRow}${monthRow}
     </div>
   `;
 }

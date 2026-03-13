@@ -55,6 +55,7 @@ import {
   calcWeekdayVsWeekend,
   calcWeightRangePosition,
   calcTagImpact,
+  calcBestPeriod,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -2381,5 +2382,56 @@ describe("calcWeightRangePosition edge cases", () => {
     const result = calcWeightRangePosition(records);
     expect(result.position).toBe(50);
     expect(result.zone).toBe("middle");
+  });
+});
+
+describe("calcBestPeriod", () => {
+  it("returns null for fewer than 7 records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69 },
+      { dt: "2025-01-03", wt: 68 },
+    ];
+    expect(calcBestPeriod(records)).toBeNull();
+  });
+
+  it("finds best 7-day period", () => {
+    const records = [];
+    for (let i = 0; i < 10; i++) {
+      const d = String(i + 1).padStart(2, "0");
+      // Days 3-9: weight drops from 75 to 69 (best 7 days = -6kg)
+      const wt = i < 3 ? 72 : 75 - (i - 3);
+      records.push({ dt: `2025-01-${d}`, wt });
+    }
+    const result = calcBestPeriod(records);
+    expect(result).not.toBeNull();
+    expect(result[7]).toBeDefined();
+    expect(result[7].change).toBeLessThan(0);
+  });
+
+  it("returns only week data when fewer than 30 records", () => {
+    const records = [];
+    for (let i = 0; i < 15; i++) {
+      const d = String(i + 1).padStart(2, "0");
+      records.push({ dt: `2025-01-${d}`, wt: 70 - i * 0.1 });
+    }
+    const result = calcBestPeriod(records);
+    expect(result).not.toBeNull();
+    expect(result[7]).toBeDefined();
+    expect(result[30]).toBeUndefined();
+  });
+
+  it("finds best 30-day period with enough records", () => {
+    const records = [];
+    for (let i = 0; i < 35; i++) {
+      const d = String(i + 1).padStart(2, "0");
+      const month = i < 31 ? "01" : "02";
+      const day = i < 31 ? d : String(i - 30).padStart(2, "0");
+      records.push({ dt: `2025-${month}-${day}`, wt: 80 - i * 0.2 });
+    }
+    const result = calcBestPeriod(records);
+    expect(result).not.toBeNull();
+    expect(result[30]).toBeDefined();
+    expect(result[30].change).toBeLessThan(0);
   });
 });

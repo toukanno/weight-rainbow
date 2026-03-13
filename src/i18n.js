@@ -422,6 +422,12 @@ export const translations = {
     "tagImpact.positive": "増加傾向",
     "tagImpact.negative": "減少傾向",
     "tagImpact.neutral": "変化なし",
+    "bestPeriod.title": "ベスト記録期間",
+    "bestPeriod.week": "最良の7日間",
+    "bestPeriod.month": "最良の30日間",
+    "bestPeriod.change": "{change}kg",
+    "bestPeriod.range": "{from} 〜 {to}",
+    "bestPeriod.weight": "{start}kg → {end}kg",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -846,6 +852,12 @@ export const translations = {
     "tagImpact.positive": "Gain trend",
     "tagImpact.negative": "Loss trend",
     "tagImpact.neutral": "No change",
+    "bestPeriod.title": "Best Period",
+    "bestPeriod.week": "Best 7 days",
+    "bestPeriod.month": "Best 30 days",
+    "bestPeriod.change": "{change}kg",
+    "bestPeriod.range": "{from} to {to}",
+    "bestPeriod.weight": "{start}kg → {end}kg",
   },
 };
 

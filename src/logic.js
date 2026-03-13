@@ -1013,3 +1013,53 @@ export function calcWeightRangePosition(records) {
   const zone = position <= 25 ? "low" : position >= 75 ? "high" : "middle";
   return { position, latest, min, max, zone };
 }
+
+export function calcTagImpact(records) {
+  if (records.length < 5) return null;
+  const tagData = {};
+  for (let i = 1; i < records.length; i++) {
+    const note = records[i].note || "";
+    const diff = Math.round((records[i].wt - records[i - 1].wt) * 10) / 10;
+    for (const tag of NOTE_TAGS) {
+      if (note.includes(`#${tag}`)) {
+        if (!tagData[tag]) tagData[tag] = { diffs: [], count: 0 };
+        tagData[tag].diffs.push(diff);
+        tagData[tag].count++;
+      }
+    }
+  }
+  const results = [];
+  for (const [tag, data] of Object.entries(tagData)) {
+    if (data.count < 2) continue;
+    const avg = Math.round((data.diffs.reduce((s, d) => s + d, 0) / data.count) * 100) / 100;
+    results.push({ tag, avgChange: avg, count: data.count });
+  }
+  if (!results.length) return null;
+  results.sort((a, b) => a.avgChange - b.avgChange);
+  return results;
+}
+
+export function calcBestPeriod(records) {
+  if (records.length < 7) return null;
+  const result = {};
+  for (const window of [7, 30]) {
+    if (records.length < window) continue;
+    let bestChange = Infinity;
+    let bestStart = 0;
+    for (let i = 0; i <= records.length - window; i++) {
+      const change = records[i + window - 1].wt - records[i].wt;
+      if (change < bestChange) {
+        bestChange = change;
+        bestStart = i;
+      }
+    }
+    result[window] = {
+      change: Math.round(bestChange * 10) / 10,
+      from: records[bestStart].dt,
+      to: records[bestStart + window - 1].dt,
+      startWeight: records[bestStart].wt,
+      endWeight: records[bestStart + window - 1].wt,
+    };
+  }
+  return Object.keys(result).length ? result : null;
+}

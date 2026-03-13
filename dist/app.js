@@ -1645,6 +1645,30 @@ function calcTagImpact(records) {
   results.sort((a, b) => a.avgChange - b.avgChange);
   return results;
 }
+function calcBestPeriod(records) {
+  if (records.length < 7) return null;
+  const result = {};
+  for (const window2 of [7, 30]) {
+    if (records.length < window2) continue;
+    let bestChange = Infinity;
+    let bestStart = 0;
+    for (let i = 0; i <= records.length - window2; i++) {
+      const change = records[i + window2 - 1].wt - records[i].wt;
+      if (change < bestChange) {
+        bestChange = change;
+        bestStart = i;
+      }
+    }
+    result[window2] = {
+      change: Math.round(bestChange * 10) / 10,
+      from: records[bestStart].dt,
+      to: records[bestStart + window2 - 1].dt,
+      startWeight: records[bestStart].wt,
+      endWeight: records[bestStart + window2 - 1].wt
+    };
+  }
+  return Object.keys(result).length ? result : null;
+}
 
 // src/i18n.js
 var translations = {
@@ -23579,6 +23603,7 @@ function render() {
             ${renderMovingAverages()}
             ${renderWeightRange()}
             ${renderTagImpact()}
+            ${renderBestPeriod()}
             ${renderBodyFatStats()}
           </section>
 
@@ -24094,6 +24119,29 @@ function renderTagImpact() {
       <div class="helper">${t("tagImpact.title")}</div>
       <div class="helper hint-small" style="margin-bottom:6px;">${t("tagImpact.hint")}</div>
       ${rows}
+    </div>
+  `;
+}
+function renderBestPeriod() {
+  const best = calcBestPeriod(state.records);
+  if (!best) return "";
+  const renderRow = (key, data) => {
+    if (!data || data.change >= 0) return "";
+    return `
+      <div class="best-period-row">
+        <div class="best-period-label">${t("bestPeriod." + key)}</div>
+        <div class="best-period-change">${t("bestPeriod.change").replace("{change}", data.change.toFixed(1))}</div>
+        <div class="hint-small">${t("bestPeriod.range").replace("{from}", data.from).replace("{to}", data.to)}</div>
+        <div class="hint-small">${t("bestPeriod.weight").replace("{start}", data.startWeight.toFixed(1)).replace("{end}", data.endWeight.toFixed(1))}</div>
+      </div>`;
+  };
+  const weekRow = renderRow("week", best[7]);
+  const monthRow = renderRow("month", best[30]);
+  if (!weekRow && !monthRow) return "";
+  return `
+    <div class="best-period-section">
+      <div class="helper">${t("bestPeriod.title")}</div>
+      ${weekRow}${monthRow}
     </div>
   `;
 }
