@@ -2371,3 +2371,30 @@ export function calcIdealWeightRange(heightCm, currentWeight) {
     toMax: Math.round((maxWeight - currentWeight) * 10) / 10,
   };
 }
+
+/**
+ * Calculate how stale the latest record is.
+ * Returns { daysSince, lastDate, lastWeight, level: "today"|"recent"|"stale"|"veryStale" }
+ */
+export function calcDataFreshness(records) {
+  if (records.length === 0) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const last = sorted[sorted.length - 1];
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const lastDate = new Date(last.dt + "T00:00:00");
+  const todayDate = new Date(today + "T00:00:00");
+  const daysSince = Math.round((todayDate - lastDate) / 86400000);
+
+  let level = "today";
+  if (daysSince >= 7) level = "veryStale";
+  else if (daysSince >= 3) level = "stale";
+  else if (daysSince >= 1) level = "recent";
+
+  return {
+    daysSince,
+    lastDate: last.dt,
+    lastWeight: last.wt,
+    level,
+  };
+}

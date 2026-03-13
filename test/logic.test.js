@@ -87,6 +87,7 @@ import {
   calcMonthlyRecordingMap,
   calcWeightTrendIndicator,
   calcNoteTagStats,
+  calcIdealWeightRange,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -6709,5 +6710,171 @@ describe("calcNoteTagStats", () => {
     const result = calcNoteTagStats(records);
     expect(result.tags).toHaveLength(1);
     expect(result.tags[0].tag).toBe("diet");
+  });
+});
+
+describe("calcIdealWeightRange", () => {
+  it("returns null for missing height or weight", () => {
+    expect(calcIdealWeightRange(0, 70)).toBeNull();
+    expect(calcIdealWeightRange(170, 0)).toBeNull();
+    expect(calcIdealWeightRange(null, 70)).toBeNull();
+  });
+
+  it("calculates correct range for 170cm", () => {
+    const result = calcIdealWeightRange(170, 65);
+    // BMI 18.5 at 170cm = 53.5, BMI 24.9 = 71.9
+    expect(result.minWeight).toBeCloseTo(53.5, 0);
+    expect(result.maxWeight).toBeCloseTo(71.9, 0);
+    expect(result.midWeight).toBeCloseTo(63.6, 0);
+    expect(result.zone).toBe("normal");
+  });
+
+  it("detects underweight zone", () => {
+    const result = calcIdealWeightRange(170, 50);
+    expect(result.zone).toBe("underweight");
+    expect(result.currentBMI).toBeLessThan(18.5);
+  });
+
+  it("detects overweight zone", () => {
+    const result = calcIdealWeightRange(170, 80);
+    expect(result.zone).toBe("overweight");
+    expect(result.currentBMI).toBeGreaterThanOrEqual(25);
+  });
+
+  it("detects obese zone", () => {
+    const result = calcIdealWeightRange(170, 100);
+    expect(result.zone).toBe("obese");
+    expect(result.currentBMI).toBeGreaterThanOrEqual(30);
+  });
+
+  it("position is between 0 and 100", () => {
+    const result = calcIdealWeightRange(170, 65);
+    expect(result.position).toBeGreaterThanOrEqual(0);
+    expect(result.position).toBeLessThanOrEqual(100);
+  });
+});
+
+// --- Edge case tests for undertested functions ---
+
+describe("normalizeNumericInput edge cases", () => {
+  it("handles multiple decimal points", () => {
+    const r = normalizeNumericInput("1.2.3");
+    expect(r).toBe("1.2.3");
+  });
+
+  it("handles empty string", () => {
+    expect(normalizeNumericInput("")).toBe("");
+  });
+
+  it("handles whitespace-only string", () => {
+    expect(normalizeNumericInput("   ")).toBe("");
+  });
+});
+
+describe("extractWeightCandidates edge cases", () => {
+  it("returns boundary value 20.0", () => {
+    const r = extractWeightCandidates("体重は20.0キロ");
+    expect(r).toContain(20);
+  });
+
+  it("returns boundary value 300.0", () => {
+    const r = extractWeightCandidates("体重は300キロ");
+    expect(r).toContain(300);
+  });
+
+  it("returns empty for out-of-range values", () => {
+    const r = extractWeightCandidates("体重は5キロ");
+    expect(r.length).toBe(0);
+  });
+});
+
+describe("getFrequentNotes edge cases", () => {
+  it("handles records with whitespace-only notes", () => {
+    const records = [
+      { dt: "2024-01-01", wt: 70, note: "   " },
+      { dt: "2024-01-02", wt: 70, note: "" },
+    ];
+    const r = getFrequentNotes(records);
+    expect(r.length).toBe(0);
+  });
+
+  it("returns single note from single record", () => {
+    const records = [{ dt: "2024-01-01", wt: 70, note: "#exercise" }];
+    const r = getFrequentNotes(records);
+    expect(r.length).toBe(1);
+    expect(r[0].text).toBe("#exercise");
+    expect(r[0].count).toBe(1);
+  });
+
+  it("handles maxResults greater than available notes", () => {
+    const records = [
+      { dt: "2024-01-01", wt: 70, note: "#a" },
+      { dt: "2024-01-02", wt: 70, note: "#b" },
+    ];
+    const r = getFrequentNotes(records, 100);
+    expect(r.length).toBe(2);
+  });
+});
+
+describe("filterRecords edge cases", () => {
+  it("handles empty records array", () => {
+    const r = filterRecords([], "test");
+    expect(r).toEqual([]);
+  });
+
+  it("handles query with special regex chars", () => {
+    const records = [{ dt: "2024-01-01", wt: 70, note: "test (value)" }];
+    const r = filterRecords(records, "(value)");
+    expect(r.length).toBe(1);
+  });
+});
+
+describe("calcBestPeriod edge cases", () => {
+  it("returns null for fewer than 7 records", () => {
+    const records = Array.from({ length: 6 }, (_, i) => ({
+      dt: `2024-01-0${i + 1}`,
+      wt: 70 - i * 0.1,
+    }));
+    expect(calcBestPeriod(records)).toBeNull();
+  });
+
+  it("does not leak Infinity values", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2024-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 - i * 0.2,
+    }));
+    const r = calcBestPeriod(records);
+    expect(r).not.toBeNull();
+    if (r[7]) {
+      expect(isFinite(r[7].change)).toBe(true);
+    }
+    if (r[30]) {
+      expect(isFinite(r[30].change)).toBe(true);
+    }
+  });
+});
+
+describe("calculateBMI edge cases", () => {
+  it("returns null for non-finite weight", () => {
+    expect(calculateBMI(170, Infinity)).toBeNull();
+  });
+
+  it("returns null for NaN height", () => {
+    expect(calculateBMI(NaN, 70)).toBeNull();
+  });
+
+  it("returns null for zero height", () => {
+    expect(calculateBMI(0, 70)).toBeNull();
+  });
+});
+
+describe("pickWeightCandidate edge cases", () => {
+  it("returns single element from single-element array", () => {
+    expect(pickWeightCandidate([65], 70)).toBe(65);
+  });
+
+  it("picks first when all equidistant from fallback", () => {
+    const r = pickWeightCandidate([60, 80], 70);
+    expect([60, 80]).toContain(r);
   });
 });

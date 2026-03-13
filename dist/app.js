@@ -3407,7 +3407,11 @@ var translations = {
     "ideal.underweight": "\u4F4E\u4F53\u91CD\u57DF",
     "ideal.normal": "\u6A19\u6E96\u57DF",
     "ideal.overweight": "\u904E\u4F53\u91CD\u57DF",
-    "ideal.obese": "\u80A5\u6E80\u57DF"
+    "ideal.obese": "\u80A5\u6E80\u57DF",
+    "fresh.today": "\u4ECA\u65E5\u306E\u8A18\u9332\u6E08\u307F",
+    "fresh.recent": "{days}\u65E5\u524D\u306B\u8A18\u9332\uFF08{weight}kg\uFF09",
+    "fresh.stale": "{days}\u65E5\u9593\u672A\u8A18\u9332\u3067\u3059\u3002\u4ECA\u65E5\u306E\u4F53\u91CD\u3092\u8A18\u9332\u3057\u307E\u3057\u3087\u3046\uFF01",
+    "fresh.veryStale": "{days}\u65E5\u9593\u672A\u8A18\u9332\u3067\u3059\u3002\u8A18\u9332\u3092\u518D\u958B\u3057\u307E\u3057\u3087\u3046\uFF01"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4088,7 +4092,11 @@ var translations = {
     "ideal.underweight": "Underweight",
     "ideal.normal": "Normal",
     "ideal.overweight": "Overweight",
-    "ideal.obese": "Obese"
+    "ideal.obese": "Obese",
+    "fresh.today": "Recorded today",
+    "fresh.recent": "Last recorded {days} day(s) ago ({weight}kg)",
+    "fresh.stale": "No record for {days} days. Log today's weight!",
+    "fresh.veryStale": "No record for {days} days. Time to get back on track!"
   }
 };
 function createTranslator(language) {
@@ -26469,7 +26477,7 @@ function renderIdealWeight() {
           <span>${t("ideal.overweight")}</span>
         </div>
       </div>
-      <div class="helper hint-small">${currentText}</div>
+      <div class="helper hint-small">${currentText} \u2014 ${zoneLabel}</div>
       <div class="helper hint-small">${rangeText}</div>
       <div class="helper hint-small">${centerText}</div>
     </div>
