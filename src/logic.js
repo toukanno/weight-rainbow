@@ -613,3 +613,19 @@ export function filterRecordsByDateRange(records, fromDate, toDate) {
     return true;
   });
 }
+
+export function exportRecordsToCSV(records) {
+  if (!records.length) return "";
+  const header = "date,weight,bmi,bodyFat,source,note";
+  const escapeCSV = (val) => {
+    const str = String(val ?? "");
+    if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+  const rows = records.map((r) =>
+    [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source ?? "", escapeCSV(r.note ?? "")].join(",")
+  );
+  return [header, ...rows].join("\n");
+}

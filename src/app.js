@@ -38,6 +38,7 @@ import {
   calcDayOfWeekAvg,
   calcWeightStability,
   detectMilestone,
+  exportRecordsToCSV,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -625,6 +626,7 @@ function render() {
                 ${recordDateFrom || recordDateTo ? `<button type="button" class="btn ghost" data-action="clear-date-range">${t("records.clearRange")}</button>` : ""}
               </div>
             </div>` : ""}
+            ${state.records.length ? `<div class="export-row"><button type="button" class="btn ghost" data-action="export-csv">📥 ${t("export.csv")}</button></div>` : ""}
             <div class="record-list">
               ${state.records.length ? renderRecordList() : `<div class="empty-state">
                 <div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">📊</div>
@@ -725,11 +727,11 @@ function render() {
               </div>
             </div>
             <div class="google-actions">
-              <button type="button" class="google-btn" data-action="google-backup" ${GOOGLE_CLIENT_ID ? "" : "disabled"}>
+              <button type="button" class="google-btn" data-action="google-backup" ${isGoogleReady() ? "" : "disabled"}>
                 <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
                 ${t("google.backup")}
               </button>
-              <button type="button" class="google-btn" data-action="google-restore" ${GOOGLE_CLIENT_ID ? "" : "disabled"}>
+              <button type="button" class="google-btn" data-action="google-restore" ${isGoogleReady() ? "" : "disabled"}>
                 <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
                 ${t("google.restore")}
               </button>
@@ -1354,9 +1356,7 @@ function checkRainbow(newWeight) {
       } else if (milestone.type === "roundNumber") {
         rainbowDetail += ` 🎯 ${t("milestone.roundNumber").replace("{value}", milestone.value)}`;
       } else if (milestone.type === "bmiCrossing") {
-        const bmiKey = milestone.threshold === 18.5 ? "milestone.bmiNormal"
-          : milestone.threshold === 25 ? "milestone.bmiUnder25" : "milestone.bmiUnder30";
-        rainbowDetail += ` 💪 ${t(bmiKey).replace("{bmi}", milestone.bmi.toFixed(1))}`;
+        rainbowDetail += ` 💪 ${t("milestone.bmiCrossing").replace("{threshold}", milestone.threshold)}`;
       }
     }
     rainbowVisible = true;
@@ -2356,8 +2356,12 @@ let gTokenClient = null;
 let gToken = null;
 let gTokenExpiresAt = 0;
 
+function isGoogleReady() {
+  return !!(GOOGLE_CLIENT_ID && typeof google !== "undefined" && google.accounts?.oauth2);
+}
+
 function googleAuth() {
-  if (!GOOGLE_CLIENT_ID || typeof google === "undefined") return null;
+  if (!isGoogleReady()) return null;
   if (gTokenClient) return gTokenClient;
   gTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
@@ -2402,14 +2406,16 @@ async function googleBackup() {
       },
     };
     const sr = await fetch(
-      `https://www.googleapis.com/drive/v3/files?q=name='${BACKUP_FILENAME}'+and+trashed=false&spaces=appDataFolder`,
+      `https://www.googleapis.com/drive/v3/files?q=name='${BACKUP_FILENAME}'+and+trashed=false&spaces=appDataFolder&fields=files(id)`,
       { headers: { Authorization: `Bearer ${tk}` } },
     );
+    if (!sr.ok) throw new Error("drive_error");
     const sd = await sr.json();
     const ex = sd.files?.[0];
     const bd = JSON.stringify(data, null, 2);
+    let ur;
     if (ex) {
-      await fetch(
+      ur = await fetch(
         `https://www.googleapis.com/upload/drive/v3/files/${ex.id}?uploadType=media`,
         { method: "PATCH", headers: { Authorization: `Bearer ${tk}`, "Content-Type": "application/json" }, body: bd },
       );
@@ -2419,11 +2425,12 @@ async function googleBackup() {
         `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
         JSON.stringify({ name: BACKUP_FILENAME, mimeType: "application/json", parents: ["appDataFolder"] }) +
         `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${bd}\r\n--${boundary}--`;
-      await fetch(
+      ur = await fetch(
         "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
         { method: "POST", headers: { Authorization: `Bearer ${tk}`, "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipartBody },
       );
     }
+    if (!ur.ok) throw new Error("drive_error");
     setStatus(t("google.backupDone"));
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
@@ -2439,9 +2446,10 @@ async function googleRestore() {
   try {
     const tk = await googleGetToken();
     const sr = await fetch(
-      `https://www.googleapis.com/drive/v3/files?q=name='${BACKUP_FILENAME}'+and+trashed=false&spaces=appDataFolder`,
+      `https://www.googleapis.com/drive/v3/files?q=name='${BACKUP_FILENAME}'+and+trashed=false&spaces=appDataFolder&fields=files(id)`,
       { headers: { Authorization: `Bearer ${tk}` } },
     );
+    if (!sr.ok) throw new Error("drive_error");
     const sd = await sr.json();
     const f = sd.files?.[0];
     if (!f) { setStatus(t("google.noData"), "error"); return; }
@@ -2449,6 +2457,7 @@ async function googleRestore() {
       `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
       { headers: { Authorization: `Bearer ${tk}` } },
     );
+    if (!cr.ok) throw new Error("drive_error");
     const bd = await cr.json();
     if (!bd.records?.length) { setStatus(t("google.noData"), "error"); return; }
     let m = [...state.records];
@@ -2465,6 +2474,17 @@ async function googleRestore() {
   } finally {
     btn?.classList.remove("loading");
   }
+}
+
+// Re-enable Google buttons once GSI library loads asynchronously
+if (GOOGLE_CLIENT_ID) {
+  const gsiCheck = setInterval(() => {
+    if (isGoogleReady()) {
+      clearInterval(gsiCheck);
+      app.querySelectorAll('[data-action="google-backup"], [data-action="google-restore"]').forEach((b) => b.removeAttribute("disabled"));
+    }
+  }, 500);
+  setTimeout(() => clearInterval(gsiCheck), 30000);
 }
 
 // Photo zoom
