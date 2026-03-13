@@ -914,10 +914,13 @@ function renderCalendar() {
   const data = buildCalendarMonth(state.records, calendarYear, calendarMonth);
   if (!data) return `<div class="helper">${t("chart.empty")}</div>`;
   const dayNames = ["calendar.sun", "calendar.mon", "calendar.tue", "calendar.wed", "calendar.thu", "calendar.fri", "calendar.sat"];
+  const now = new Date();
+  const isCurrentMonthView = calendarYear === now.getFullYear() && calendarMonth === now.getMonth();
   let html = `<div class="calendar-nav">
     <button type="button" data-action="cal-prev">${t("calendar.prev")}</button>
     <span class="calendar-label">${new Date(calendarYear, calendarMonth).toLocaleDateString(state.settings.language === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "long" })}</span>
     <button type="button" data-action="cal-next">${t("calendar.next")}</button>
+    ${!isCurrentMonthView ? `<button type="button" class="btn ghost" data-action="cal-today" style="margin-left:4px;font-size:0.72rem;">${t("diff.today")}</button>` : ""}
   </div>`;
   html += `<div class="calendar-grid">`;
   for (const key of dayNames) {
@@ -1178,6 +1181,12 @@ function bindEvents() {
   app.querySelector('[data-action="cal-next"]')?.addEventListener("click", () => {
     calendarMonth++;
     if (calendarMonth > 11) { calendarMonth = 0; calendarYear++; }
+    render();
+  });
+  app.querySelector('[data-action="cal-today"]')?.addEventListener("click", () => {
+    const now = new Date();
+    calendarYear = now.getFullYear();
+    calendarMonth = now.getMonth();
     render();
   });
 
