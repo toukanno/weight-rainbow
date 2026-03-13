@@ -475,6 +475,8 @@ export const translations = {
     "calorie.deficit": "不足",
     "calorie.balanced": "均衡",
     "calorie.hint": "体重変化から推定（1kg ≈ 7,700kcal）",
+    "analytics.showMore": "▼ 詳細分析を表示",
+    "analytics.showLess": "▲ 詳細分析を非表示",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -952,6 +954,8 @@ export const translations = {
     "calorie.deficit": "Deficit",
     "calorie.balanced": "Balanced",
     "calorie.hint": "Estimated from weight change (1kg ≈ 7,700kcal)",
+    "analytics.showMore": "▼ Show detailed analytics",
+    "analytics.showLess": "▲ Hide detailed analytics",
   },
 };
 

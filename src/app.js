@@ -117,6 +117,7 @@ let reminderTimer = null;
 let calendarYear = new Date().getFullYear();
 let calendarMonth = new Date().getMonth();
 let showMonthlyStats = false;
+let showAdvancedAnalytics = false;
 let recordSearchQuery = "";
 let recordDateFrom = "";
 let recordDateTo = "";
@@ -659,22 +660,33 @@ function render() {
               }</div>` : ""}
             </div>` : ""}
             ${renderDayOfWeekAvg()}
-            ${renderWeekdayWeekend()}
             ${renderStability()}
-            ${renderConsistencyStreak()}
             ${renderBMIDistribution()}
-            ${renderWeightPercentile()}
-            ${renderMovingAverages()}
-            ${renderWeightRange()}
-            ${renderTagImpact()}
-            ${renderBestPeriod()}
-            ${renderWeeklyFrequency()}
             ${renderWeightVelocity()}
-            ${renderWeightVariance()}
-            ${renderWeightPlateau()}
-            ${renderRecordGaps()}
             ${renderCalorieEstimate()}
             ${renderBodyFatStats()}
+            ${state.records.length >= 3 ? `
+            <div class="analytics-toggle-section">
+              <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
+                ${showAdvancedAnalytics ? t("analytics.showLess") : t("analytics.showMore")}
+              </button>
+              ${showAdvancedAnalytics ? `
+              <div class="advanced-analytics">
+                ${renderWeekdayWeekend()}
+                ${renderConsistencyStreak()}
+                ${renderWeightPercentile()}
+                ${renderMovingAverages()}
+                ${renderWeightRange()}
+                ${renderTagImpact()}
+                ${renderBestPeriod()}
+                ${renderWeeklyFrequency()}
+                ${renderWeightVariance()}
+                ${renderWeightPlateau()}
+                ${renderRecordGaps()}
+              </div>
+              ` : ""}
+            </div>
+            ` : ""}
           </section>
 
           <!-- Monthly Stats Panel -->
@@ -1598,6 +1610,10 @@ function bindEvents() {
   });
   app.querySelector('[data-action="toggle-monthly"]')?.addEventListener("click", () => {
     showMonthlyStats = !showMonthlyStats;
+    render();
+  });
+  app.querySelector('[data-action="toggle-analytics"]')?.addEventListener("click", () => {
+    showAdvancedAnalytics = !showAdvancedAnalytics;
     render();
   });
   app.querySelector("#recordSearch")?.addEventListener("input", (e) => {

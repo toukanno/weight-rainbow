@@ -2302,7 +2302,9 @@ var translations = {
     "calorie.surplus": "\u4F59\u5270",
     "calorie.deficit": "\u4E0D\u8DB3",
     "calorie.balanced": "\u5747\u8861",
-    "calorie.hint": "\u4F53\u91CD\u5909\u5316\u304B\u3089\u63A8\u5B9A\uFF081kg \u2248 7,700kcal\uFF09"
+    "calorie.hint": "\u4F53\u91CD\u5909\u5316\u304B\u3089\u63A8\u5B9A\uFF081kg \u2248 7,700kcal\uFF09",
+    "analytics.showMore": "\u25BC \u8A73\u7D30\u5206\u6790\u3092\u8868\u793A",
+    "analytics.showLess": "\u25B2 \u8A73\u7D30\u5206\u6790\u3092\u975E\u8868\u793A"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2784,7 +2786,9 @@ var translations = {
     "calorie.surplus": "Surplus",
     "calorie.deficit": "Deficit",
     "calorie.balanced": "Balanced",
-    "calorie.hint": "Estimated from weight change (1kg \u2248 7,700kcal)"
+    "calorie.hint": "Estimated from weight change (1kg \u2248 7,700kcal)",
+    "analytics.showMore": "\u25BC Show detailed analytics",
+    "analytics.showLess": "\u25B2 Hide detailed analytics"
   }
 };
 function createTranslator(language) {
@@ -23343,6 +23347,7 @@ var reminderTimer = null;
 var calendarYear = (/* @__PURE__ */ new Date()).getFullYear();
 var calendarMonth = (/* @__PURE__ */ new Date()).getMonth();
 var showMonthlyStats = false;
+var showAdvancedAnalytics = false;
 var recordSearchQuery = "";
 var recordDateFrom = "";
 var recordDateTo = "";
@@ -23839,22 +23844,33 @@ function render() {
               ${insight.weekComparison !== null ? `<div class="helper">${insight.weekComparison > 0.05 ? t("insight.weekUp").replace("{diff}", insight.weekComparison.toFixed(1)) : insight.weekComparison < -0.05 ? t("insight.weekDown").replace("{diff}", insight.weekComparison.toFixed(1)) : t("insight.weekSame")}</div>` : ""}
             </div>` : ""}
             ${renderDayOfWeekAvg()}
-            ${renderWeekdayWeekend()}
             ${renderStability()}
-            ${renderConsistencyStreak()}
             ${renderBMIDistribution()}
-            ${renderWeightPercentile()}
-            ${renderMovingAverages()}
-            ${renderWeightRange()}
-            ${renderTagImpact()}
-            ${renderBestPeriod()}
-            ${renderWeeklyFrequency()}
             ${renderWeightVelocity()}
-            ${renderWeightVariance()}
-            ${renderWeightPlateau()}
-            ${renderRecordGaps()}
             ${renderCalorieEstimate()}
             ${renderBodyFatStats()}
+            ${state.records.length >= 3 ? `
+            <div class="analytics-toggle-section">
+              <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
+                ${showAdvancedAnalytics ? t("analytics.showLess") : t("analytics.showMore")}
+              </button>
+              ${showAdvancedAnalytics ? `
+              <div class="advanced-analytics">
+                ${renderWeekdayWeekend()}
+                ${renderConsistencyStreak()}
+                ${renderWeightPercentile()}
+                ${renderMovingAverages()}
+                ${renderWeightRange()}
+                ${renderTagImpact()}
+                ${renderBestPeriod()}
+                ${renderWeeklyFrequency()}
+                ${renderWeightVariance()}
+                ${renderWeightPlateau()}
+                ${renderRecordGaps()}
+              </div>
+              ` : ""}
+            </div>
+            ` : ""}
           </section>
 
           <!-- Monthly Stats Panel -->
@@ -24736,6 +24752,10 @@ function bindEvents() {
   });
   app.querySelector('[data-action="toggle-monthly"]')?.addEventListener("click", () => {
     showMonthlyStats = !showMonthlyStats;
+    render();
+  });
+  app.querySelector('[data-action="toggle-analytics"]')?.addEventListener("click", () => {
+    showAdvancedAnalytics = !showAdvancedAnalytics;
     render();
   });
   app.querySelector("#recordSearch")?.addEventListener("input", (e) => {
