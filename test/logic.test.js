@@ -88,6 +88,7 @@ import {
   calcWeightTrendIndicator,
   calcNoteTagStats,
   calcIdealWeightRange,
+  calcDataFreshness,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -6876,5 +6877,56 @@ describe("pickWeightCandidate edge cases", () => {
   it("picks first when all equidistant from fallback", () => {
     const r = pickWeightCandidate([60, 80], 70);
     expect([60, 80]).toContain(r);
+  });
+});
+
+describe("calcDataFreshness", () => {
+  it("returns null for empty records", () => {
+    expect(calcDataFreshness([])).toBeNull();
+  });
+
+  it("returns 'today' for record from today", () => {
+    const now = new Date();
+    const dt = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const result = calcDataFreshness([{ dt, wt: 70 }]);
+    expect(result.level).toBe("today");
+    expect(result.daysSince).toBe(0);
+  });
+
+  it("returns 'recent' for 1-2 day old record", () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 2);
+    const dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const result = calcDataFreshness([{ dt, wt: 70 }]);
+    expect(result.level).toBe("recent");
+    expect(result.daysSince).toBe(2);
+  });
+
+  it("returns 'stale' for 3-6 day old record", () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 5);
+    const dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const result = calcDataFreshness([{ dt, wt: 70 }]);
+    expect(result.level).toBe("stale");
+  });
+
+  it("returns 'veryStale' for 7+ day old record", () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 10);
+    const dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const result = calcDataFreshness([{ dt, wt: 70 }]);
+    expect(result.level).toBe("veryStale");
+    expect(result.daysSince).toBe(10);
+  });
+
+  it("uses the most recent record", () => {
+    const d1 = new Date();
+    d1.setDate(d1.getDate() - 10);
+    const now = new Date();
+    const dt1 = `${d1.getFullYear()}-${String(d1.getMonth() + 1).padStart(2, "0")}-${String(d1.getDate()).padStart(2, "0")}`;
+    const dt2 = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const result = calcDataFreshness([{ dt: dt1, wt: 70 }, { dt: dt2, wt: 71 }]);
+    expect(result.level).toBe("today");
+    expect(result.lastWeight).toBe(71);
   });
 });

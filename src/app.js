@@ -90,6 +90,8 @@ import {
   calcMonthlyRecordingMap,
   calcWeightTrendIndicator,
   calcNoteTagStats,
+  calcIdealWeightRange,
+  calcDataFreshness,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -705,6 +707,7 @@ function render() {
                 : t("insight.weekSame")
               }</div>` : ""}
             </div>` : ""}
+            ${renderDataFreshness()}
             ${renderTrendIndicator()}
             ${renderMomentumScore()}
             ${renderStreakRewards()}
@@ -713,6 +716,7 @@ function render() {
             ${renderDayOfWeekAvg()}
             ${renderStability()}
             ${renderBMIDistribution()}
+            ${renderIdealWeight()}
             ${renderWeightVelocity()}
             ${renderCalorieEstimate()}
             ${renderWeightConfidence()}
@@ -2050,6 +2054,57 @@ function renderNoteTagStats() {
   `;
 }
 
+function renderIdealWeight() {
+  if (!state.profile.heightCm || state.records.length === 0) return "";
+  const latest = [...state.records].sort((a, b) => a.dt.localeCompare(b.dt)).pop();
+  const ideal = calcIdealWeightRange(Number(state.profile.heightCm), latest.wt);
+  if (!ideal) return "";
+  const zoneLabel = t("ideal." + ideal.zone);
+  const rangeText = t("ideal.range").replace("{min}", ideal.minWeight).replace("{max}", ideal.maxWeight);
+  const currentText = t("ideal.current").replace("{weight}", ideal.currentWeight).replace("{bmi}", ideal.currentBMI);
+  const centerText = t("ideal.center").replace("{mid}", ideal.midWeight);
+  // Position marker on a gradient bar
+  const idealStart = Math.round(((18.5 - 15) / 15) * 100);
+  const idealEnd = Math.round(((24.9 - 15) / 15) * 100);
+  return `
+    <div class="ideal-section">
+      <div class="helper">${t("ideal.title")}</div>
+      <div class="ideal-bar-container">
+        <div class="ideal-bar">
+          <div class="ideal-zone ideal-under" style="width:${idealStart}%"></div>
+          <div class="ideal-zone ideal-normal" style="width:${idealEnd - idealStart}%"></div>
+          <div class="ideal-zone ideal-over" style="width:${100 - idealEnd}%"></div>
+          <div class="ideal-marker" style="left:${ideal.position}%"></div>
+        </div>
+        <div class="ideal-labels">
+          <span>${t("ideal.underweight")}</span>
+          <span>${t("ideal.normal")}</span>
+          <span>${t("ideal.overweight")}</span>
+        </div>
+      </div>
+      <div class="helper hint-small">${currentText} — ${zoneLabel}</div>
+      <div class="helper hint-small">${rangeText}</div>
+      <div class="helper hint-small">${centerText}</div>
+    </div>
+  `;
+}
+
+function renderDataFreshness() {
+  const fresh = calcDataFreshness(state.records);
+  if (!fresh) return "";
+  if (fresh.level === "today") return "";
+  let msg;
+  if (fresh.level === "recent") {
+    msg = t("fresh.recent").replace("{days}", fresh.daysSince).replace("{weight}", fresh.lastWeight.toFixed(1));
+  } else if (fresh.level === "stale") {
+    msg = t("fresh.stale").replace("{days}", fresh.daysSince);
+  } else {
+    msg = t("fresh.veryStale").replace("{days}", fresh.daysSince);
+  }
+  const cls = fresh.level === "veryStale" ? "fresh-warn" : fresh.level === "stale" ? "fresh-nudge" : "fresh-info";
+  return `<div class="freshness-banner ${cls}">${msg}</div>`;
+}
+
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -2399,6 +2454,7 @@ function bindEvents() {
   app.querySelectorAll("[data-quick-adj]").forEach((button) => {
     button.addEventListener("click", () => {
       const adj = parseFloat(button.dataset.quickAdj);
+      if (!Number.isFinite(adj)) return;
       quickWeight = Math.round((quickWeight + adj) * 10) / 10;
       quickWeight = Math.max(20, Math.min(300, quickWeight));
       const display = document.getElementById("quickDisplay");
@@ -2409,6 +2465,7 @@ function bindEvents() {
   app.querySelectorAll("[data-pick-weight]").forEach((button) => {
     button.addEventListener("click", () => {
       const w = parseFloat(button.dataset.pickWeight);
+      if (!Number.isFinite(w)) return;
       state.form.pickerInt = Math.floor(w);
       state.form.pickerDec = Math.round((w - Math.floor(w)) * 10);
       render();
@@ -3894,7 +3951,7 @@ if (GOOGLE_CLIENT_ID) {
 function handlePhotoZoom() {
   if (!imagePreviewUrl) return;
   const ov = document.createElement("div");
-  ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
+  ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
   ov.setAttribute("role", "dialog");
   ov.setAttribute("aria-label", t("photo.zoomHint"));
   const im = document.createElement("img");

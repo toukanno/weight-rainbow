@@ -2725,6 +2725,26 @@ function calcIdealWeightRange(heightCm, currentWeight) {
     toMax: Math.round((maxWeight - currentWeight) * 10) / 10
   };
 }
+function calcDataFreshness(records) {
+  if (records.length === 0) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const last = sorted[sorted.length - 1];
+  const now = /* @__PURE__ */ new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const lastDate = /* @__PURE__ */ new Date(last.dt + "T00:00:00");
+  const todayDate = /* @__PURE__ */ new Date(today + "T00:00:00");
+  const daysSince = Math.round((todayDate - lastDate) / 864e5);
+  let level = "today";
+  if (daysSince >= 7) level = "veryStale";
+  else if (daysSince >= 3) level = "stale";
+  else if (daysSince >= 1) level = "recent";
+  return {
+    daysSince,
+    lastDate: last.dt,
+    lastWeight: last.wt,
+    level
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -25169,6 +25189,7 @@ function render() {
               <div class="helper">${t("insight.bestDay").replace("{day}", t("day." + insight.bestDay))}</div>
               ${insight.weekComparison !== null ? `<div class="helper">${insight.weekComparison > 0.05 ? t("insight.weekUp").replace("{diff}", insight.weekComparison.toFixed(1)) : insight.weekComparison < -0.05 ? t("insight.weekDown").replace("{diff}", insight.weekComparison.toFixed(1)) : t("insight.weekSame")}</div>` : ""}
             </div>` : ""}
+            ${renderDataFreshness()}
             ${renderTrendIndicator()}
             ${renderMomentumScore()}
             ${renderStreakRewards()}
@@ -26483,6 +26504,21 @@ function renderIdealWeight() {
     </div>
   `;
 }
+function renderDataFreshness() {
+  const fresh = calcDataFreshness(state.records);
+  if (!fresh) return "";
+  if (fresh.level === "today") return "";
+  let msg;
+  if (fresh.level === "recent") {
+    msg = t("fresh.recent").replace("{days}", fresh.daysSince).replace("{weight}", fresh.lastWeight.toFixed(1));
+  } else if (fresh.level === "stale") {
+    msg = t("fresh.stale").replace("{days}", fresh.daysSince);
+  } else {
+    msg = t("fresh.veryStale").replace("{days}", fresh.daysSince);
+  }
+  const cls = fresh.level === "veryStale" ? "fresh-warn" : fresh.level === "stale" ? "fresh-nudge" : "fresh-info";
+  return `<div class="freshness-banner ${cls}">${msg}</div>`;
+}
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -26826,6 +26862,7 @@ function bindEvents() {
   app.querySelectorAll("[data-quick-adj]").forEach((button) => {
     button.addEventListener("click", () => {
       const adj = parseFloat(button.dataset.quickAdj);
+      if (!Number.isFinite(adj)) return;
       quickWeight = Math.round((quickWeight + adj) * 10) / 10;
       quickWeight = Math.max(20, Math.min(300, quickWeight));
       const display = document.getElementById("quickDisplay");
@@ -26835,6 +26872,7 @@ function bindEvents() {
   app.querySelectorAll("[data-pick-weight]").forEach((button) => {
     button.addEventListener("click", () => {
       const w = parseFloat(button.dataset.pickWeight);
+      if (!Number.isFinite(w)) return;
       state.form.pickerInt = Math.floor(w);
       state.form.pickerDec = Math.round((w - Math.floor(w)) * 10);
       render();
@@ -28185,7 +28223,7 @@ if (GOOGLE_CLIENT_ID) {
 function handlePhotoZoom() {
   if (!imagePreviewUrl) return;
   const ov = document.createElement("div");
-  ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
+  ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
   ov.setAttribute("role", "dialog");
   ov.setAttribute("aria-label", t("photo.zoomHint"));
   const im = document.createElement("img");
