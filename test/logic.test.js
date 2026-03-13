@@ -75,6 +75,7 @@ import {
   calcWeightConfidence,
   calcProgressSummary,
   calcMilestoneTimeline,
+  calcVolatilityIndex,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -4814,6 +4815,49 @@ describe("calcMilestoneTimeline", () => {
   });
 });
 
+describe("calcVolatilityIndex", () => {
+  it("returns null for fewer than 5 records", () => {
+    const records = Array.from({ length: 4 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    expect(calcVolatilityIndex(records)).toBeNull();
+  });
+
+  it("calculates low volatility for stable weights", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + (i % 2 === 0 ? 0.1 : -0.1),
+    }));
+    const result = calcVolatilityIndex(records);
+    expect(result).not.toBeNull();
+    expect(result.level).toBe("low");
+    expect(result.overall).toBeLessThan(0.3);
+  });
+
+  it("calculates high volatility for fluctuating weights", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + (i % 2 === 0 ? 1.5 : -1.5),
+    }));
+    const result = calcVolatilityIndex(records);
+    expect(result).not.toBeNull();
+    expect(result.level).toBe("high");
+    expect(result.overall).toBeGreaterThan(0.8);
+  });
+
+  it("returns maxSwing and trend", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + Math.sin(i) * 0.5,
+    }));
+    const result = calcVolatilityIndex(records);
+    expect(result).not.toBeNull();
+    expect(result.maxSwing).toBeGreaterThan(0);
+    expect(["increasing", "decreasing", "stable"]).toContain(result.trend);
+  });
+});
+
 describe("buildRecord edge cases", () => {
   it("truncates note to 100 characters", () => {
     const longNote = "x".repeat(150);
@@ -5574,5 +5618,76 @@ describe("exportRecordsToCSV", () => {
   it("escapes notes with commas", () => {
     const csv = exportRecordsToCSV([{ dt: "2024-01-01", wt: 70, note: "a,b" }]);
     expect(csv).toContain('"a,b"');
+  });
+});
+
+// ── getBMIStatus expanded ──
+describe("getBMIStatus expanded", () => {
+  it("returns unknown for NaN", () => {
+    expect(getBMIStatus(NaN)).toBe("bmi.unknown");
+  });
+  it("returns unknown for Infinity", () => {
+    expect(getBMIStatus(Infinity)).toBe("bmi.unknown");
+  });
+  it("returns under for BMI below 18.5", () => {
+    expect(getBMIStatus(17.0)).toBe("bmi.under");
+  });
+  it("returns normal for BMI at 18.5 boundary", () => {
+    expect(getBMIStatus(18.5)).toBe("bmi.normal");
+  });
+  it("returns over for BMI at 25 boundary", () => {
+    expect(getBMIStatus(25)).toBe("bmi.over");
+  });
+  it("returns obese for BMI at 30 boundary", () => {
+    expect(getBMIStatus(30)).toBe("bmi.obese");
+  });
+});
+
+// ── createDefaultSettings expanded ──
+describe("createDefaultSettings expanded", () => {
+  it("returns correct default language", () => {
+    expect(createDefaultSettings().language).toBe("ja");
+  });
+  it("returns correct default theme", () => {
+    expect(createDefaultSettings().theme).toBe("prism");
+  });
+  it("returns goalWeight as null", () => {
+    expect(createDefaultSettings().goalWeight).toBeNull();
+  });
+  it("returns new object each time", () => {
+    expect(createDefaultSettings()).not.toBe(createDefaultSettings());
+  });
+});
+
+// ── calcWeightVariance edge cases ──
+describe("calcWeightVariance expanded", () => {
+  it("returns null for fewer than 5 records", () => {
+    const records = Array.from({ length: 4 }, () => ({ wt: 70 }));
+    expect(calcWeightVariance(records)).toBeNull();
+  });
+  it("returns veryLow level for identical weights", () => {
+    const records = Array.from({ length: 5 }, () => ({ wt: 70 }));
+    const result = calcWeightVariance(records);
+    expect(result.cv).toBe(0);
+    expect(result.level).toBe("veryLow");
+    expect(result.maxSwing).toBe(0);
+  });
+  it("detects high variance", () => {
+    const records = [{ wt: 65 }, { wt: 75 }, { wt: 60 }, { wt: 80 }, { wt: 70 }];
+    const result = calcWeightVariance(records);
+    expect(result.level).toBe("high");
+    expect(result.maxSwing).toBe(20);
+  });
+});
+
+// ── calcWeightPlateau with previousRate ──
+describe("calcWeightPlateau with previousRate", () => {
+  it("calculates previousRate when 28+ records available", () => {
+    const records = Array.from({ length: 28 }, (_, i) => ({
+      dt: `2024-01-${String(i + 1).padStart(2, "0")}`,
+      wt: i < 14 ? 75 - i * 0.3 : 70.5 + (i % 2) * 0.1,
+    }));
+    const result = calcWeightPlateau(records);
+    expect(result.previousRate).not.toBeNull();
   });
 });

@@ -2326,6 +2326,37 @@ function calcMilestoneTimeline(records) {
   filtered.sort((a, b) => a.date.localeCompare(b.date));
   return { events: filtered.slice(-10), total: filtered.length };
 }
+function calcVolatilityIndex(records) {
+  if (records.length < 5) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const changes = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const dayDiff = Math.round((new Date(sorted[i].dt) - new Date(sorted[i - 1].dt)) / 864e5);
+    if (dayDiff === 1) {
+      changes.push(Math.abs(sorted[i].wt - sorted[i - 1].wt));
+    }
+  }
+  if (changes.length < 3) return null;
+  const avg = (arr) => arr.reduce((s, v) => s + v, 0) / arr.length;
+  const overallAvg = Math.round(avg(changes) * 100) / 100;
+  const recentChanges = changes.slice(-7);
+  const recentAvg = Math.round(avg(recentChanges) * 100) / 100;
+  const maxSwing = Math.round(Math.max(...changes) * 100) / 100;
+  let level = "moderate";
+  if (overallAvg < 0.3) level = "low";
+  else if (overallAvg > 0.8) level = "high";
+  let trend = "stable";
+  if (recentAvg > overallAvg * 1.3) trend = "increasing";
+  else if (recentAvg < overallAvg * 0.7) trend = "decreasing";
+  return {
+    overall: overallAvg,
+    recent: recentAvg,
+    maxSwing,
+    level,
+    trend,
+    dataPoints: changes.length
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -2920,7 +2951,18 @@ var translations = {
     "timeline.mark": "{mark}kg\u3092\u7A81\u7834",
     "timeline.bmi.normal": "BMI\u6A19\u6E96\u30BE\u30FC\u30F3\u306B\u5230\u9054",
     "timeline.bmi.change": "BMI\u30BE\u30FC\u30F3\u5909\u66F4: {from} \u2192 {to}",
-    "timeline.hint": "\u76F4\u8FD1{count}\u4EF6\u306E\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3"
+    "timeline.hint": "\u76F4\u8FD1{count}\u4EF6\u306E\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3",
+    "volatility.title": "\u4F53\u91CD\u5909\u52D5\u6307\u6570",
+    "volatility.overall": "\u5168\u4F53: \xB1{val}kg/\u65E5",
+    "volatility.recent": "\u76F4\u8FD1: \xB1{val}kg/\u65E5",
+    "volatility.max": "\u6700\u5927\u5909\u52D5: {val}kg",
+    "volatility.low": "\u5B89\u5B9A",
+    "volatility.moderate": "\u666E\u901A",
+    "volatility.high": "\u5909\u52D5\u5927",
+    "volatility.increasing": "\u5909\u52D5\u304C\u5897\u52A0\u4E2D",
+    "volatility.decreasing": "\u5909\u52D5\u304C\u6E1B\u5C11\u4E2D",
+    "volatility.stable": "\u5909\u52D5\u306F\u5B89\u5B9A",
+    "volatility.hint": "\u65E5\u3005\u306E\u4F53\u91CD\u5909\u52D5\u306F\u81EA\u7136\u306A\u3053\u3068\u3067\u3059"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3513,7 +3555,18 @@ var translations = {
     "timeline.mark": "Broke through {mark}kg",
     "timeline.bmi.normal": "Reached normal BMI zone",
     "timeline.bmi.change": "BMI zone: {from} \u2192 {to}",
-    "timeline.hint": "Last {count} milestones"
+    "timeline.hint": "Last {count} milestones",
+    "volatility.title": "Weight Volatility Index",
+    "volatility.overall": "Overall: \xB1{val}kg/day",
+    "volatility.recent": "Recent: \xB1{val}kg/day",
+    "volatility.max": "Max swing: {val}kg",
+    "volatility.low": "Steady",
+    "volatility.moderate": "Normal",
+    "volatility.high": "Volatile",
+    "volatility.increasing": "Volatility increasing",
+    "volatility.decreasing": "Volatility decreasing",
+    "volatility.stable": "Volatility stable",
+    "volatility.hint": "Daily weight fluctuations are completely normal"
   }
 };
 function createTranslator(language) {
@@ -24607,6 +24660,7 @@ function render() {
                 ${renderWeightHeatmap()}
                 ${renderProgressSummary()}
                 ${renderMilestoneTimeline()}
+                ${renderVolatilityIndex()}
               </div>
               ` : ""}
             </div>
@@ -25590,6 +25644,29 @@ function renderMilestoneTimeline() {
       <div class="helper">${t("timeline.title")}</div>
       <div class="timeline-list">${items}</div>
       <div class="helper hint-small">${t("timeline.hint").replace("{count}", tl.events.length)}</div>
+    </div>
+  `;
+}
+function renderVolatilityIndex() {
+  const vi = calcVolatilityIndex(state.records);
+  if (!vi) return "";
+  const levelColors = { low: "#10b981", moderate: "#f59e0b", high: "#ef4444" };
+  const color = levelColors[vi.level] || levelColors.moderate;
+  const pct = Math.min(100, Math.round(vi.overall / 1.2 * 100));
+  return `
+    <div class="volatility-section">
+      <div class="helper">${t("volatility.title")}</div>
+      <div class="volatility-badge" style="color:${color}">${t("volatility." + vi.level)}</div>
+      <div class="volatility-bar-track">
+        <div class="volatility-bar-fill" style="width:${pct}%;background:${color}"></div>
+      </div>
+      <div class="volatility-stats">
+        <span>${t("volatility.overall").replace("{val}", vi.overall)}</span>
+        <span>${t("volatility.recent").replace("{val}", vi.recent)}</span>
+        <span>${t("volatility.max").replace("{val}", vi.maxSwing)}</span>
+      </div>
+      <div class="volatility-trend">${t("volatility." + vi.trend)}</div>
+      <div class="helper hint-small">${t("volatility.hint")}</div>
     </div>
   `;
 }
@@ -26712,7 +26789,8 @@ function drawChart() {
     context.moveTo(padX, y);
     context.lineTo(width - padX, y);
     context.stroke();
-    const weightLabel = (max - index / 4 * range).toFixed(1);
+    const weightVal = max - index / 4 * range;
+    const weightLabel = weightVal % 1 === 0 ? String(Math.round(weightVal)) : weightVal.toFixed(1);
     context.fillStyle = cs.getPropertyValue("--muted").trim() || "#6b7280";
     context.font = "11px sans-serif";
     context.textAlign = "right";

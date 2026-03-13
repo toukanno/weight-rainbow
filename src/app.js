@@ -78,6 +78,7 @@ import {
   calcWeightConfidence,
   calcProgressSummary,
   calcMilestoneTimeline,
+  calcVolatilityIndex,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -714,6 +715,7 @@ function render() {
                 ${renderWeightHeatmap()}
                 ${renderProgressSummary()}
                 ${renderMilestoneTimeline()}
+                ${renderVolatilityIndex()}
               </div>
               ` : ""}
             </div>
@@ -1743,6 +1745,31 @@ function renderMilestoneTimeline() {
       <div class="helper">${t("timeline.title")}</div>
       <div class="timeline-list">${items}</div>
       <div class="helper hint-small">${t("timeline.hint").replace("{count}", tl.events.length)}</div>
+    </div>
+  `;
+}
+
+function renderVolatilityIndex() {
+  const vi = calcVolatilityIndex(state.records);
+  if (!vi) return "";
+  const levelColors = { low: "#10b981", moderate: "#f59e0b", high: "#ef4444" };
+  const color = levelColors[vi.level] || levelColors.moderate;
+  // Scale bar: map overall avg to 0-100 (0.3=low threshold, 0.8=high threshold)
+  const pct = Math.min(100, Math.round((vi.overall / 1.2) * 100));
+  return `
+    <div class="volatility-section">
+      <div class="helper">${t("volatility.title")}</div>
+      <div class="volatility-badge" style="color:${color}">${t("volatility." + vi.level)}</div>
+      <div class="volatility-bar-track">
+        <div class="volatility-bar-fill" style="width:${pct}%;background:${color}"></div>
+      </div>
+      <div class="volatility-stats">
+        <span>${t("volatility.overall").replace("{val}", vi.overall)}</span>
+        <span>${t("volatility.recent").replace("{val}", vi.recent)}</span>
+        <span>${t("volatility.max").replace("{val}", vi.maxSwing)}</span>
+      </div>
+      <div class="volatility-trend">${t("volatility." + vi.trend)}</div>
+      <div class="helper hint-small">${t("volatility.hint")}</div>
     </div>
   `;
 }
@@ -2989,7 +3016,8 @@ function drawChart() {
     context.stroke();
 
     // Y-axis labels
-    const weightLabel = (max - (index / 4) * range).toFixed(1);
+    const weightVal = max - (index / 4) * range;
+    const weightLabel = weightVal % 1 === 0 ? String(Math.round(weightVal)) : weightVal.toFixed(1);
     context.fillStyle = cs.getPropertyValue("--muted").trim() || "#6b7280";
     context.font = "11px sans-serif";
     context.textAlign = "right";

@@ -1825,3 +1825,51 @@ export function calcMilestoneTimeline(records) {
 
   return { events: filtered.slice(-10), total: filtered.length };
 }
+
+/**
+ * Calculates a volatility index measuring day-to-day weight fluctuation.
+ * Compares recent (7-day) vs overall volatility to detect trend changes.
+ */
+export function calcVolatilityIndex(records) {
+  if (records.length < 5) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+
+  // Calculate consecutive-day changes
+  const changes = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const dayDiff = Math.round((new Date(sorted[i].dt) - new Date(sorted[i - 1].dt)) / 86400000);
+    if (dayDiff === 1) {
+      changes.push(Math.abs(sorted[i].wt - sorted[i - 1].wt));
+    }
+  }
+  if (changes.length < 3) return null;
+
+  const avg = (arr) => arr.reduce((s, v) => s + v, 0) / arr.length;
+  const overallAvg = Math.round(avg(changes) * 100) / 100;
+
+  // Recent volatility (last 7 changes)
+  const recentChanges = changes.slice(-7);
+  const recentAvg = Math.round(avg(recentChanges) * 100) / 100;
+
+  // Max single-day swing
+  const maxSwing = Math.round(Math.max(...changes) * 100) / 100;
+
+  // Volatility level
+  let level = "moderate";
+  if (overallAvg < 0.3) level = "low";
+  else if (overallAvg > 0.8) level = "high";
+
+  // Trend: is volatility increasing or decreasing?
+  let trend = "stable";
+  if (recentAvg > overallAvg * 1.3) trend = "increasing";
+  else if (recentAvg < overallAvg * 0.7) trend = "decreasing";
+
+  return {
+    overall: overallAvg,
+    recent: recentAvg,
+    maxSwing,
+    level,
+    trend,
+    dataPoints: changes.length,
+  };
+}
