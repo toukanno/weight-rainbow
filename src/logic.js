@@ -1940,3 +1940,105 @@ export function calcPeriodComparison(records) {
 
   return { weekly, monthly };
 }
+
+/**
+ * Calculates goal countdown with ETA and progress percentage.
+ * Uses recent trend rate to estimate days until goal is reached.
+ */
+export function calcGoalCountdown(records, goalWeight) {
+  if (!goalWeight || records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1].wt;
+  const remaining = Math.round((latest - goalWeight) * 10) / 10;
+  const absRemaining = Math.abs(remaining);
+
+  const first = sorted[0].wt;
+  const isLossGoal = first > goalWeight;
+
+  // Already at or past goal
+  if (absRemaining < 0.1 || (isLossGoal && latest <= goalWeight) || (!isLossGoal && latest >= goalWeight)) {
+    return { reached: true, latest, goal: goalWeight, remaining: 0, pct: 100 };
+  }
+
+  // Calculate progress from starting weight
+  const totalToLose = first - goalWeight;
+  const lost = first - latest;
+  const pct = totalToLose !== 0 ? Math.max(0, Math.min(100, Math.round((lost / totalToLose) * 100))) : 0;
+
+  // Estimate days remaining using last 14 records trend
+  const recent = sorted.slice(-14);
+  let etaDays = null;
+  if (recent.length >= 3) {
+    const daySpan = Math.max(1, Math.round((new Date(recent[recent.length - 1].dt) - new Date(recent[0].dt)) / 86400000));
+    const rate = (recent[recent.length - 1].wt - recent[0].wt) / daySpan; // kg/day
+    // Only estimate if trend is in the right direction
+    if (rate < -0.01 && remaining > 0) {
+      etaDays = Math.ceil(remaining / Math.abs(rate));
+    } else if (rate > 0.01 && remaining < 0) {
+      etaDays = Math.ceil(absRemaining / rate);
+    }
+  }
+
+  return {
+    reached: false,
+    latest,
+    goal: goalWeight,
+    remaining,
+    absRemaining,
+    pct,
+    etaDays,
+    direction: remaining > 0 ? "lose" : "gain",
+  };
+}
+
+/**
+ * Analyzes body fat trends vs weight trends to detect body composition changes.
+ * Identifies whether fat loss, muscle gain, or mixed changes are occurring.
+ */
+export function calcBodyComposition(records) {
+  const withBf = records.filter((r) => r.bf != null && Number.isFinite(r.bf) && r.bf > 0);
+  if (withBf.length < 3) return null;
+  const sorted = [...withBf].sort((a, b) => a.dt.localeCompare(b.dt));
+
+  const first = sorted[0];
+  const latest = sorted[sorted.length - 1];
+
+  // Body fat change
+  const bfChange = Math.round((latest.bf - first.bf) * 10) / 10;
+  const wtChange = Math.round((latest.wt - first.wt) * 10) / 10;
+
+  // Estimated fat mass and lean mass
+  const firstFatMass = Math.round((first.wt * first.bf / 100) * 10) / 10;
+  const latestFatMass = Math.round((latest.wt * latest.bf / 100) * 10) / 10;
+  const firstLeanMass = Math.round((first.wt - firstFatMass) * 10) / 10;
+  const latestLeanMass = Math.round((latest.wt - latestFatMass) * 10) / 10;
+
+  const fatMassChange = Math.round((latestFatMass - firstFatMass) * 10) / 10;
+  const leanMassChange = Math.round((latestLeanMass - firstLeanMass) * 10) / 10;
+
+  // Determine body composition trend
+  let trend = "mixed";
+  if (fatMassChange < -0.3 && leanMassChange >= 0) trend = "fatLoss";
+  else if (fatMassChange >= 0 && leanMassChange > 0.3) trend = "muscleGain";
+  else if (fatMassChange < -0.3 && leanMassChange > 0.3) trend = "recomp";
+  else if (fatMassChange > 0.3 && leanMassChange < 0) trend = "decline";
+
+  // Average body fat
+  const avgBf = Math.round((sorted.reduce((s, r) => s + r.bf, 0) / sorted.length) * 10) / 10;
+
+  return {
+    firstBf: first.bf,
+    latestBf: latest.bf,
+    bfChange,
+    wtChange,
+    fatMassChange,
+    leanMassChange,
+    firstFatMass,
+    latestFatMass,
+    firstLeanMass,
+    latestLeanMass,
+    trend,
+    avgBf,
+    dataPoints: sorted.length,
+  };
+}

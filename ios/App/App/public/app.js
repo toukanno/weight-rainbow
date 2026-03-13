@@ -2412,10 +2412,11 @@ function calcGoalCountdown(records, goalWeight) {
   const latest = sorted[sorted.length - 1].wt;
   const remaining = Math.round((latest - goalWeight) * 10) / 10;
   const absRemaining = Math.abs(remaining);
-  if (remaining <= 0 && latest <= goalWeight || absRemaining < 0.1) {
+  const first = sorted[0].wt;
+  const isLossGoal = first > goalWeight;
+  if (absRemaining < 0.1 || isLossGoal && latest <= goalWeight || !isLossGoal && latest >= goalWeight) {
     return { reached: true, latest, goal: goalWeight, remaining: 0, pct: 100 };
   }
-  const first = sorted[0].wt;
   const totalToLose = first - goalWeight;
   const lost = first - latest;
   const pct = totalToLose !== 0 ? Math.max(0, Math.min(100, Math.round(lost / totalToLose * 100))) : 0;
@@ -3065,7 +3066,17 @@ var translations = {
     "countdown.eta": "\u4E88\u60F3\u5230\u9054\u65E5: \u7D04{days}\u65E5\u5F8C",
     "countdown.noEta": "\u30C8\u30EC\u30F3\u30C9\u30C7\u30FC\u30BF\u4E0D\u8DB3",
     "countdown.pct": "\u9054\u6210\u7387: {pct}%",
-    "countdown.current": "\u73FE\u5728: {wt}kg \u2192 \u76EE\u6A19: {goal}kg"
+    "countdown.current": "\u73FE\u5728: {wt}kg \u2192 \u76EE\u6A19: {goal}kg",
+    "bodyComp.title": "\u4F53\u7D44\u6210\u5206\u6790",
+    "bodyComp.bf": "\u4F53\u8102\u80AA\u7387: {first}% \u2192 {latest}% ({change}%)",
+    "bodyComp.fatMass": "\u8102\u80AA\u91CF: {change}kg",
+    "bodyComp.leanMass": "\u9664\u8102\u80AA\u91CF: {change}kg",
+    "bodyComp.fatLoss": "\u8102\u80AA\u304C\u6E1B\u5C11\u4E2D",
+    "bodyComp.muscleGain": "\u7B4B\u8089\u304C\u5897\u52A0\u4E2D",
+    "bodyComp.recomp": "\u4F53\u7D44\u6210\u6539\u5584\u4E2D\uFF08\u30EA\u30B3\u30F3\u30D7\uFF09",
+    "bodyComp.decline": "\u6CE8\u610F\u304C\u5FC5\u8981\u3067\u3059",
+    "bodyComp.mixed": "\u5909\u52D5\u4E2D",
+    "bodyComp.hint": "{n}\u4EF6\u306E\u4F53\u8102\u80AA\u30C7\u30FC\u30BF\u306B\u57FA\u3065\u304F\u5206\u6790"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3688,7 +3699,17 @@ var translations = {
     "countdown.eta": "Estimated: ~{days} days",
     "countdown.noEta": "Not enough trend data",
     "countdown.pct": "Progress: {pct}%",
-    "countdown.current": "Now: {wt}kg \u2192 Goal: {goal}kg"
+    "countdown.current": "Now: {wt}kg \u2192 Goal: {goal}kg",
+    "bodyComp.title": "Body Composition",
+    "bodyComp.bf": "Body fat: {first}% \u2192 {latest}% ({change}%)",
+    "bodyComp.fatMass": "Fat mass: {change}kg",
+    "bodyComp.leanMass": "Lean mass: {change}kg",
+    "bodyComp.fatLoss": "Losing fat",
+    "bodyComp.muscleGain": "Gaining muscle",
+    "bodyComp.recomp": "Body recomposition",
+    "bodyComp.decline": "Needs attention",
+    "bodyComp.mixed": "Mixed changes",
+    "bodyComp.hint": "Based on {n} body fat records"
   }
 };
 function createTranslator(language) {

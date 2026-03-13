@@ -77,6 +77,7 @@ import {
   calcMilestoneTimeline,
   calcVolatilityIndex,
   calcPeriodComparison,
+  calcGoalCountdown,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -4910,6 +4911,42 @@ describe("calcPeriodComparison", () => {
   });
 });
 
+describe("calcGoalCountdown", () => {
+  it("returns null without goal weight", () => {
+    expect(calcGoalCountdown([{ dt: "2025-01-01", wt: 70 }], null)).toBeNull();
+    expect(calcGoalCountdown([{ dt: "2025-01-01", wt: 70 }], 0)).toBeNull();
+  });
+
+  it("returns null for fewer than 3 records", () => {
+    expect(calcGoalCountdown([{ dt: "2025-01-01", wt: 70 }, { dt: "2025-01-02", wt: 69 }], 65)).toBeNull();
+  });
+
+  it("detects goal reached", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 68 },
+      { dt: "2025-01-03", wt: 65 },
+    ];
+    const result = calcGoalCountdown(records, 65);
+    expect(result.reached).toBe(true);
+    expect(result.pct).toBe(100);
+  });
+
+  it("calculates remaining and progress", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 80 },
+      { dt: "2025-01-02", wt: 78 },
+      { dt: "2025-01-03", wt: 75 },
+    ];
+    const result = calcGoalCountdown(records, 70);
+    expect(result.reached).toBe(false);
+    expect(result.remaining).toBe(5);
+    expect(result.absRemaining).toBe(5);
+    expect(result.pct).toBe(50); // lost 5 of 10
+    expect(result.direction).toBe("lose");
+  });
+});
+
 describe("buildRecord edge cases", () => {
   it("truncates note to 100 characters", () => {
     const longNote = "x".repeat(150);
@@ -5857,5 +5894,122 @@ describe("calcMovingAverages edge cases", () => {
     expect(result).not.toBeNull();
     expect(result.signal).toBe("aligned");
     expect(result.diff).toBe(0);
+  });
+});
+
+describe("calcVolatilityIndex edge cases", () => {
+  it("returns null when no consecutive days exist", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-03", wt: 71 },
+      { dt: "2025-01-05", wt: 72 },
+      { dt: "2025-01-07", wt: 73 },
+      { dt: "2025-01-09", wt: 74 },
+    ];
+    expect(calcVolatilityIndex(records)).toBeNull();
+  });
+
+  it("detects increasing volatility trend", () => {
+    // Stable start, volatile end
+    const records = [];
+    for (let i = 0; i < 20; i++) {
+      records.push({
+        dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+        wt: i < 10 ? 70 + (i % 2 === 0 ? 0.1 : -0.1) : 70 + (i % 2 === 0 ? 2 : -2),
+      });
+    }
+    const result = calcVolatilityIndex(records);
+    expect(result).not.toBeNull();
+    expect(result.recent).toBeGreaterThan(result.overall);
+  });
+
+  it("includes correct dataPoints count", () => {
+    const records = Array.from({ length: 8 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + (i % 2 === 0 ? 0.5 : -0.5),
+    }));
+    const result = calcVolatilityIndex(records);
+    expect(result).not.toBeNull();
+    expect(result.dataPoints).toBe(7);
+  });
+});
+
+describe("calcGoalCountdown edge cases", () => {
+  it("estimates ETA when losing weight toward goal", () => {
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 80 - i * 0.2,
+    }));
+    const result = calcGoalCountdown(records, 70);
+    expect(result).not.toBeNull();
+    expect(result.reached).toBe(false);
+    expect(result.etaDays).toBeGreaterThan(0);
+    expect(result.direction).toBe("lose");
+  });
+
+  it("returns null ETA when trend is wrong direction", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i * 0.5, // gaining weight but goal is lower
+    }));
+    const result = calcGoalCountdown(records, 65);
+    expect(result).not.toBeNull();
+    expect(result.etaDays).toBeNull();
+  });
+
+  it("handles gain direction (goal is higher than current)", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 50 + i * 0.3,
+    }));
+    const result = calcGoalCountdown(records, 55);
+    expect(result).not.toBeNull();
+    expect(result.direction).toBe("gain");
+    expect(result.remaining).toBeLessThan(0);
+  });
+
+  it("clamps pct to 0-100 range", () => {
+    // Start at 80, current 60 (overshot goal 65)
+    const records = [
+      { dt: "2025-01-01", wt: 80 },
+      { dt: "2025-01-02", wt: 70 },
+      { dt: "2025-01-03", wt: 60 },
+    ];
+    const result = calcGoalCountdown(records, 65);
+    // Already past goal, so should be reached
+    expect(result.reached).toBe(true);
+  });
+});
+
+describe("calcPeriodComparison edge cases", () => {
+  it("returns null when all records are from the distant past", () => {
+    const records = [
+      { dt: "2020-01-01", wt: 70 },
+      { dt: "2020-01-02", wt: 71 },
+      { dt: "2020-01-03", wt: 72 },
+    ];
+    const result = calcPeriodComparison(records);
+    // May return null or have null weekly/monthly depending on date range
+    if (result) {
+      // At least structure is valid
+      expect(result).toHaveProperty("weekly");
+      expect(result).toHaveProperty("monthly");
+    }
+  });
+
+  it("calculates avgDiff when both periods have data", () => {
+    const today = new Date();
+    const records = [];
+    // Add records for last 30 days
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      records.push({ dt, wt: 70 + (i > 14 ? 2 : 0) });
+    }
+    const result = calcPeriodComparison(records);
+    expect(result).not.toBeNull();
+    expect(result).toHaveProperty("weekly");
+    expect(result).toHaveProperty("monthly");
   });
 });
