@@ -1690,6 +1690,10 @@ var translations = {
     "chart.period.all": "\u5168\u3066",
     "chart.bmiZones": "\u80CC\u666F\u8272\u306FBMI\u533A\u5206\u3092\u8868\u793A\uFF08\u8EAB\u9577\u8A2D\u5B9A\u6642\uFF09",
     "chart.forecast": "\u4E88\u6E2C",
+    "chart.legend.weight": "\u4F53\u91CD",
+    "chart.legend.movingAvg": "7\u65E5\u79FB\u52D5\u5E73\u5747",
+    "chart.legend.goal": "\u76EE\u6A19",
+    "chart.legend.forecast": "\u30C8\u30EC\u30F3\u30C9\u4E88\u6E2C",
     "share.chart": "\u5171\u6709",
     "share.done": "\u30C1\u30E3\u30FC\u30C8\u3092\u5171\u6709\u3057\u307E\u3057\u305F",
     "share.error": "\u5171\u6709\u306B\u5931\u6557\u3057\u307E\u3057\u305F",
@@ -2046,6 +2050,10 @@ var translations = {
     "chart.period.all": "All",
     "chart.bmiZones": "Background colors show BMI zones (when height is set)",
     "chart.forecast": "Forecast",
+    "chart.legend.weight": "Weight",
+    "chart.legend.movingAvg": "7-day moving avg",
+    "chart.legend.goal": "Goal",
+    "chart.legend.forecast": "Trend forecast",
     "share.chart": "Share",
     "share.done": "Chart shared",
     "share.error": "Sharing failed",
@@ -23120,6 +23128,12 @@ function render() {
             </div>
             <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}"></canvas>
             <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
+            ${state.records.length >= 3 ? `<div class="chart-legend">
+              <span class="chart-legend-item"><span class="chart-legend-line gradient"></span>${t("chart.legend.weight")}</span>
+              <span class="chart-legend-item"><span class="chart-legend-line dashed accent3"></span>${t("chart.legend.movingAvg")}</span>
+              ${Number.isFinite(goalWeight) ? `<span class="chart-legend-item"><span class="chart-legend-line dashed ok"></span>${t("chart.legend.goal")}</span>` : ""}
+              <span class="chart-legend-item"><span class="chart-legend-line dashed accent2"></span>${t("chart.legend.forecast")}</span>
+            </div>` : ""}
             ${state.profile.heightCm ? `<div class="hint-small" style="margin-top:4px;">${t("chart.bmiZones")}</div>` : ""}
             <div class="stat-grid">
               ${renderStat(t("chart.latest"), stats ? formatWeight(stats.latestWeight) : "--")}
@@ -23547,7 +23561,7 @@ function renderRecord(record, prevRecord, badge) {
 function renderSourceBreakdown() {
   const breakdown = calcSourceBreakdown(state.records);
   if (!breakdown) return "";
-  const sourceIcons = { manual: "\u270F\uFE0F", voice: "\u{1F3A4}", photo: "\u{1F4F7}", quick: "\u26A1" };
+  const sourceIcons = { manual: "\u270F\uFE0F", voice: "\u{1F3A4}", photo: "\u{1F4F7}", quick: "\u26A1", import: "\u{1F4E5}" };
   const entries = Object.entries(breakdown).sort((a, b) => b[1] - a[1]);
   return `
     <div class="source-breakdown">

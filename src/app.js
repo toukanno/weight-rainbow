@@ -45,6 +45,7 @@ import {
   calcLongestStreak,
   calcTrendForecast,
   calcSmoothedWeight,
+  calcCalendarChangeMap,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -562,6 +563,12 @@ function render() {
             </div>
             <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}"></canvas>
             <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
+            ${state.records.length >= 3 ? `<div class="chart-legend">
+              <span class="chart-legend-item"><span class="chart-legend-line gradient"></span>${t("chart.legend.weight")}</span>
+              <span class="chart-legend-item"><span class="chart-legend-line dashed accent3"></span>${t("chart.legend.movingAvg")}</span>
+              ${Number.isFinite(goalWeight) ? `<span class="chart-legend-item"><span class="chart-legend-line dashed ok"></span>${t("chart.legend.goal")}</span>` : ""}
+              <span class="chart-legend-item"><span class="chart-legend-line dashed accent2"></span>${t("chart.legend.forecast")}</span>
+            </div>` : ""}
             ${state.profile.heightCm ? `<div class="hint-small" style="margin-top:4px;">${t("chart.bmiZones")}</div>` : ""}
             <div class="stat-grid">
               ${renderStat(t("chart.latest"), stats ? formatWeight(stats.latestWeight) : "--")}
@@ -1008,7 +1015,7 @@ function renderRecord(record, prevRecord, badge) {
 function renderSourceBreakdown() {
   const breakdown = calcSourceBreakdown(state.records);
   if (!breakdown) return "";
-  const sourceIcons = { manual: "✏️", voice: "🎤", photo: "📷", quick: "⚡" };
+  const sourceIcons = { manual: "✏️", voice: "🎤", photo: "📷", quick: "⚡", import: "📥" };
   const entries = Object.entries(breakdown).sort((a, b) => b[1] - a[1]);
   return `
     <div class="source-breakdown">
