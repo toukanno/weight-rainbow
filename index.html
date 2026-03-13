@@ -896,6 +896,37 @@
         font-weight: 600;
       }
 
+      .ma-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .ma-display {
+        margin-top: 6px;
+      }
+      .ma-values {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+        font-size: 0.82rem;
+        color: var(--text);
+      }
+      .ma-diff {
+        font-weight: 700;
+        font-size: 0.82rem;
+      }
+      .ma-diff.negative { color: var(--ok, #10b981); }
+      .ma-diff.positive { color: var(--warn, #f59e0b); }
+      .ma-crossing {
+        margin-top: 4px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        padding: 4px 8px;
+        border-radius: 6px;
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
+        display: inline-block;
+      }
+
       .bodyfat-stats-section {
         margin-top: 14px;
         padding-top: 12px;
@@ -2424,6 +2455,13 @@
 
       body[data-theme="midnight"] .percentile-ring {
         background: rgba(30, 35, 55, 0.6);
+      }
+
+      body[data-theme="midnight"] .ma-section {
+        border-color: rgba(139, 146, 176, 0.14);
+      }
+      body[data-theme="midnight"] .ma-crossing {
+        background: rgba(139, 146, 176, 0.12);
       }
 
       @media (max-width: 980px) {

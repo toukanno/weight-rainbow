@@ -46,6 +46,7 @@ import {
   calcCalendarChangeMap,
   calcBMIDistribution,
   calcWeightPercentile,
+  calcMovingAverages,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -1751,5 +1752,46 @@ describe("exportRecordsToCSV edge cases", () => {
     const records = [{ dt: "2025-01-01", wt: 70, bmi: 24.2, bf: null, source: "manual", note: "line1\nline2" }];
     const csv = exportRecordsToCSV(records);
     expect(csv).toContain('"line1\nline2"');
+  });
+});
+
+describe("calcMovingAverages", () => {
+  it("returns null for fewer than 30 records", () => {
+    const records = Array.from({ length: 29 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    expect(calcMovingAverages(records)).toBeNull();
+  });
+
+  it("calculates short and long averages", () => {
+    const records = Array.from({ length: 30 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i * 0.1,
+    }));
+    const ma = calcMovingAverages(records);
+    expect(ma).not.toBeNull();
+    expect(ma.shortAvg).toBeGreaterThan(ma.longAvg);
+    expect(ma.signal).toBe("above");
+  });
+
+  it("detects decreasing trend", () => {
+    const records = Array.from({ length: 30 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 80 - i * 0.2,
+    }));
+    const ma = calcMovingAverages(records);
+    expect(ma.shortAvg).toBeLessThan(ma.longAvg);
+    expect(ma.signal).toBe("below");
+  });
+
+  it("detects aligned when averages are close", () => {
+    const records = Array.from({ length: 30 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const ma = calcMovingAverages(records);
+    expect(ma.signal).toBe("aligned");
+    expect(ma.diff).toBe(0);
   });
 });

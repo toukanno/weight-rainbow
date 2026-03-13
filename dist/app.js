@@ -1467,6 +1467,28 @@ function calcWeightPercentile(records) {
     total: sorted.length
   };
 }
+function calcMovingAverages(records, shortWindow = 7, longWindow = 30) {
+  if (records.length < longWindow) return null;
+  const weights = records.map((r) => r.wt);
+  const shortAvg = weights.slice(-shortWindow).reduce((s, w) => s + w, 0) / shortWindow;
+  const longAvg = weights.slice(-longWindow).reduce((s, w) => s + w, 0) / longWindow;
+  const diff = Math.round((shortAvg - longAvg) * 100) / 100;
+  let prevSignal = null;
+  if (records.length >= longWindow + 1) {
+    const prevShort = weights.slice(-(shortWindow + 1), -1).reduce((s, w) => s + w, 0) / shortWindow;
+    const prevLong = weights.slice(-(longWindow + 1), -1).reduce((s, w) => s + w, 0) / longWindow;
+    const prevDiff = prevShort - prevLong;
+    if (prevDiff > 0 && diff <= 0) prevSignal = "crossDown";
+    else if (prevDiff < 0 && diff >= 0) prevSignal = "crossUp";
+  }
+  return {
+    shortAvg: Math.round(shortAvg * 10) / 10,
+    longAvg: Math.round(longAvg * 10) / 10,
+    diff,
+    signal: diff < -0.3 ? "below" : diff > 0.3 ? "above" : "aligned",
+    crossing: prevSignal
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -1653,6 +1675,16 @@ var translations = {
     "percentile.value": "\u5168\u8A18\u9332\u306E{pct}%\u3088\u308A\u8EFD\u3044",
     "percentile.rank": "{rank}\u4F4D / {total}\u4EF6\u4E2D\uFF08\u8EFD\u3044\u9806\uFF09",
     "percentile.best": "\u904E\u53BB\u6700\u8EFD\u91CF\u306B\u8FD1\u3044\uFF01",
+    "entry.preview.vsLast": "\u524D\u56DE\u6BD4",
+    "entry.preview.large": "\u26A0\uFE0F \u5909\u52D5\u304C\u5927\u304D\u3044\u3067\u3059\u3002\u5165\u529B\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
+    "ma.title": "\u79FB\u52D5\u5E73\u5747\u30AF\u30ED\u30B9",
+    "ma.short": "7\u65E5\u5E73\u5747",
+    "ma.long": "30\u65E5\u5E73\u5747",
+    "ma.below": "\u77ED\u671F\u30C8\u30EC\u30F3\u30C9\u304C\u9577\u671F\u3092\u4E0B\u56DE\u3063\u3066\u3044\u307E\u3059\uFF08\u6E1B\u5C11\u50BE\u5411\uFF09",
+    "ma.above": "\u77ED\u671F\u30C8\u30EC\u30F3\u30C9\u304C\u9577\u671F\u3092\u4E0A\u56DE\u3063\u3066\u3044\u307E\u3059\uFF08\u5897\u52A0\u50BE\u5411\uFF09",
+    "ma.aligned": "\u77ED\u671F\u30FB\u9577\u671F\u30C8\u30EC\u30F3\u30C9\u304C\u307B\u307C\u4E00\u81F4\u3057\u3066\u3044\u307E\u3059",
+    "ma.crossDown": "\u{1F4C9} \u6E1B\u5C11\u30B7\u30B0\u30CA\u30EB: \u77ED\u671F\u5E73\u5747\u304C\u9577\u671F\u5E73\u5747\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F",
+    "ma.crossUp": "\u{1F4C8} \u5897\u52A0\u30B7\u30B0\u30CA\u30EB: \u77ED\u671F\u5E73\u5747\u304C\u9577\u671F\u5E73\u5747\u3092\u4E0A\u56DE\u308A\u307E\u3057\u305F",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
     "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01\uFF08-{diff}kg\uFF09",
     "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
@@ -2027,6 +2059,16 @@ var translations = {
     "percentile.value": "Lighter than {pct}% of all records",
     "percentile.rank": "Rank {rank} of {total} (lightest first)",
     "percentile.best": "Near your all-time lightest!",
+    "entry.preview.vsLast": "vs last",
+    "entry.preview.large": "\u26A0\uFE0F Large change \u2014 please double-check",
+    "ma.title": "Moving Average Cross",
+    "ma.short": "7-day avg",
+    "ma.long": "30-day avg",
+    "ma.below": "Short-term trend is below long-term (decreasing)",
+    "ma.above": "Short-term trend is above long-term (increasing)",
+    "ma.aligned": "Short and long-term trends are aligned",
+    "ma.crossDown": "\u{1F4C9} Decrease signal: short-term crossed below long-term",
+    "ma.crossUp": "\u{1F4C8} Increase signal: short-term crossed above long-term",
     "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
@@ -23257,6 +23299,7 @@ function render() {
             ${renderStability()}
             ${renderBMIDistribution()}
             ${renderWeightPercentile()}
+            ${renderMovingAverages()}
             ${renderBodyFatStats()}
           </section>
 
@@ -23735,6 +23778,25 @@ function renderWeightPercentile() {
           <div class="helper hint-small">${t("percentile.rank").replace("{rank}", pctl.rank).replace("{total}", pctl.total)}</div>
           ${pctl.percentile <= 10 ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("percentile.best")}</div>` : ""}
         </div>
+      </div>
+    </div>
+  `;
+}
+function renderMovingAverages() {
+  const ma = calcMovingAverages(state.records);
+  if (!ma) return "";
+  const signalCls = ma.signal === "below" ? "negative" : ma.signal === "above" ? "positive" : "";
+  return `
+    <div class="ma-section">
+      <div class="helper">${t("ma.title")}</div>
+      <div class="ma-display">
+        <div class="ma-values">
+          <span class="ma-value">${t("ma.short")}: <strong>${ma.shortAvg.toFixed(1)}kg</strong></span>
+          <span class="ma-value">${t("ma.long")}: <strong>${ma.longAvg.toFixed(1)}kg</strong></span>
+          <span class="ma-diff ${signalCls}">${ma.diff > 0 ? "+" : ""}${ma.diff.toFixed(2)}kg</span>
+        </div>
+        <div class="helper hint-small">${t("ma." + ma.signal)}</div>
+        ${ma.crossing ? `<div class="ma-crossing">${t("ma." + ma.crossing)}</div>` : ""}
       </div>
     </div>
   `;
