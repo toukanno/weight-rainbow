@@ -326,7 +326,7 @@ function formatBMI(bmi) {
 }
 
 function formatNote(note) {
-  return escapeAttr(note).replace(/#([\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF66-\uFF9F]+)/g, '<span class="note-hashtag">#$1</span>');
+  return escHtml(note).replace(/#([\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF66-\uFF9F]+)/g, '<span class="note-hashtag">#$1</span>');
 }
 
 function getMotivationalMessage(streak, trend, records, goalProgress) {
@@ -2990,7 +2990,11 @@ function checkRainbow(newWeight) {
   }
 }
 
+let _saveLock = false;
 function saveRecordFromPicker() {
+  if (_saveLock) return;
+  _saveLock = true;
+  setTimeout(() => { _saveLock = false; }, 300);
   const weight = state.form.pickerInt + state.form.pickerDec / 10;
   state.form.weight = weight.toFixed(1);
   saveRecordWithWeight(weight, activeEntryMode);
