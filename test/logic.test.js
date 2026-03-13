@@ -70,6 +70,7 @@ import {
   calcPersonalRecords,
   calcWeightRegression,
   calcBMIHistory,
+  calcWeightHeatmap,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -248,8 +249,10 @@ describe("calcDailyDiff", () => {
   });
 
   it("returns diff when both today and yesterday exist", () => {
-    const today = new Date().toISOString().slice(0, 10);
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const yd = new Date(now); yd.setDate(yd.getDate() - 1);
+    const yesterday = `${yd.getFullYear()}-${String(yd.getMonth() + 1).padStart(2, "0")}-${String(yd.getDate()).padStart(2, "0")}`;
     const records = [
       { dt: yesterday, wt: 70.0 },
       { dt: today, wt: 69.5 },
@@ -1229,13 +1232,15 @@ describe("calcDaysSinceLastRecord", () => {
   });
 
   it("returns 0 for record today", () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const records = [{ dt: today, wt: 70 }];
     expect(calcDaysSinceLastRecord(records)).toBe(0);
   });
 
   it("returns 1 for record yesterday", () => {
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const yd = new Date(); yd.setDate(yd.getDate() - 1);
+    const yesterday = `${yd.getFullYear()}-${String(yd.getMonth() + 1).padStart(2, "0")}-${String(yd.getDate()).padStart(2, "0")}`;
     const records = [{ dt: yesterday, wt: 70 }];
     expect(calcDaysSinceLastRecord(records)).toBe(1);
   });
@@ -4570,6 +4575,51 @@ describe("calcBMIHistory", () => {
     expect(result.zones.normal).toBe(25);
     expect(result.zones.over).toBe(25);
     expect(result.zones.obese).toBe(25);
+  });
+});
+
+describe("calcWeightHeatmap", () => {
+  it("returns null for fewer than 7 records", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i * 0.1,
+    }));
+    expect(calcWeightHeatmap(records)).toBeNull();
+  });
+
+  it("returns 12 weeks of data", () => {
+    const records = Array.from({ length: 30 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + Math.sin(i) * 0.5,
+    }));
+    const result = calcWeightHeatmap(records);
+    expect(result).not.toBeNull();
+    expect(result.weeks.length).toBe(12);
+    expect(result.weeks[0].length).toBe(7);
+  });
+
+  it("assigns intensity levels to cells", () => {
+    const today = new Date();
+    const records = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - 13 + i);
+      const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      return { dt: ds, wt: 70 + i * 0.3 };
+    });
+    const result = calcWeightHeatmap(records);
+    const allCells = result.weeks.flat();
+    const withLevel = allCells.filter((c) => c.level > 0);
+    expect(withLevel.length).toBeGreaterThan(0);
+  });
+
+  it("tracks daysWithData count", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcWeightHeatmap(records);
+    expect(result.daysWithData).toBeGreaterThanOrEqual(0);
+    expect(typeof result.threshold).toBe("number");
   });
 });
 

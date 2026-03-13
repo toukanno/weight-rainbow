@@ -537,6 +537,7 @@
         background: linear-gradient(135deg, var(--accent), var(--accent-2));
         color: white;
         font-weight: 700;
+        cursor: pointer;
         box-shadow: 0 14px 30px color-mix(in srgb, var(--accent) 22%, transparent);
         transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
       }
@@ -1594,6 +1595,72 @@
         margin-top: 4px;
         font-weight: 600;
       }
+
+      .heatmap-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .heatmap-grid {
+        margin-top: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .heatmap-row {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+      }
+      .heatmap-label {
+        width: 14px;
+        font-size: 0.65rem;
+        color: var(--text);
+        text-align: center;
+        flex-shrink: 0;
+      }
+      .heatmap-cell {
+        flex: 1;
+        aspect-ratio: 1;
+        border-radius: 2px;
+        background: color-mix(in srgb, var(--text) 8%, transparent);
+      }
+      .heatmap-cell[data-level="1"] { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+      .heatmap-cell[data-level="2"] { background: color-mix(in srgb, var(--accent) 50%, transparent); }
+      .heatmap-cell[data-level="3"] { background: color-mix(in srgb, var(--accent) 75%, transparent); }
+      .heatmap-cell[data-level="4"] { background: var(--accent); }
+      .heatmap-cell.loss[data-level="2"],
+      .heatmap-cell.loss[data-level="3"],
+      .heatmap-cell.loss[data-level="4"] {
+        background: #10b981;
+      }
+      .heatmap-cell.loss[data-level="2"] { opacity: 0.6; }
+      .heatmap-cell.loss[data-level="3"] { opacity: 0.8; }
+      .heatmap-cell.gain[data-level="2"],
+      .heatmap-cell.gain[data-level="3"],
+      .heatmap-cell.gain[data-level="4"] {
+        background: #ef4444;
+      }
+      .heatmap-cell.gain[data-level="2"] { opacity: 0.6; }
+      .heatmap-cell.gain[data-level="3"] { opacity: 0.8; }
+      .heatmap-legend {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        margin-top: 6px;
+      }
+      .heatmap-legend .heatmap-cell {
+        width: 12px;
+        height: 12px;
+        flex: none;
+      }
+      .heatmap-legend-text {
+        font-size: 0.7rem;
+        color: var(--text);
+      }
+      .loss-text { color: #10b981; }
+      .gain-text { color: #ef4444; }
 
       .analytics-toggle-section {
         margin-top: 14px;
@@ -3229,6 +3296,7 @@
       body[data-theme="midnight"] .pr-section,
       body[data-theme="midnight"] .regression-section,
       body[data-theme="midnight"] .bmi-hist-section,
+      body[data-theme="midnight"] .heatmap-section,
       body[data-theme="midnight"] .range-section,
       body[data-theme="midnight"] .vel-section,
       body[data-theme="midnight"] .stability-section,

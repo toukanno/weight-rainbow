@@ -1388,3 +1388,262 @@ export function calcWeightDistribution(records, bucketSize = 1) {
     total: records.length,
   };
 }
+
+export function calcDayOfWeekChange(records) {
+  if (records.length < 7) return null;
+  const sums = [0, 0, 0, 0, 0, 0, 0];
+  const counts = [0, 0, 0, 0, 0, 0, 0];
+  for (let i = 1; i < records.length; i++) {
+    const prev = new Date(records[i - 1].dt + "T00:00:00");
+    const curr = new Date(records[i].dt + "T00:00:00");
+    const gap = (curr - prev) / 86400000;
+    if (gap !== 1) continue; // only consecutive days
+    const dow = curr.getDay();
+    const diff = records[i].wt - records[i - 1].wt;
+    sums[dow] += diff;
+    counts[dow]++;
+  }
+  const avgs = sums.map((s, i) => counts[i] > 0 ? Math.round((s / counts[i]) * 100) / 100 : null);
+  const valid = avgs.filter((a) => a !== null);
+  if (valid.length < 3) return null;
+  const worstDay = avgs.reduce((best, a, i) => a !== null && (best === null || a > avgs[best]) ? i : best, null);
+  const bestDay = avgs.reduce((best, a, i) => a !== null && (best === null || a < avgs[best]) ? i : best, null);
+  return { avgs, counts, worstDay, bestDay };
+}
+
+export function calcPersonalRecords(records) {
+  if (records.length < 3) return null;
+  const weights = records.map((r) => r.wt);
+  const allTimeLow = Math.min(...weights);
+  const allTimeLowDate = records.find((r) => r.wt === allTimeLow)?.dt ?? null;
+
+  // Biggest single-day drop
+  let biggestDrop = 0;
+  let biggestDropDate = null;
+  for (let i = 1; i < records.length; i++) {
+    const drop = records[i - 1].wt - records[i].wt;
+    if (drop > biggestDrop) {
+      biggestDrop = drop;
+      biggestDropDate = records[i].dt;
+    }
+  }
+  biggestDrop = Math.round(biggestDrop * 10) / 10;
+
+  // Best 7-day change
+  let best7 = Infinity;
+  let best7From = null;
+  if (records.length >= 7) {
+    for (let i = 0; i <= records.length - 7; i++) {
+      const change = records[i + 6].wt - records[i].wt;
+      if (change < best7) {
+        best7 = change;
+        best7From = records[i].dt;
+      }
+    }
+  }
+  best7 = best7 === Infinity ? null : Math.round(best7 * 10) / 10;
+
+  // Total weight lost from first record
+  const totalChange = Math.round((weights[weights.length - 1] - weights[0]) * 10) / 10;
+
+  return {
+    allTimeLow,
+    allTimeLowDate,
+    biggestDrop,
+    biggestDropDate,
+    best7DayChange: best7,
+    best7DayFrom: best7From,
+    totalChange,
+    totalRecords: records.length,
+    firstDate: records[0].dt,
+    latestDate: records[records.length - 1].dt,
+  };
+}
+
+export function calcWeightRegression(records) {
+  if (records.length < 5) return null;
+  const startDate = new Date(records[0].dt + "T00:00:00");
+  const points = records.map((r) => ({
+    x: (new Date(r.dt + "T00:00:00") - startDate) / 86400000,
+    y: r.wt,
+  }));
+  const n = points.length;
+  const sumX = points.reduce((s, p) => s + p.x, 0);
+  const sumY = points.reduce((s, p) => s + p.y, 0);
+  const sumXY = points.reduce((s, p) => s + p.x * p.y, 0);
+  const sumX2 = points.reduce((s, p) => s + p.x * p.x, 0);
+  const denom = n * sumX2 - sumX * sumX;
+  if (denom === 0) return null;
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+
+  // R² calculation
+  const meanY = sumY / n;
+  const ssTotal = points.reduce((s, p) => s + (p.y - meanY) ** 2, 0);
+  const ssResidual = points.reduce((s, p) => s + (p.y - (slope * p.x + intercept)) ** 2, 0);
+  const r2 = ssTotal > 0 ? Math.round((1 - ssResidual / ssTotal) * 1000) / 1000 : 0;
+
+  const totalDays = points[points.length - 1].x;
+  const weeklyRate = Math.round(slope * 7 * 100) / 100;
+  const direction = slope < -0.01 ? "losing" : slope > 0.01 ? "gaining" : "maintaining";
+  const fit = r2 >= 0.7 ? "strong" : r2 >= 0.3 ? "moderate" : "weak";
+
+  return {
+    slope: Math.round(slope * 1000) / 1000,
+    intercept: Math.round(intercept * 10) / 10,
+    r2,
+    weeklyRate,
+    direction,
+    fit,
+    totalDays: Math.round(totalDays),
+  };
+}
+
+export function calcBMIHistory(records) {
+  const withBMI = records.filter((r) => r.bmi != null && Number.isFinite(r.bmi));
+  if (withBMI.length < 3) return null;
+  const bmis = withBMI.map((r) => r.bmi);
+  const first = bmis[0];
+  const latest = bmis[bmis.length - 1];
+  const min = Math.round(Math.min(...bmis) * 10) / 10;
+  const max = Math.round(Math.max(...bmis) * 10) / 10;
+  const change = Math.round((latest - first) * 10) / 10;
+  const avg = Math.round((bmis.reduce((s, b) => s + b, 0) / bmis.length) * 10) / 10;
+
+  // Time in each zone
+  const zones = { under: 0, normal: 0, over: 0, obese: 0 };
+  for (const b of bmis) {
+    if (b < 18.5) zones.under++;
+    else if (b < 25) zones.normal++;
+    else if (b < 30) zones.over++;
+    else zones.obese++;
+  }
+  const total = bmis.length;
+  const zonePcts = {
+    under: Math.round((zones.under / total) * 100),
+    normal: Math.round((zones.normal / total) * 100),
+    over: Math.round((zones.over / total) * 100),
+    obese: Math.round((zones.obese / total) * 100),
+  };
+
+  const currentZone = latest < 18.5 ? "under" : latest < 25 ? "normal" : latest < 30 ? "over" : "obese";
+  const improving = change < 0 && first > 18.5; // BMI decreasing from overweight is improvement
+
+  return { first, latest, min, max, change, avg, zones: zonePcts, currentZone, improving, count: total };
+}
+
+/**
+ * Calculates a weekly weight-change heatmap for the last 12 weeks.
+ * Each cell represents one day with a change intensity level (0-4).
+ */
+export function calcWeightHeatmap(records) {
+  if (records.length < 7) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const byDate = new Map(sorted.map((r) => [r.dt, r.wt]));
+
+  // Build last 12 weeks (84 days)
+  const today = new Date();
+  const dayOfWeek = today.getDay(); // 0=Sun
+  // Start from the beginning of the week 11 weeks ago
+  const startOffset = dayOfWeek + 7 * 11;
+  const weeks = [];
+  let totalChanges = 0;
+  let changeCount = 0;
+
+  for (let w = 0; w < 12; w++) {
+    const week = [];
+    for (let d = 0; d < 7; d++) {
+      const daysBack = startOffset - (w * 7 + d);
+      const date = new Date(today);
+      date.setDate(date.getDate() - daysBack);
+      const ds = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      const wt = byDate.get(ds) ?? null;
+
+      // Find previous day's weight for change calc
+      const prevDate = new Date(date);
+      prevDate.setDate(prevDate.getDate() - 1);
+      const prevDs = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}-${String(prevDate.getDate()).padStart(2, "0")}`;
+      const prevWt = byDate.get(prevDs) ?? null;
+      let change = null;
+      if (wt != null && prevWt != null) {
+        change = Math.round((wt - prevWt) * 100) / 100;
+        totalChanges += Math.abs(change);
+        changeCount++;
+      }
+      week.push({ date: ds, weight: wt, change, isFuture: daysBack < 0 });
+    }
+    weeks.push(week);
+  }
+
+  // Determine thresholds for intensity levels
+  const avgChange = changeCount > 0 ? totalChanges / changeCount : 0.3;
+  const threshold = Math.max(avgChange, 0.1);
+
+  // Assign intensity levels: 0=no data, 1=small, 2=moderate, 3=large, 4=very large
+  for (const week of weeks) {
+    for (const day of week) {
+      if (day.isFuture || day.weight == null) {
+        day.level = 0;
+      } else if (day.change == null) {
+        day.level = 1; // has weight but no change data
+      } else {
+        const absChange = Math.abs(day.change);
+        if (absChange < threshold * 0.5) day.level = 1;
+        else if (absChange < threshold) day.level = 2;
+        else if (absChange < threshold * 2) day.level = 3;
+        else day.level = 4;
+        day.direction = day.change < 0 ? "loss" : day.change > 0 ? "gain" : "same";
+      }
+    }
+  }
+
+  return { weeks, threshold: Math.round(threshold * 100) / 100, daysWithData: changeCount };
+}
+
+/**
+ * Calculates streak-based rewards/milestones for consistent weight recording.
+ * Returns the current streak, next milestone, and earned badges.
+ */
+export function calcStreakRewards(records) {
+  if (records.length < 1) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+
+  // Calculate current streak from today backwards
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const dateSet = new Set(sorted.map((r) => r.dt));
+
+  let streak = 0;
+  const d = new Date(today);
+  // Allow starting from today or yesterday
+  if (!dateSet.has(todayStr)) {
+    d.setDate(d.getDate() - 1);
+  }
+  while (true) {
+    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (dateSet.has(ds)) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+
+  // Milestone thresholds
+  const milestones = [3, 7, 14, 21, 30, 60, 90, 120, 180, 365];
+  const earned = milestones.filter((m) => streak >= m);
+  const next = milestones.find((m) => streak < m) || null;
+  const nextRemaining = next ? next - streak : 0;
+
+  // Badge level based on highest earned milestone
+  let level = "starter";
+  if (streak >= 365) level = "legend";
+  else if (streak >= 180) level = "master";
+  else if (streak >= 90) level = "expert";
+  else if (streak >= 30) level = "dedicated";
+  else if (streak >= 14) level = "committed";
+  else if (streak >= 7) level = "steady";
+  else if (streak >= 3) level = "beginner";
+
+  return { streak, level, earned, next, nextRemaining, totalRecords: records.length };
+}
