@@ -449,8 +449,11 @@ function render() {
 
               <div class="row">
                 <button type="button" class="btn" data-action="save-record">${t("entry.save")}</button>
-                <div class="helper">${state.profile.heightCm ? `${t("entry.bmiReady")}: ${formatBMI(currentBMI)}` : t("bmi.unknown")}</div>
-                <div class="helper hint-small">${t("record.dailyLimit")}</div>
+                <div>
+                  <div class="helper">${state.profile.heightCm ? `${t("entry.bmiReady")}: ${formatBMI(currentBMI)}` : t("bmi.unknown")}</div>
+                  <div class="helper hint-small">${t("record.dailyLimit")}</div>
+                  <div class="helper hint-small">⌘+Enter</div>
+                </div>
               </div>
             </div>
 
@@ -615,9 +618,9 @@ function render() {
                 <input value="${APP_VERSION}" readonly />
               </div>
             </div>
-            <div class="row" style="margin-top: 16px; grid-template-columns: 1fr 1fr auto;">
+            <div class="data-actions">
               <button type="button" class="btn secondary" data-action="export-data">💾 ${t("settings.export")}</button>
-              <label class="btn secondary" for="importInput" style="text-align:center;cursor:pointer;">📥 ${t("import.button")}</label>
+              <label class="btn secondary" for="importInput">📥 ${t("import.button")}</label>
               <input id="importInput" type="file" accept=".json" class="hidden" />
               <button type="button" class="btn ghost" data-action="reset-data">🗑️ ${t("settings.reset")}</button>
             </div>
@@ -631,7 +634,7 @@ function render() {
                 <p>${t("google.hint")}</p>
               </div>
             </div>
-            <div class="row" style="gap: 10px;">
+            <div class="google-actions">
               <button type="button" class="google-btn" data-action="google-backup" ${GOOGLE_CLIENT_ID ? "" : "disabled"}>
                 <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
                 ${t("google.backup")}
@@ -870,7 +873,7 @@ function renderRecord(record, prevRecord) {
         <div class="helper">${t("bmi.title")}: ${bmiText}${record.bf ? ` / ${t("bodyFat.label")}: ${record.bf}%` : ""}</div>
         ${record.note ? `<div class="helper record-note">📝 ${escapeAttr(record.note)}</div>` : ""}
       </div>
-      <button type="button" class="record-delete" data-delete-date="${escapeAttr(record.dt)}">${t("records.delete")}</button>
+      <button type="button" class="record-delete" data-delete-date="${escapeAttr(record.dt)}" aria-label="${t("records.delete")} ${escapeAttr(record.dt)} ${record.wt.toFixed(1)}kg">${t("records.delete")}</button>
     </div>
   `;
 }
@@ -1740,8 +1743,11 @@ function drawChart() {
 
   if (!chartRecords.length) {
     context.fillStyle = getComputedStyle(document.body).getPropertyValue("--muted").trim() || "#7c7f9b";
-    context.font = "16px sans-serif";
-    context.fillText(t("chart.empty"), 24, 48);
+    context.textAlign = "center";
+    context.font = "32px sans-serif";
+    context.fillText("📊", width / 2, height / 2 - 16);
+    context.font = "14px sans-serif";
+    context.fillText(t("chart.empty"), width / 2, height / 2 + 16);
     return;
   }
 
