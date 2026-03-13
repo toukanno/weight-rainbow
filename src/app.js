@@ -80,6 +80,7 @@ import {
   calcMilestoneTimeline,
   calcVolatilityIndex,
   calcPeriodComparison,
+  calcGoalCountdown,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -253,15 +254,21 @@ function showFirstLaunchModal() {
 }
 
 let statusClearTimer = null;
+let statusFadeTimer = null;
 function setStatus(message, kind = "ok") {
   statusMessage = message;
   statusKind = kind;
   clearTimeout(statusClearTimer);
+  clearTimeout(statusFadeTimer);
   if (kind === "ok" && message) {
+    statusFadeTimer = setTimeout(() => {
+      const el = app.querySelector(".status");
+      if (el) el.classList.add("status-fade-out");
+    }, 3200);
     statusClearTimer = setTimeout(() => {
       statusMessage = "";
       render();
-    }, 4000);
+    }, 3800);
   }
   render();
 }
@@ -681,6 +688,7 @@ function render() {
             </div>` : ""}
             ${renderMomentumScore()}
             ${renderStreakRewards()}
+            ${renderGoalCountdown()}
             ${renderNextMilestones()}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
@@ -1815,6 +1823,33 @@ function renderPeriodComparison() {
       <div class="helper">${t("compare.title")}</div>
       ${renderPair(t("compare.weekly"), pc.weekly, t("compare.thisWeek"), t("compare.lastWeek"))}
       ${renderPair(t("compare.monthly"), pc.monthly, t("compare.thisMonth"), t("compare.lastMonth"))}
+    </div>
+  `;
+}
+
+function renderGoalCountdown() {
+  const goalWeight = Number(state.settings.goalWeight);
+  if (!goalWeight) return "";
+  const gc = calcGoalCountdown(state.records, goalWeight);
+  if (!gc) return "";
+  if (gc.reached) {
+    return `
+      <div class="countdown-section countdown-reached">
+        <div class="helper">${t("countdown.title")}</div>
+        <div class="countdown-congrats">${t("countdown.reached")}</div>
+      </div>
+    `;
+  }
+  return `
+    <div class="countdown-section">
+      <div class="helper">${t("countdown.title")}</div>
+      <div class="countdown-current">${t("countdown.current").replace("{wt}", gc.latest).replace("{goal}", gc.goal)}</div>
+      <div class="countdown-remaining">${t("countdown.remaining").replace("{val}", gc.absRemaining)}</div>
+      <div class="countdown-bar-track">
+        <div class="countdown-bar-fill" style="width:${gc.pct}%"></div>
+      </div>
+      <div class="countdown-pct">${t("countdown.pct").replace("{pct}", gc.pct)}</div>
+      <div class="countdown-eta">${gc.etaDays ? t("countdown.eta").replace("{days}", gc.etaDays) : t("countdown.noEta")}</div>
     </div>
   `;
 }

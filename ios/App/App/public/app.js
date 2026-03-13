@@ -2406,6 +2406,41 @@ function calcPeriodComparison(records) {
   if (!weekly.current && !monthly.current) return null;
   return { weekly, monthly };
 }
+function calcGoalCountdown(records, goalWeight) {
+  if (!goalWeight || records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1].wt;
+  const remaining = Math.round((latest - goalWeight) * 10) / 10;
+  const absRemaining = Math.abs(remaining);
+  if (remaining <= 0 && latest <= goalWeight || absRemaining < 0.1) {
+    return { reached: true, latest, goal: goalWeight, remaining: 0, pct: 100 };
+  }
+  const first = sorted[0].wt;
+  const totalToLose = first - goalWeight;
+  const lost = first - latest;
+  const pct = totalToLose !== 0 ? Math.max(0, Math.min(100, Math.round(lost / totalToLose * 100))) : 0;
+  const recent = sorted.slice(-14);
+  let etaDays = null;
+  if (recent.length >= 3) {
+    const daySpan = Math.max(1, Math.round((new Date(recent[recent.length - 1].dt) - new Date(recent[0].dt)) / 864e5));
+    const rate = (recent[recent.length - 1].wt - recent[0].wt) / daySpan;
+    if (rate < -0.01 && remaining > 0) {
+      etaDays = Math.ceil(remaining / Math.abs(rate));
+    } else if (rate > 0.01 && remaining < 0) {
+      etaDays = Math.ceil(absRemaining / rate);
+    }
+  }
+  return {
+    reached: false,
+    latest,
+    goal: goalWeight,
+    remaining,
+    absRemaining,
+    pct,
+    etaDays,
+    direction: remaining > 0 ? "lose" : "gain"
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -3023,7 +3058,14 @@ var translations = {
     "compare.avg": "\u5E73\u5747: {val}kg",
     "compare.diff": "\u5DEE: {val}kg",
     "compare.noData": "\u30C7\u30FC\u30BF\u4E0D\u8DB3",
-    "compare.records": "{n}\u4EF6"
+    "compare.records": "{n}\u4EF6",
+    "countdown.title": "\u76EE\u6A19\u30AB\u30A6\u30F3\u30C8\u30C0\u30A6\u30F3",
+    "countdown.remaining": "\u3042\u3068{val}kg",
+    "countdown.reached": "\u76EE\u6A19\u9054\u6210\uFF01\u304A\u3081\u3067\u3068\u3046\u3054\u3056\u3044\u307E\u3059\uFF01",
+    "countdown.eta": "\u4E88\u60F3\u5230\u9054\u65E5: \u7D04{days}\u65E5\u5F8C",
+    "countdown.noEta": "\u30C8\u30EC\u30F3\u30C9\u30C7\u30FC\u30BF\u4E0D\u8DB3",
+    "countdown.pct": "\u9054\u6210\u7387: {pct}%",
+    "countdown.current": "\u73FE\u5728: {wt}kg \u2192 \u76EE\u6A19: {goal}kg"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3639,7 +3681,14 @@ var translations = {
     "compare.avg": "Avg: {val}kg",
     "compare.diff": "Diff: {val}kg",
     "compare.noData": "No data",
-    "compare.records": "{n} records"
+    "compare.records": "{n} records",
+    "countdown.title": "Goal Countdown",
+    "countdown.remaining": "{val}kg to go",
+    "countdown.reached": "Goal reached! Congratulations!",
+    "countdown.eta": "Estimated: ~{days} days",
+    "countdown.noEta": "Not enough trend data",
+    "countdown.pct": "Progress: {pct}%",
+    "countdown.current": "Now: {wt}kg \u2192 Goal: {goal}kg"
   }
 };
 function createTranslator(language) {
@@ -24307,15 +24356,21 @@ function showFirstLaunchModal() {
   });
 }
 var statusClearTimer = null;
+var statusFadeTimer = null;
 function setStatus(message, kind = "ok") {
   statusMessage = message;
   statusKind = kind;
   clearTimeout(statusClearTimer);
+  clearTimeout(statusFadeTimer);
   if (kind === "ok" && message) {
+    statusFadeTimer = setTimeout(() => {
+      const el = app.querySelector(".status");
+      if (el) el.classList.add("status-fade-out");
+    }, 3200);
     statusClearTimer = setTimeout(() => {
       statusMessage = "";
       render();
-    }, 4e3);
+    }, 3800);
   }
   render();
 }
@@ -24698,6 +24753,7 @@ function render() {
             </div>` : ""}
             ${renderMomentumScore()}
             ${renderStreakRewards()}
+            ${renderGoalCountdown()}
             ${renderNextMilestones()}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
@@ -25777,6 +25833,32 @@ function renderPeriodComparison() {
       <div class="helper">${t("compare.title")}</div>
       ${renderPair(t("compare.weekly"), pc.weekly, t("compare.thisWeek"), t("compare.lastWeek"))}
       ${renderPair(t("compare.monthly"), pc.monthly, t("compare.thisMonth"), t("compare.lastMonth"))}
+    </div>
+  `;
+}
+function renderGoalCountdown() {
+  const goalWeight = Number(state.settings.goalWeight);
+  if (!goalWeight) return "";
+  const gc = calcGoalCountdown(state.records, goalWeight);
+  if (!gc) return "";
+  if (gc.reached) {
+    return `
+      <div class="countdown-section countdown-reached">
+        <div class="helper">${t("countdown.title")}</div>
+        <div class="countdown-congrats">${t("countdown.reached")}</div>
+      </div>
+    `;
+  }
+  return `
+    <div class="countdown-section">
+      <div class="helper">${t("countdown.title")}</div>
+      <div class="countdown-current">${t("countdown.current").replace("{wt}", gc.latest).replace("{goal}", gc.goal)}</div>
+      <div class="countdown-remaining">${t("countdown.remaining").replace("{val}", gc.absRemaining)}</div>
+      <div class="countdown-bar-track">
+        <div class="countdown-bar-fill" style="width:${gc.pct}%"></div>
+      </div>
+      <div class="countdown-pct">${t("countdown.pct").replace("{pct}", gc.pct)}</div>
+      <div class="countdown-eta">${gc.etaDays ? t("countdown.eta").replace("{days}", gc.etaDays) : t("countdown.noEta")}</div>
     </div>
   `;
 }
