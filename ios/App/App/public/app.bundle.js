@@ -27081,7 +27081,7 @@ function renderMilestoneTimeline() {
   const icons = { low: "\u2B07\uFE0F", mark: "\u{1F3AF}", bmi: "\u{1F4CA}" };
   const items = tl.events.map((e) => {
     let label = "";
-    if (e.type === "low") label = t("timeline.low").replace("{wt}", e.weight);
+    if (e.type === "low") label = t("timeline.low").replace("{wt}", Number(e.weight).toFixed(1));
     else if (e.type === "mark") label = t("timeline.mark").replace("{mark}", e.mark);
     else if (e.type === "bmi") {
       label = e.to === "normal" ? t("timeline.bmi.normal") : t("timeline.bmi.change").replace("{from}", e.from).replace("{to}", e.to);
@@ -27171,12 +27171,12 @@ function renderGoalCountdown() {
   return `
     <div class="countdown-section">
       <div class="helper">${t("countdown.title")}</div>
-      <div class="countdown-current">${t("countdown.current").replace("{wt}", gc.latest).replace("{goal}", gc.goal)}</div>
-      <div class="countdown-remaining">${t("countdown.remaining").replace("{val}", gc.absRemaining)}</div>
+      <div class="countdown-current">${t("countdown.current").replace("{wt}", Number(gc.latest).toFixed(1)).replace("{goal}", Number(gc.goal).toFixed(1))}</div>
+      <div class="countdown-remaining">${t("countdown.remaining").replace("{val}", Number(gc.absRemaining).toFixed(1))}</div>
       <div class="countdown-bar-track">
         <div class="countdown-bar-fill" style="width:${gc.pct}%"></div>
       </div>
-      <div class="countdown-pct">${t("countdown.pct").replace("{pct}", gc.pct)}</div>
+      <div class="countdown-pct">${t("countdown.pct").replace("{pct}", Math.round(gc.pct))}</div>
       <div class="countdown-eta">${gc.etaDays ? t("countdown.eta").replace("{days}", gc.etaDays) : t("countdown.noEta")}</div>
     </div>
   `;
@@ -27347,9 +27347,9 @@ function renderIdealWeight() {
   const ideal = calcIdealWeightRange(Number(state.profile.heightCm), latest.wt);
   if (!ideal) return "";
   const zoneLabel = t("ideal." + ideal.zone);
-  const rangeText = t("ideal.range").replace("{min}", ideal.minWeight).replace("{max}", ideal.maxWeight);
-  const currentText = t("ideal.current").replace("{weight}", ideal.currentWeight).replace("{bmi}", ideal.currentBMI);
-  const centerText = t("ideal.center").replace("{mid}", ideal.midWeight);
+  const rangeText = t("ideal.range").replace("{min}", Number(ideal.minWeight).toFixed(1)).replace("{max}", Number(ideal.maxWeight).toFixed(1));
+  const currentText = t("ideal.current").replace("{weight}", Number(ideal.currentWeight).toFixed(1)).replace("{bmi}", Number(ideal.currentBMI).toFixed(1));
+  const centerText = t("ideal.center").replace("{mid}", Number(ideal.midWeight).toFixed(1));
   const idealStart = Math.round((18.5 - 15) / 15 * 100);
   const idealEnd = Math.round((24.9 - 15) / 15 * 100);
   return `
