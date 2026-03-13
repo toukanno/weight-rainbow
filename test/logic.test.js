@@ -3075,6 +3075,122 @@ describe("calcRecordGaps", () => {
   });
 });
 
+describe("calcGoalPrediction edge cases", () => {
+  it("returns achieved when at or below goal", () => {
+    const result = calcGoalPrediction([{ dt: "2025-01-01", wt: 65 }], 70);
+    expect(result.achieved).toBe(true);
+  });
+
+  it("returns insufficient with fewer than 2 recent records", () => {
+    const result = calcGoalPrediction([{ dt: "2020-01-01", wt: 75 }], 65);
+    expect(result.insufficient).toBe(true);
+  });
+
+  it("returns noTrend when weight is increasing", () => {
+    const today = new Date();
+    const records = Array.from({ length: 5 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (4 - i));
+      return {
+        dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+        wt: 70 + i * 0.5,
+      };
+    });
+    const result = calcGoalPrediction(records, 65);
+    expect(result.noTrend).toBe(true);
+  });
+
+  it("predicts days when losing weight", () => {
+    const today = new Date();
+    const records = Array.from({ length: 10 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (9 - i));
+      return {
+        dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+        wt: 75 - i * 0.2,
+      };
+    });
+    const result = calcGoalPrediction(records, 65);
+    expect(result.achieved).toBe(false);
+    expect(result.days).toBeGreaterThan(0);
+    expect(result.predictedDate).toBeDefined();
+  });
+});
+
+describe("calcAchievements edge cases", () => {
+  it("returns empty for no records", () => {
+    expect(calcAchievements([], 0, null)).toEqual([]);
+  });
+
+  it("awards record count badges", () => {
+    const records = Array.from({ length: 30 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const achievements = calcAchievements(records, 0, null);
+    const recordBadges = achievements.filter(a => a.id.startsWith("records_"));
+    expect(recordBadges.length).toBeGreaterThanOrEqual(3); // 1, 10, 30
+  });
+
+  it("awards goal achieved badge", () => {
+    const records = [{ dt: "2025-01-01", wt: 60 }];
+    const achievements = calcAchievements(records, 0, 65);
+    const goalBadge = achievements.find(a => a.id === "goal_achieved");
+    expect(goalBadge).toBeDefined();
+  });
+
+  it("awards weight loss badges", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 80 },
+      { dt: "2025-01-30", wt: 74 }, // lost 6kg
+    ];
+    const achievements = calcAchievements(records, 0, null);
+    const lossBadges = achievements.filter(a => a.id.startsWith("loss_"));
+    expect(lossBadges.some(b => b.id === "loss_5")).toBe(true);
+    expect(lossBadges.some(b => b.id === "loss_1")).toBe(true);
+  });
+});
+
+describe("calcLongestStreak edge cases", () => {
+  it("returns 0 for empty records", () => {
+    expect(calcLongestStreak([])).toBe(0);
+  });
+
+  it("returns 1 for single record", () => {
+    expect(calcLongestStreak([{ dt: "2025-01-01", wt: 70 }])).toBe(1);
+  });
+
+  it("handles gaps correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70 },
+      { dt: "2025-01-03", wt: 70 },
+      // gap
+      { dt: "2025-01-10", wt: 70 },
+      { dt: "2025-01-11", wt: 70 },
+    ];
+    expect(calcLongestStreak(records)).toBe(3);
+  });
+});
+
+describe("calcSourceBreakdown edge cases", () => {
+  it("returns null for empty records", () => {
+    expect(calcSourceBreakdown([])).toBeNull();
+  });
+
+  it("counts sources correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, source: "manual" },
+      { dt: "2025-01-02", wt: 70, source: "voice" },
+      { dt: "2025-01-03", wt: 70, source: "manual" },
+      { dt: "2025-01-04", wt: 70 }, // no source defaults to manual
+    ];
+    const result = calcSourceBreakdown(records);
+    expect(result.manual).toBe(3);
+    expect(result.voice).toBe(1);
+  });
+});
+
 describe("calcCalorieEstimate", () => {
   it("returns null with fewer than 3 records", () => {
     expect(calcCalorieEstimate([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
