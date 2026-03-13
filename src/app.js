@@ -17,6 +17,7 @@ import {
   createDefaultSettings,
   extractWeightCandidates,
   getBMIStatus,
+  calcBMIZoneWeights,
   pickWeightCandidate,
   parseVoiceWeight,
   trimRecords,
@@ -479,6 +480,7 @@ function render() {
             </div>
             <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}"></canvas>
             <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
+            ${state.profile.heightCm ? `<div class="hint-small" style="margin-top:4px;">${t("chart.bmiZones")}</div>` : ""}
             <div class="stat-grid">
               ${renderStat(t("chart.latest"), stats ? formatWeight(stats.latestWeight) : "--")}
               ${renderStat(t("chart.min"), stats ? formatWeight(stats.minWeight) : "--")}
@@ -1792,6 +1794,34 @@ function drawChart() {
     context.font = "11px sans-serif";
     context.textAlign = "right";
     context.fillText(weightLabel, padX - 6, y + 4);
+  }
+
+  // BMI zone bands (if height is set)
+  const bmiZones = calcBMIZoneWeights(state.profile.heightCm);
+  if (bmiZones) {
+    const zones = [
+      { from: min, to: Math.min(bmiZones.underMax, max), color: "rgba(59, 130, 246, 0.08)", label: t("bmi.under") },
+      { from: Math.max(bmiZones.underMax, min), to: Math.min(bmiZones.normalMax, max), color: "rgba(16, 185, 129, 0.08)", label: t("bmi.normal") },
+      { from: Math.max(bmiZones.normalMax, min), to: Math.min(bmiZones.overMax, max), color: "rgba(245, 158, 11, 0.08)", label: t("bmi.over") },
+      { from: Math.max(bmiZones.overMax, min), to: max, color: "rgba(239, 68, 68, 0.08)", label: t("bmi.obese") },
+    ];
+    context.save();
+    for (const zone of zones) {
+      if (zone.from >= zone.to) continue;
+      const y1 = toY(zone.to);
+      const y2 = toY(zone.from);
+      context.fillStyle = zone.color;
+      context.fillRect(padX, y1, width - padX * 2, y2 - y1);
+      // Zone label on right edge
+      context.fillStyle = "rgba(120,130,180,0.5)";
+      context.font = "9px sans-serif";
+      context.textAlign = "right";
+      const labelY = (y1 + y2) / 2 + 3;
+      if (y2 - y1 > 14) {
+        context.fillText(zone.label, width - padX - 4, labelY);
+      }
+    }
+    context.restore();
   }
 
   // Line chart with smooth curves

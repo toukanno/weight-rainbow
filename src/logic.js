@@ -106,6 +106,18 @@ export function calculateBMI(weightKg, heightCm) {
   return Math.round(bmi * 10) / 10;
 }
 
+export function calcBMIZoneWeights(heightCm) {
+  const h = Number(heightCm);
+  if (!Number.isFinite(h) || h <= 0) return null;
+  const hm = h / 100;
+  const hm2 = hm * hm;
+  return {
+    underMax: Math.round(18.5 * hm2 * 10) / 10,
+    normalMax: Math.round(25 * hm2 * 10) / 10,
+    overMax: Math.round(30 * hm2 * 10) / 10,
+  };
+}
+
 export function getBMIStatus(bmi) {
   if (!Number.isFinite(bmi)) return "bmi.unknown";
   if (bmi < 18.5) return "bmi.under";

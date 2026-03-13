@@ -848,6 +848,17 @@ function calculateBMI(weightKg, heightCm) {
   const bmi = weight / (height / 100) ** 2;
   return Math.round(bmi * 10) / 10;
 }
+function calcBMIZoneWeights(heightCm) {
+  const h = Number(heightCm);
+  if (!Number.isFinite(h) || h <= 0) return null;
+  const hm = h / 100;
+  const hm2 = hm * hm;
+  return {
+    underMax: Math.round(18.5 * hm2 * 10) / 10,
+    normalMax: Math.round(25 * hm2 * 10) / 10,
+    overMax: Math.round(30 * hm2 * 10) / 10
+  };
+}
 function getBMIStatus(bmi) {
   if (!Number.isFinite(bmi)) return "bmi.unknown";
   if (bmi < 18.5) return "bmi.under";
@@ -1387,6 +1398,7 @@ var translations = {
     "chart.period.30": "30\u65E5",
     "chart.period.90": "90\u65E5",
     "chart.period.all": "\u5168\u3066",
+    "chart.bmiZones": "\u80CC\u666F\u8272\u306FBMI\u533A\u5206\u3092\u8868\u793A\uFF08\u8EAB\u9577\u8A2D\u5B9A\u6642\uFF09",
     "share.chart": "\u5171\u6709",
     "share.done": "\u30C1\u30E3\u30FC\u30C8\u3092\u5171\u6709\u3057\u307E\u3057\u305F",
     "share.error": "\u5171\u6709\u306B\u5931\u6557\u3057\u307E\u3057\u305F",
@@ -1677,6 +1689,7 @@ var translations = {
     "chart.period.30": "30 days",
     "chart.period.90": "90 days",
     "chart.period.all": "All",
+    "chart.bmiZones": "Background colors show BMI zones (when height is set)",
     "share.chart": "Share",
     "share.done": "Chart shared",
     "share.error": "Sharing failed",
@@ -22655,6 +22668,7 @@ function render() {
             </div>
             <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}"></canvas>
             <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
+            ${state.profile.heightCm ? `<div class="hint-small" style="margin-top:4px;">${t("chart.bmiZones")}</div>` : ""}
             <div class="stat-grid">
               ${renderStat(t("chart.latest"), stats ? formatWeight(stats.latestWeight) : "--")}
               ${renderStat(t("chart.min"), stats ? formatWeight(stats.minWeight) : "--")}
@@ -23843,6 +23857,31 @@ function drawChart() {
     context.font = "11px sans-serif";
     context.textAlign = "right";
     context.fillText(weightLabel, padX - 6, y + 4);
+  }
+  const bmiZones = calcBMIZoneWeights(state.profile.heightCm);
+  if (bmiZones) {
+    const zones = [
+      { from: min, to: Math.min(bmiZones.underMax, max), color: "rgba(59, 130, 246, 0.08)", label: t("bmi.under") },
+      { from: Math.max(bmiZones.underMax, min), to: Math.min(bmiZones.normalMax, max), color: "rgba(16, 185, 129, 0.08)", label: t("bmi.normal") },
+      { from: Math.max(bmiZones.normalMax, min), to: Math.min(bmiZones.overMax, max), color: "rgba(245, 158, 11, 0.08)", label: t("bmi.over") },
+      { from: Math.max(bmiZones.overMax, min), to: max, color: "rgba(239, 68, 68, 0.08)", label: t("bmi.obese") }
+    ];
+    context.save();
+    for (const zone of zones) {
+      if (zone.from >= zone.to) continue;
+      const y1 = toY(zone.to);
+      const y2 = toY(zone.from);
+      context.fillStyle = zone.color;
+      context.fillRect(padX, y1, width - padX * 2, y2 - y1);
+      context.fillStyle = "rgba(120,130,180,0.5)";
+      context.font = "9px sans-serif";
+      context.textAlign = "right";
+      const labelY = (y1 + y2) / 2 + 3;
+      if (y2 - y1 > 14) {
+        context.fillText(zone.label, width - padX - 4, labelY);
+      }
+    }
+    context.restore();
   }
   context.strokeStyle = gradient;
   context.lineWidth = 3;

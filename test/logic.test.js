@@ -23,6 +23,7 @@ import {
   calcWeeklyRate,
   calcMonthlyStats,
   filterRecords,
+  calcBMIZoneWeights,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -625,5 +626,33 @@ describe("filterRecords", () => {
     const result = filterRecords(records, "voice");
     expect(result).toHaveLength(1);
     expect(result[0].dt).toBe("2026-02-01");
+  });
+});
+
+describe("calcBMIZoneWeights", () => {
+  it("returns null for invalid height", () => {
+    expect(calcBMIZoneWeights(null)).toBeNull();
+    expect(calcBMIZoneWeights("")).toBeNull();
+    expect(calcBMIZoneWeights(0)).toBeNull();
+  });
+
+  it("calculates correct zone boundaries for 170cm", () => {
+    const zones = calcBMIZoneWeights(170);
+    // BMI 18.5 at 170cm = 18.5 * 1.7^2 = 53.465
+    expect(zones.underMax).toBeCloseTo(53.5, 0);
+    // BMI 25 at 170cm = 25 * 1.7^2 = 72.25
+    expect(zones.normalMax).toBeCloseTo(72.3, 0);
+    // BMI 30 at 170cm = 30 * 1.7^2 = 86.7
+    expect(zones.overMax).toBeCloseTo(86.7, 0);
+  });
+
+  it("calculates correct zone boundaries for 160cm", () => {
+    const zones = calcBMIZoneWeights(160);
+    // BMI 18.5 at 160cm = 18.5 * 1.6^2 = 47.36
+    expect(zones.underMax).toBeCloseTo(47.4, 0);
+    // BMI 25 at 160cm = 25 * 1.6^2 = 64.0
+    expect(zones.normalMax).toBe(64);
+    // BMI 30 at 160cm = 30 * 1.6^2 = 76.8
+    expect(zones.overMax).toBe(76.8);
   });
 });
