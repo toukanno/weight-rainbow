@@ -25390,6 +25390,15 @@ function getMotivationalMessage(streak, trend, records, goalProgress) {
   if (trend === "down") return t("motivation.trendDown");
   return "";
 }
+var _renderRAF = 0;
+function scheduleRender() {
+  if (!_renderRAF) {
+    _renderRAF = requestAnimationFrame(() => {
+      _renderRAF = 0;
+      render();
+    });
+  }
+}
 function render() {
   try {
     const scrollY = window.scrollY;
@@ -27819,13 +27828,13 @@ function handleFieldInput(event) {
   if (name === "pickerInt") {
     state.form.pickerInt = parseInt(value, 10);
     state.form.weight = `${state.form.pickerInt}.${state.form.pickerDec}`;
-    render();
+    scheduleRender();
     return;
   }
   if (name === "pickerDec") {
     state.form.pickerDec = parseInt(value, 10);
     state.form.weight = `${state.form.pickerInt}.${state.form.pickerDec}`;
-    render();
+    scheduleRender();
     return;
   }
   if (["weight", "date", "bodyFat", "note"].includes(name)) {
