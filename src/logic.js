@@ -1177,3 +1177,27 @@ export function calcWeightPlateau(records) {
     previousRate,
   };
 }
+
+export function calcRecordGaps(records) {
+  if (records.length < 2) return null;
+  const gaps = [];
+  for (let i = 1; i < records.length; i++) {
+    const prev = new Date(records[i - 1].dt + "T00:00:00");
+    const curr = new Date(records[i].dt + "T00:00:00");
+    const days = Math.round((curr - prev) / 86400000);
+    if (days > 1) {
+      gaps.push({ from: records[i - 1].dt, to: records[i].dt, days });
+    }
+  }
+  gaps.sort((a, b) => b.days - a.days);
+  const totalDays = Math.max(1, (new Date(records[records.length - 1].dt + "T00:00:00") - new Date(records[0].dt + "T00:00:00")) / 86400000);
+  const coverage = Math.round((records.length / (totalDays + 1)) * 100);
+  return {
+    gaps: gaps.slice(0, 5),
+    totalGaps: gaps.length,
+    longestGap: gaps.length ? gaps[0].days : 0,
+    coverage,
+    totalDays: Math.round(totalDays),
+    recordCount: records.length,
+  };
+}

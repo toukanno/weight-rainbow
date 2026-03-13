@@ -60,6 +60,7 @@ import {
   calcWeightVelocity,
   calcWeightVariance,
   calcWeightPlateau,
+  calcRecordGaps,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -2916,5 +2917,47 @@ describe("upsertRecord edge cases", () => {
     const updated = upsertRecord(records, { dt: "2025-01-02", wt: 71 });
     expect(updated).toHaveLength(3);
     expect(updated[1].dt).toBe("2025-01-02");
+  });
+});
+
+describe("calcRecordGaps", () => {
+  it("returns null with fewer than 2 records", () => {
+    expect(calcRecordGaps([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns no gaps for consecutive days", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcRecordGaps(records);
+    expect(result).not.toBeNull();
+    expect(result.totalGaps).toBe(0);
+    expect(result.longestGap).toBe(0);
+    expect(result.coverage).toBe(100);
+  });
+
+  it("detects gaps between records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-05", wt: 71 },
+      { dt: "2025-01-10", wt: 69 },
+    ];
+    const result = calcRecordGaps(records);
+    expect(result).not.toBeNull();
+    expect(result.totalGaps).toBe(2);
+    expect(result.longestGap).toBe(5);
+    expect(result.gaps[0].days).toBe(5);
+    expect(result.gaps[1].days).toBe(4);
+  });
+
+  it("limits gaps to top 5", () => {
+    const records = [];
+    for (let i = 0; i < 7; i++) {
+      records.push({ dt: `2025-0${i + 1}-01`, wt: 70 });
+    }
+    const result = calcRecordGaps(records);
+    expect(result).not.toBeNull();
+    expect(result.gaps.length).toBeLessThanOrEqual(5);
   });
 });

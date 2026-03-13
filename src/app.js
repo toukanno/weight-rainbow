@@ -62,6 +62,7 @@ import {
   calcWeightVelocity,
   calcWeightVariance,
   calcWeightPlateau,
+  calcRecordGaps,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -670,6 +671,7 @@ function render() {
             ${renderWeightVelocity()}
             ${renderWeightVariance()}
             ${renderWeightPlateau()}
+            ${renderRecordGaps()}
             ${renderBodyFatStats()}
           </section>
 
@@ -1310,6 +1312,26 @@ function renderWeightPlateau() {
       </div>
       ${p.previousRate !== null ? `<div class="plateau-prev">${t("plateau.prevRate").replace("{rate}", p.previousRate)}</div>` : ""}
       <div class="helper hint-small">${t("plateau.hint")}</div>
+    </div>
+  `;
+}
+
+function renderRecordGaps() {
+  const g = calcRecordGaps(state.records);
+  if (!g) return "";
+  const gapsList = g.gaps.length
+    ? g.gaps.map((gap) => `<div class="gaps-item">${t("gaps.period").replace("{from}", gap.from).replace("{to}", gap.to).replace("{days}", gap.days)}</div>`).join("")
+    : `<div class="gaps-perfect">${t("gaps.perfect")}</div>`;
+  return `
+    <div class="gaps-section">
+      <div class="helper">${t("gaps.title")}</div>
+      <div class="gaps-summary">
+        <span>${t("gaps.coverage").replace("{pct}", g.coverage)}</span>
+        <span>${t("gaps.longest").replace("{days}", g.longestGap)}</span>
+        <span>${t("gaps.total").replace("{count}", g.totalGaps)}</span>
+      </div>
+      <div class="gaps-list">${gapsList}</div>
+      <div class="helper hint-small">${t("gaps.hint")}</div>
     </div>
   `;
 }

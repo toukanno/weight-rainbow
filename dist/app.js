@@ -1773,6 +1773,29 @@ function calcWeightPlateau(records) {
     previousRate
   };
 }
+function calcRecordGaps(records) {
+  if (records.length < 2) return null;
+  const gaps = [];
+  for (let i = 1; i < records.length; i++) {
+    const prev = /* @__PURE__ */ new Date(records[i - 1].dt + "T00:00:00");
+    const curr = /* @__PURE__ */ new Date(records[i].dt + "T00:00:00");
+    const days2 = Math.round((curr - prev) / 864e5);
+    if (days2 > 1) {
+      gaps.push({ from: records[i - 1].dt, to: records[i].dt, days: days2 });
+    }
+  }
+  gaps.sort((a, b) => b.days - a.days);
+  const totalDays = Math.max(1, (/* @__PURE__ */ new Date(records[records.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(records[0].dt + "T00:00:00")) / 864e5);
+  const coverage = Math.round(records.length / (totalDays + 1) * 100);
+  return {
+    gaps: gaps.slice(0, 5),
+    totalGaps: gaps.length,
+    longestGap: gaps.length ? gaps[0].days : 0,
+    coverage,
+    totalDays: Math.round(totalDays),
+    recordCount: records.length
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -2240,7 +2263,14 @@ var translations = {
     "plateau.avg": "\u5E73\u5747: {avg}kg",
     "plateau.change": "\u5909\u5316\u91CF: {change}kg",
     "plateau.prevRate": "\u524D\u671F\u9593\u306E\u30DA\u30FC\u30B9: {rate}kg/\u65E5",
-    "plateau.hint": "\u4F53\u91CD\u304C\u9577\u671F\u9593\u307B\u307C\u5909\u5316\u3057\u306A\u3044\u72B6\u614B\u3092\u691C\u51FA\u3057\u307E\u3059"
+    "plateau.hint": "\u4F53\u91CD\u304C\u9577\u671F\u9593\u307B\u307C\u5909\u5316\u3057\u306A\u3044\u72B6\u614B\u3092\u691C\u51FA\u3057\u307E\u3059",
+    "gaps.title": "\u8A18\u9332\u306E\u7A7A\u767D",
+    "gaps.longest": "\u6700\u9577\u7A7A\u767D: {days}\u65E5\u9593",
+    "gaps.coverage": "\u8A18\u9332\u30AB\u30D0\u30FC\u7387: {pct}%",
+    "gaps.total": "{count}\u56DE\u306E\u7A7A\u767D\u671F\u9593",
+    "gaps.period": "{from} \u301C {to} ({days}\u65E5\u9593)",
+    "gaps.perfect": "\u7A7A\u767D\u306A\u3057\uFF01\u6BCE\u65E5\u8A18\u9332\u3057\u3066\u3044\u307E\u3059",
+    "gaps.hint": "\u8A18\u9332\u306E\u7D99\u7D9A\u6027\u3092\u78BA\u8A8D\u3067\u304D\u307E\u3059"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2706,7 +2736,14 @@ var translations = {
     "plateau.avg": "Average: {avg}kg",
     "plateau.change": "Change: {change}kg",
     "plateau.prevRate": "Previous rate: {rate}kg/day",
-    "plateau.hint": "Detects periods where weight remains relatively unchanged"
+    "plateau.hint": "Detects periods where weight remains relatively unchanged",
+    "gaps.title": "Record Gaps",
+    "gaps.longest": "Longest gap: {days} days",
+    "gaps.coverage": "Coverage: {pct}%",
+    "gaps.total": "{count} gap periods",
+    "gaps.period": "{from} to {to} ({days} days)",
+    "gaps.perfect": "No gaps! Recording every day",
+    "gaps.hint": "Review your recording consistency"
   }
 };
 function createTranslator(language) {
@@ -23774,6 +23811,7 @@ function render() {
             ${renderWeightVelocity()}
             ${renderWeightVariance()}
             ${renderWeightPlateau()}
+            ${renderRecordGaps()}
             ${renderBodyFatStats()}
           </section>
 
@@ -24392,6 +24430,23 @@ function renderWeightPlateau() {
       </div>
       ${p.previousRate !== null ? `<div class="plateau-prev">${t("plateau.prevRate").replace("{rate}", p.previousRate)}</div>` : ""}
       <div class="helper hint-small">${t("plateau.hint")}</div>
+    </div>
+  `;
+}
+function renderRecordGaps() {
+  const g = calcRecordGaps(state.records);
+  if (!g) return "";
+  const gapsList = g.gaps.length ? g.gaps.map((gap) => `<div class="gaps-item">${t("gaps.period").replace("{from}", gap.from).replace("{to}", gap.to).replace("{days}", gap.days)}</div>`).join("") : `<div class="gaps-perfect">${t("gaps.perfect")}</div>`;
+  return `
+    <div class="gaps-section">
+      <div class="helper">${t("gaps.title")}</div>
+      <div class="gaps-summary">
+        <span>${t("gaps.coverage").replace("{pct}", g.coverage)}</span>
+        <span>${t("gaps.longest").replace("{days}", g.longestGap)}</span>
+        <span>${t("gaps.total").replace("{count}", g.totalGaps)}</span>
+      </div>
+      <div class="gaps-list">${gapsList}</div>
+      <div class="helper hint-small">${t("gaps.hint")}</div>
     </div>
   `;
 }

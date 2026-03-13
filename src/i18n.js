@@ -459,6 +459,13 @@ export const translations = {
     "plateau.change": "変化量: {change}kg",
     "plateau.prevRate": "前期間のペース: {rate}kg/日",
     "plateau.hint": "体重が長期間ほぼ変化しない状態を検出します",
+    "gaps.title": "記録の空白",
+    "gaps.longest": "最長空白: {days}日間",
+    "gaps.coverage": "記録カバー率: {pct}%",
+    "gaps.total": "{count}回の空白期間",
+    "gaps.period": "{from} 〜 {to} ({days}日間)",
+    "gaps.perfect": "空白なし！毎日記録しています",
+    "gaps.hint": "記録の継続性を確認できます",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -920,6 +927,13 @@ export const translations = {
     "plateau.change": "Change: {change}kg",
     "plateau.prevRate": "Previous rate: {rate}kg/day",
     "plateau.hint": "Detects periods where weight remains relatively unchanged",
+    "gaps.title": "Record Gaps",
+    "gaps.longest": "Longest gap: {days} days",
+    "gaps.coverage": "Coverage: {pct}%",
+    "gaps.total": "{count} gap periods",
+    "gaps.period": "{from} to {to} ({days} days)",
+    "gaps.perfect": "No gaps! Recording every day",
+    "gaps.hint": "Review your recording consistency",
   },
 };
 

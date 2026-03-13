@@ -1245,6 +1245,35 @@
         padding-top: 12px;
         border-top: 1px solid var(--border);
       }
+      .gaps-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .gaps-summary {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        margin-top: 6px;
+        font-size: 0.78rem;
+        color: var(--text);
+      }
+      .gaps-list {
+        margin-top: 6px;
+      }
+      .gaps-item {
+        font-size: 0.75rem;
+        color: var(--text);
+        opacity: 0.8;
+        padding: 2px 0;
+      }
+      .gaps-perfect {
+        font-size: 0.85rem;
+        color: var(--ok, #10b981);
+        font-weight: 600;
+        margin-top: 4px;
+      }
+
       .consistency-display {
         display: flex;
         flex-wrap: wrap;
@@ -2843,7 +2872,8 @@
       body[data-theme="midnight"] .tag-impact-section,
       body[data-theme="midnight"] .freq-section,
       body[data-theme="midnight"] .variance-section,
-      body[data-theme="midnight"] .plateau-section {
+      body[data-theme="midnight"] .plateau-section,
+      body[data-theme="midnight"] .gaps-section {
         border-color: rgba(139, 146, 176, 0.14);
       }
 
