@@ -3587,6 +3587,31 @@ function calcGoalProgressRing(records, goalWeight) {
     onTrack
   };
 }
+function calcBodyFatTrend(records) {
+  if (!records || records.length < 1) {
+    return { points: [], change: 0, direction: "neutral", current: null, min: null, max: null, avg: null };
+  }
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const points = sorted.filter((r) => r.bf != null && Number.isFinite(Number(r.bf)) && Number(r.bf) > 0).map((r) => ({ dt: r.dt, bf: +Number(r.bf).toFixed(1) }));
+  if (points.length < 2) {
+    return { points: [], change: 0, direction: "neutral", current: points.length === 1 ? points[0].bf : null, min: null, max: null, avg: null };
+  }
+  const current = points[points.length - 1].bf;
+  const first = points[0].bf;
+  const change = +(current - first).toFixed(1);
+  const direction = change < -0.1 ? "down" : change > 0.1 ? "up" : "neutral";
+  const bfs = points.map((p) => p.bf);
+  const avg = +(bfs.reduce((s, v) => s + v, 0) / bfs.length).toFixed(1);
+  return {
+    points: points.slice(-30),
+    change,
+    direction,
+    current,
+    min: +Math.min(...bfs).toFixed(1),
+    max: +Math.max(...bfs).toFixed(1),
+    avg
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -4450,7 +4475,16 @@ var translations = {
     "gring.eta": "\u63A8\u5B9A {weeks}\u9031\u9593\u5F8C",
     "gring.onTrack": "\u9806\u8ABF",
     "gring.offTrack": "\u30DA\u30FC\u30B9\u898B\u76F4\u3057",
-    "gring.done": "\u76EE\u6A19\u9054\u6210\uFF01"
+    "gring.done": "\u76EE\u6A19\u9054\u6210\uFF01",
+    "bfTrend.title": "\u4F53\u8102\u80AA\u7387\u63A8\u79FB",
+    "bfTrend.current": "\u73FE\u5728",
+    "bfTrend.change": "\u5909\u5316",
+    "bfTrend.avg": "\u5E73\u5747",
+    "bfTrend.range": "\u7BC4\u56F2",
+    "bfTrend.down": "\u6E1B\u5C11\u50BE\u5411",
+    "bfTrend.up": "\u5897\u52A0\u50BE\u5411",
+    "bfTrend.neutral": "\u5B89\u5B9A",
+    "bfTrend.nodata": "\u4F53\u8102\u80AA\u30C7\u30FC\u30BF\u304C\u4E0D\u8DB3\u3057\u3066\u3044\u307E\u3059"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5312,7 +5346,16 @@ var translations = {
     "gring.eta": "Est. {weeks} weeks",
     "gring.onTrack": "On Track",
     "gring.offTrack": "Off Track",
-    "gring.done": "Goal Reached!"
+    "gring.done": "Goal Reached!",
+    "bfTrend.title": "Body Fat Trend",
+    "bfTrend.current": "Current",
+    "bfTrend.change": "Change",
+    "bfTrend.avg": "Average",
+    "bfTrend.range": "Range",
+    "bfTrend.down": "Decreasing",
+    "bfTrend.up": "Increasing",
+    "bfTrend.neutral": "Stable",
+    "bfTrend.nodata": "Insufficient body fat data"
   }
 };
 function createTranslator(language) {
@@ -26459,6 +26502,7 @@ function render() {
             ${renderWeightRangeSummary()}
             ${renderTrendStreak()}
             ${renderBMITrend()}
+            ${renderBodyFatTrend()}
             ${renderWeeklySummaryComparison()}
             ${renderGoalProgressRing()}
             ${state.records.length >= 3 ? `
@@ -28218,6 +28262,39 @@ function renderGoalProgressRing() {
           <div class="gr-badge ${statusCls}">${statusLabel}</div>
           ${etaText ? `<div class="gr-eta">${etaText}</div>` : ""}
         </div>
+      </div>
+    </div>
+  `;
+}
+function renderBodyFatTrend() {
+  const data = calcBodyFatTrend(state.records);
+  if (!data.current || data.points.length < 2) return "";
+  const dirLabel = t(`bfTrend.${data.direction}`);
+  const dirCls = data.direction === "down" ? "bft-down" : data.direction === "up" ? "bft-up" : "bft-neutral";
+  const changeSign = data.change > 0 ? "+" : "";
+  const pts = data.points;
+  const svgW = 200, svgH = 40;
+  const bMin = data.min - 0.5, bMax = data.max + 0.5, bRange = bMax - bMin || 1;
+  const pathD = pts.map((p, i) => {
+    const x = i / Math.max(pts.length - 1, 1) * svgW;
+    const y = svgH - (p.bf - bMin) / bRange * svgH;
+    return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  return `
+    <div class="bft-section">
+      <div class="helper">${t("bfTrend.title")}</div>
+      <div class="bft-top">
+        <div class="bft-current">
+          <span class="bft-big">${data.current.toFixed(1)}%</span>
+          <span class="bft-badge ${dirCls}">${changeSign}${data.change.toFixed(1)}% ${dirLabel}</span>
+        </div>
+        <svg class="bft-spark" viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none">
+          <path d="${pathD}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/>
+        </svg>
+      </div>
+      <div class="bft-meta">
+        <span>${t("bfTrend.avg")}: ${data.avg.toFixed(1)}%</span>
+        <span>${t("bfTrend.range")}: ${data.min.toFixed(1)}\u2013${data.max.toFixed(1)}%</span>
       </div>
     </div>
   `;

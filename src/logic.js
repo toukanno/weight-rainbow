@@ -3503,3 +3503,39 @@ export function calcGoalProgressRing(records, goalWeight) {
     onTrack,
   };
 }
+
+/**
+ * Calculate body fat percentage trend over time.
+ * Returns { points: [{ dt, bf }], change, direction, current, min, max, avg }
+ */
+export function calcBodyFatTrend(records) {
+  if (!records || records.length < 1) {
+    return { points: [], change: 0, direction: "neutral", current: null, min: null, max: null, avg: null };
+  }
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const points = sorted
+    .filter((r) => r.bf != null && Number.isFinite(Number(r.bf)) && Number(r.bf) > 0)
+    .map((r) => ({ dt: r.dt, bf: +Number(r.bf).toFixed(1) }));
+
+  if (points.length < 2) {
+    return { points: [], change: 0, direction: "neutral", current: points.length === 1 ? points[0].bf : null, min: null, max: null, avg: null };
+  }
+
+  const current = points[points.length - 1].bf;
+  const first = points[0].bf;
+  const change = +(current - first).toFixed(1);
+  const direction = change < -0.1 ? "down" : change > 0.1 ? "up" : "neutral";
+  const bfs = points.map((p) => p.bf);
+  const avg = +(bfs.reduce((s, v) => s + v, 0) / bfs.length).toFixed(1);
+
+  return {
+    points: points.slice(-30),
+    change,
+    direction,
+    current,
+    min: +Math.min(...bfs).toFixed(1),
+    max: +Math.max(...bfs).toFixed(1),
+    avg,
+  };
+}

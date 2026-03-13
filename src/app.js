@@ -115,6 +115,7 @@ import {
   calcBMITrend,
   calcWeeklySummaryComparison,
   calcGoalProgressRing,
+  calcBodyFatTrend,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -805,6 +806,7 @@ function render() {
             ${renderWeightRangeSummary()}
             ${renderTrendStreak()}
             ${renderBMITrend()}
+            ${renderBodyFatTrend()}
             ${renderWeeklySummaryComparison()}
             ${renderGoalProgressRing()}
             ${state.records.length >= 3 ? `
@@ -2692,6 +2694,44 @@ function renderGoalProgressRing() {
           <div class="gr-badge ${statusCls}">${statusLabel}</div>
           ${etaText ? `<div class="gr-eta">${etaText}</div>` : ""}
         </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderBodyFatTrend() {
+  const data = calcBodyFatTrend(state.records);
+  if (!data.current || data.points.length < 2) return "";
+
+  const dirLabel = t(`bfTrend.${data.direction}`);
+  const dirCls = data.direction === "down" ? "bft-down" : data.direction === "up" ? "bft-up" : "bft-neutral";
+  const changeSign = data.change > 0 ? "+" : "";
+
+  // Sparkline SVG
+  const pts = data.points;
+  const svgW = 200, svgH = 40;
+  const bMin = data.min - 0.5, bMax = data.max + 0.5, bRange = bMax - bMin || 1;
+  const pathD = pts.map((p, i) => {
+    const x = (i / Math.max(pts.length - 1, 1)) * svgW;
+    const y = svgH - ((p.bf - bMin) / bRange) * svgH;
+    return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+
+  return `
+    <div class="bft-section">
+      <div class="helper">${t("bfTrend.title")}</div>
+      <div class="bft-top">
+        <div class="bft-current">
+          <span class="bft-big">${data.current.toFixed(1)}%</span>
+          <span class="bft-badge ${dirCls}">${changeSign}${data.change.toFixed(1)}% ${dirLabel}</span>
+        </div>
+        <svg class="bft-spark" viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none">
+          <path d="${pathD}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/>
+        </svg>
+      </div>
+      <div class="bft-meta">
+        <span>${t("bfTrend.avg")}: ${data.avg.toFixed(1)}%</span>
+        <span>${t("bfTrend.range")}: ${data.min.toFixed(1)}–${data.max.toFixed(1)}%</span>
       </div>
     </div>
   `;

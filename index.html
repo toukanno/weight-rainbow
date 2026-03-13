@@ -349,6 +349,10 @@
         font-size: clamp(2rem, 4vw, 3.4rem);
         line-height: 0.98;
         letter-spacing: -0.04em;
+        background: linear-gradient(135deg, var(--text), var(--accent));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
       }
 
       .hero-copy {
@@ -3003,6 +3007,32 @@
         color: var(--muted);
       }
 
+      .bft-section { margin-top: 14px; }
+      .bft-top {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin: 8px 0;
+      }
+      .bft-current { display: flex; align-items: baseline; gap: 8px; }
+      .bft-big { font-size: 1.8rem; font-weight: 800; }
+      .bft-badge {
+        padding: 3px 8px;
+        border-radius: 8px;
+        font-size: 0.78rem;
+        font-weight: 600;
+      }
+      .bft-down { color: var(--ok); background: color-mix(in srgb, var(--ok) 15%, transparent); }
+      .bft-up { color: var(--danger); background: color-mix(in srgb, var(--danger) 15%, transparent); }
+      .bft-neutral { color: var(--accent-3); background: color-mix(in srgb, var(--accent-3) 15%, transparent); }
+      .bft-spark { flex: 1; height: 36px; color: var(--accent-2); }
+      .bft-meta {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+
       .wc-section { margin-top: 14px; }
       .wc-header, .wc-row {
         display: grid;
@@ -3918,7 +3948,7 @@
 
       .quick-buttons {
         display: flex;
-        gap: 8px;
+        gap: 10px;
         justify-content: center;
         flex-wrap: wrap;
       }
