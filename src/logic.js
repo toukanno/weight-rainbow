@@ -300,6 +300,20 @@ export function calcGoalProgress(records, goalWeight) {
   return { percent, remaining };
 }
 
+export function calcGoalMilestones(records, goalWeight) {
+  if (!records.length || !Number.isFinite(goalWeight)) return null;
+  const firstWeight = records[0].wt;
+  const latestWeight = records[records.length - 1].wt;
+  const totalToLose = firstWeight - goalWeight;
+  if (totalToLose <= 0) return null;
+  const checkpoints = [25, 50, 75, 100];
+  return checkpoints.map((pct) => {
+    const targetWeight = firstWeight - (totalToLose * pct) / 100;
+    const reached = latestWeight <= targetWeight;
+    return { pct, targetWeight: Math.round(targetWeight * 10) / 10, reached };
+  });
+}
+
 export function calcStreak(records) {
   if (!records.length) return 0;
   const dates = new Set(records.map((r) => r.dt));
@@ -834,6 +848,30 @@ export function calcWeightPercentile(records) {
     max: sorted[sorted.length - 1],
     rank: below + 1,
     total: sorted.length,
+  };
+}
+
+export function calcMovingAverages(records, shortWindow = 7, longWindow = 30) {
+  if (records.length < longWindow) return null;
+  const weights = records.map((r) => r.wt);
+  const shortAvg = weights.slice(-shortWindow).reduce((s, w) => s + w, 0) / shortWindow;
+  const longAvg = weights.slice(-longWindow).reduce((s, w) => s + w, 0) / longWindow;
+  const diff = Math.round((shortAvg - longAvg) * 100) / 100;
+  // Check previous crossing: was short above or below long before the latest record?
+  let prevSignal = null;
+  if (records.length >= longWindow + 1) {
+    const prevShort = weights.slice(-(shortWindow + 1), -1).reduce((s, w) => s + w, 0) / shortWindow;
+    const prevLong = weights.slice(-(longWindow + 1), -1).reduce((s, w) => s + w, 0) / longWindow;
+    const prevDiff = prevShort - prevLong;
+    if (prevDiff > 0 && diff <= 0) prevSignal = "crossDown";
+    else if (prevDiff < 0 && diff >= 0) prevSignal = "crossUp";
+  }
+  return {
+    shortAvg: Math.round(shortAvg * 10) / 10,
+    longAvg: Math.round(longAvg * 10) / 10,
+    diff,
+    signal: diff < -0.3 ? "below" : diff > 0.3 ? "above" : "aligned",
+    crossing: prevSignal,
   };
 }
 

@@ -1867,7 +1867,8 @@
         border-radius: 6px;
         background: color-mix(in srgb, var(--border) 80%, transparent);
         margin: 10px 0;
-        overflow: hidden;
+        overflow: visible;
+        position: relative;
       }
 
       .progress-bar-fill {
@@ -1875,6 +1876,36 @@
         border-radius: 6px;
         background: linear-gradient(90deg, var(--accent), var(--ok));
         transition: width 0.5s ease;
+      }
+
+      .goal-milestone-marker {
+        position: absolute;
+        top: -2px;
+        width: 3px;
+        height: 16px;
+        background: var(--muted);
+        border-radius: 1px;
+        transform: translateX(-50%);
+        opacity: 0.5;
+      }
+      .goal-milestone-marker.reached {
+        background: var(--ok, #10b981);
+        opacity: 0.9;
+      }
+      .goal-milestones {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+        margin-top: 4px;
+        font-size: 0.75rem;
+        color: var(--text);
+      }
+      .goal-ms {
+        opacity: 0.5;
+      }
+      .goal-ms.reached {
+        opacity: 1;
+        font-weight: 600;
       }
 
       .progress-text {

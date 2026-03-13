@@ -48,6 +48,8 @@ import {
   calcCalendarChangeMap,
   calcBMIDistribution,
   calcWeightPercentile,
+  calcMovingAverages,
+  calcGoalMilestones,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -288,6 +290,7 @@ function render() {
   const goalWeight = Number(state.settings.goalWeight);
   const goalProgress = calcGoalProgress(state.records, goalWeight);
   const goalPrediction = calcGoalPrediction(state.records, goalWeight);
+  const goalMilestones = calcGoalMilestones(state.records, goalWeight);
   const periodDays = summaryPeriod === "week" ? 7 : 30;
   const periodSummary = calcPeriodSummary(state.records, periodDays);
   const streak = calcStreak(state.records);
@@ -379,11 +382,13 @@ function render() {
               ? `<div class="progress-percent">${goalProgress.percent}%</div>
                 <div class="progress-bar-track" role="progressbar" aria-valuenow="${goalProgress.percent}" aria-valuemin="0" aria-valuemax="100" aria-label="${t("goal.title")}">
                   <div class="progress-bar-fill" style="width: ${goalProgress.percent}%"></div>
+                  ${goalMilestones ? goalMilestones.filter((m) => m.pct < 100).map((m) => `<div class="goal-milestone-marker${m.reached ? " reached" : ""}" style="left:${m.pct}%" title="${t("goal.milestone").replace("{pct}", m.pct)}"></div>`).join("") : ""}
                 </div>
                 <div class="progress-text">
                   <span>${t("goal.progress")}</span>
                   <span>${goalProgress.remaining <= 0 ? t("goal.achieved") : `${t("goal.remaining")}: ${goalProgress.remaining.toFixed(1)}kg`}</span>
                 </div>
+                ${goalMilestones ? `<div class="goal-milestones">${goalMilestones.map((m) => `<span class="goal-ms${m.reached ? " reached" : ""}">${m.reached ? "✅" : "⬜"} ${t("goal.milestone").replace("{pct}", m.pct)} <span class="hint-small">(${m.targetWeight}kg)</span></span>`).join("")}</div>` : ""}
                 ${goalPrediction ? `<div class="prediction-text">${t("goal.prediction")}: ${
                   goalPrediction.achieved ? t("goal.predictionAchieved")
                   : goalPrediction.insufficient ? t("goal.predictionInsufficient")
@@ -633,6 +638,7 @@ function render() {
             ${renderStability()}
             ${renderBMIDistribution()}
             ${renderWeightPercentile()}
+            ${renderMovingAverages()}
             ${renderBodyFatStats()}
           </section>
 
@@ -1130,6 +1136,26 @@ function renderWeightPercentile() {
           <div class="helper hint-small">${t("percentile.rank").replace("{rank}", pctl.rank).replace("{total}", pctl.total)}</div>
           ${pctl.percentile <= 10 ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("percentile.best")}</div>` : ""}
         </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderMovingAverages() {
+  const ma = calcMovingAverages(state.records);
+  if (!ma) return "";
+  const signalCls = ma.signal === "below" ? "negative" : ma.signal === "above" ? "positive" : "";
+  return `
+    <div class="ma-section">
+      <div class="helper">${t("ma.title")}</div>
+      <div class="ma-display">
+        <div class="ma-values">
+          <span class="ma-value">${t("ma.short")}: <strong>${ma.shortAvg.toFixed(1)}kg</strong></span>
+          <span class="ma-value">${t("ma.long")}: <strong>${ma.longAvg.toFixed(1)}kg</strong></span>
+          <span class="ma-diff ${signalCls}">${ma.diff > 0 ? "+" : ""}${ma.diff.toFixed(2)}kg</span>
+        </div>
+        <div class="helper hint-small">${t("ma." + ma.signal)}</div>
+        ${ma.crossing ? `<div class="ma-crossing">${t("ma." + ma.crossing)}</div>` : ""}
       </div>
     </div>
   `;
