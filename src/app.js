@@ -34,6 +34,7 @@ import {
   NOTE_TAGS,
   toggleNoteTag,
   filterRecordsByDateRange,
+  calcSourceBreakdown,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -835,7 +836,7 @@ function renderMonthlyStats() {
           const changeCls = m.change < 0 ? "loss" : m.change > 0 ? "gain" : "neutral";
           return `
             <div class="monthly-stats-row">
-              <div class="monthly-label">${m.month}</div>
+              <div class="monthly-label">${new Date(m.month + "-01").toLocaleDateString(state.settings.language === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "short" })}</div>
               <div class="monthly-values">
                 <span title="${t("summary.avg")}">${t("summary.avg")}: ${m.avg.toFixed(1)}kg</span>
                 <span title="${t("summary.min")}">↓${m.min.toFixed(1)}</span>
