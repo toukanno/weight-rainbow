@@ -753,10 +753,12 @@
         background: var(--surface);
         color: var(--text);
         font-size: 0.85rem;
+        transition: border-color 0.15s ease, outline-color 0.15s ease;
       }
       .record-search input[type="search"]:focus {
         outline: 2px solid var(--accent);
         outline-offset: -1px;
+        border-color: var(--accent);
       }
 
       .note-tags-row {
@@ -840,6 +842,7 @@
         border-radius: 12px;
         background: var(--surface);
         border: 1px solid var(--border);
+        transition: background 0.15s ease;
       }
       .source-icon {
         font-size: 0.9em;
