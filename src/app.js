@@ -326,11 +326,11 @@ function setStatus(message, kind = "ok") {
     statusFadeTimer = setTimeout(() => {
       const el = app.querySelector(".status");
       if (el) el.classList.add("status-fade-out");
-    }, 3200);
+    }, 4000);
     statusClearTimer = setTimeout(() => {
       statusMessage = "";
       render();
-    }, 3800);
+    }, 4600);
   }
   render();
 }
@@ -1125,7 +1125,7 @@ function render() {
           overlay.remove();
         }, 600);
       }
-    }, 3500);
+    }, 4200);
   }
   } catch (e) {
     console.error("[WeightRainbow] Render error:", e);

@@ -3904,7 +3904,7 @@ var translations = {
     "motivation.streak3": "3\u65E5\u9023\u7D9A\u8A18\u9332\uFF01\u3053\u306E\u8ABF\u5B50\u3067\u7D9A\u3051\u307E\u3057\u3087\u3046",
     "motivation.streak7": "1\u9031\u9593\u9023\u7D9A\uFF01\u7D20\u6674\u3089\u3057\u3044\u7FD2\u6163\u3067\u3059",
     "motivation.streak14": "2\u9031\u9593\u9023\u7D9A\uFF01\u3042\u306A\u305F\u306E\u52AA\u529B\u306F\u78BA\u5B9F\u306B\u6210\u679C\u306B",
-    "motivation.streak30": "1\u30F6\u6708\u9023\u7D9A\uFF01\u5727\u5012\u7684\u306A\u7D99\u7D9A\u529B\u3067\u3059",
+    "motivation.streak30": "1\u30F6\u6708\u9023\u7D9A\uFF01\u3059\u3054\u3044\u7D99\u7D9A\u529B\u3067\u3059",
     "motivation.trendDown": "\u6E1B\u5C11\u50BE\u5411\u3067\u3059\u3002\u826F\u3044\u8ABF\u5B50\uFF01",
     "motivation.newRecord": "\u65B0\u3057\u3044\u6700\u4F4E\u4F53\u91CD\u3092\u8A18\u9332\uFF01",
     "motivation.goalClose": "\u76EE\u6A19\u307E\u3067\u3042\u3068\u5C11\u3057\uFF01\u9811\u5F35\u308A\u307E\u3057\u3087\u3046",
@@ -4768,7 +4768,7 @@ var translations = {
     "motivation.streak3": "3-day streak! Keep it going",
     "motivation.streak7": "1-week streak! Great habit",
     "motivation.streak14": "2-week streak! Your effort is paying off",
-    "motivation.streak30": "1-month streak! Incredible consistency",
+    "motivation.streak30": "1-month streak! You're on a roll!",
     "motivation.trendDown": "Downward trend. Nice work!",
     "motivation.newRecord": "New lowest weight recorded!",
     "motivation.goalClose": "Almost at your goal! Keep pushing",
@@ -26017,11 +26017,11 @@ function setStatus(message, kind = "ok") {
     statusFadeTimer = setTimeout(() => {
       const el = app.querySelector(".status");
       if (el) el.classList.add("status-fade-out");
-    }, 3200);
+    }, 4e3);
     statusClearTimer = setTimeout(() => {
       statusMessage = "";
       render();
-    }, 3800);
+    }, 4600);
   }
   render();
 }
@@ -26776,7 +26776,7 @@ function render() {
             overlay.remove();
           }, 600);
         }
-      }, 3500);
+      }, 4200);
     }
   } catch (e) {
     console.error("[WeightRainbow] Render error:", e);
