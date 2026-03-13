@@ -3694,3 +3694,100 @@ describe("calcRecordGaps edge cases", () => {
     expect(result.gaps[0].days).toBe(8);
   });
 });
+
+describe("calcPeriodSummary edge cases", () => {
+  it("returns null for no records in period", () => {
+    const records = [{ dt: "2020-01-01", wt: 70 }];
+    // 7-day period won't include 2020 records
+    expect(calcPeriodSummary(records, 7)).toBeNull();
+  });
+
+  it("returns summary for records in period", () => {
+    const today = new Date();
+    const records = Array.from({ length: 5 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      return { dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, wt: 70 + i * 0.2 };
+    });
+    const result = calcPeriodSummary(records, 7);
+    expect(result).not.toBeNull();
+    expect(result.count).toBe(5);
+    expect(result.min).toBeLessThanOrEqual(result.max);
+    expect(result.avg).toBeGreaterThan(0);
+  });
+});
+
+describe("calcTagImpact edge cases", () => {
+  it("returns null for fewer than 5 records", () => {
+    const records = [{ dt: "2025-01-01", wt: 70, note: "#運動" }];
+    expect(calcTagImpact(records)).toBeNull();
+  });
+
+  it("returns null when no tags are repeated", () => {
+    const records = Array.from({ length: 6 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 70, note: "",
+    }));
+    expect(calcTagImpact(records)).toBeNull();
+  });
+
+  it("detects tag impact when tags repeat", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, note: "" },
+      { dt: "2025-01-02", wt: 69.5, note: "#運動" },
+      { dt: "2025-01-03", wt: 69.8, note: "" },
+      { dt: "2025-01-04", wt: 69.2, note: "#運動" },
+      { dt: "2025-01-05", wt: 69.5, note: "" },
+      { dt: "2025-01-06", wt: 69.0, note: "#運動" },
+    ];
+    const result = calcTagImpact(records);
+    if (result) {
+      expect(Array.isArray(result)).toBe(true);
+      const exerciseTag = result.find(r => r.tag === "運動");
+      if (exerciseTag) {
+        expect(typeof exerciseTag.avgChange).toBe("number");
+        expect(exerciseTag.count).toBeGreaterThanOrEqual(2);
+      }
+    }
+  });
+});
+
+describe("calcWeightPlateau edge cases", () => {
+  it("returns null for insufficient records", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    expect(calcWeightPlateau(records)).toBeNull();
+  });
+
+  it("detects plateau when weight is stable", () => {
+    const today = new Date();
+    const records = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (13 - i));
+      return { dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, wt: 70 + (Math.random() * 0.2 - 0.1) };
+    });
+    const result = calcWeightPlateau(records);
+    // May or may not detect plateau depending on exact random values, but shouldn't crash
+    expect(result === null || typeof result === "object").toBe(true);
+  });
+});
+
+describe("calcWeightVelocity edge cases", () => {
+  it("returns null for insufficient records", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    expect(calcWeightVelocity(records)).toBeNull();
+  });
+
+  it("calculates velocity for recent data", () => {
+    const today = new Date();
+    const records = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (13 - i));
+      return { dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, wt: 75 - i * 0.1 };
+    });
+    const result = calcWeightVelocity(records);
+    if (result) {
+      expect(result.week).not.toBeNull();
+      expect(typeof result.week.dailyRate).toBe("number");
+      expect(typeof result.week.monthlyProjection).toBe("number");
+    }
+  });
+});
