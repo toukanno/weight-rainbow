@@ -3268,3 +3268,43 @@ export function calcConsistencyScore(records, goalWeight) {
     grade,
   };
 }
+
+/**
+ * Calculate weight range summary across multiple time periods.
+ * Returns { periods: [{ label, days, min, max, range, avg, count }] }
+ */
+export function calcWeightRangeSummary(records) {
+  if (!records || records.length < 2) {
+    return { periods: [] };
+  }
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const today = localDateStr();
+
+  function periodStats(days, label) {
+    let subset;
+    if (days === 0) {
+      subset = sorted;
+    } else {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - days);
+      const cutoffStr = localDateStr(cutoff);
+      subset = sorted.filter((r) => r.dt >= cutoffStr && r.dt <= today);
+    }
+    if (subset.length < 2) return null;
+    const weights = subset.map((r) => r.wt);
+    const min = Math.min(...weights);
+    const max = Math.max(...weights);
+    const avg = +(weights.reduce((s, w) => s + w, 0) / weights.length).toFixed(1);
+    return { label, days, min: +min.toFixed(1), max: +max.toFixed(1), range: +(max - min).toFixed(1), avg, count: subset.length };
+  }
+
+  const periods = [
+    periodStats(7, "7d"),
+    periodStats(30, "30d"),
+    periodStats(90, "90d"),
+    periodStats(0, "all"),
+  ].filter(Boolean);
+
+  return { periods };
+}

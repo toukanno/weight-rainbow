@@ -3416,6 +3416,37 @@ function calcConsistencyScore(records, goalWeight) {
     grade
   };
 }
+function calcWeightRangeSummary(records) {
+  if (!records || records.length < 2) {
+    return { periods: [] };
+  }
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const today = localDateStr();
+  function periodStats(days2, label) {
+    let subset;
+    if (days2 === 0) {
+      subset = sorted;
+    } else {
+      const cutoff = /* @__PURE__ */ new Date();
+      cutoff.setDate(cutoff.getDate() - days2);
+      const cutoffStr = localDateStr(cutoff);
+      subset = sorted.filter((r) => r.dt >= cutoffStr && r.dt <= today);
+    }
+    if (subset.length < 2) return null;
+    const weights = subset.map((r) => r.wt);
+    const min = Math.min(...weights);
+    const max = Math.max(...weights);
+    const avg = +(weights.reduce((s, w) => s + w, 0) / weights.length).toFixed(1);
+    return { label, days: days2, min: +min.toFixed(1), max: +max.toFixed(1), range: +(max - min).toFixed(1), avg, count: subset.length };
+  }
+  const periods = [
+    periodStats(7, "7d"),
+    periodStats(30, "30d"),
+    periodStats(90, "90d"),
+    periodStats(0, "all")
+  ].filter(Boolean);
+  return { periods };
+}
 
 // src/i18n.js
 var translations = {
@@ -4237,7 +4268,16 @@ var translations = {
     "cscore.stability": "\u4F53\u91CD\u306E\u5B89\u5B9A\u6027",
     "cscore.momentum": "\u76EE\u6A19\u3078\u306E\u9032\u6357",
     "cscore.grade": "\u7DCF\u5408\u8A55\u4FA1",
-    "cscore.nodata": "7\u4EF6\u4EE5\u4E0A\u306E\u8A18\u9332\u304C\u5FC5\u8981\u3067\u3059"
+    "cscore.nodata": "7\u4EF6\u4EE5\u4E0A\u306E\u8A18\u9332\u304C\u5FC5\u8981\u3067\u3059",
+    "wrange.title": "\u4F53\u91CD\u30EC\u30F3\u30B8",
+    "wrange.min": "\u6700\u5C0F",
+    "wrange.max": "\u6700\u5927",
+    "wrange.range": "\u5E45",
+    "wrange.avg": "\u5E73\u5747",
+    "wrange.7d": "7\u65E5",
+    "wrange.30d": "30\u65E5",
+    "wrange.90d": "90\u65E5",
+    "wrange.all": "\u5168\u671F\u9593"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5057,7 +5097,16 @@ var translations = {
     "cscore.stability": "Weight Stability",
     "cscore.momentum": "Goal Progress",
     "cscore.grade": "Overall Grade",
-    "cscore.nodata": "Need 7+ records"
+    "cscore.nodata": "Need 7+ records",
+    "wrange.title": "Weight Range",
+    "wrange.min": "Min",
+    "wrange.max": "Max",
+    "wrange.range": "Range",
+    "wrange.avg": "Avg",
+    "wrange.7d": "7d",
+    "wrange.30d": "30d",
+    "wrange.90d": "90d",
+    "wrange.all": "All"
   }
 };
 function createTranslator(language) {
@@ -25674,6 +25723,8 @@ function sanitizeProfile(p) {
 function loadState() {
   const rawRecords = safeParse(STORAGE_KEYS.records, []);
   const records = Array.isArray(rawRecords) ? rawRecords.filter((r) => r && r.dt && Number.isFinite(r.wt)) : [];
+  const sorted = [...records].sort((a, b) => a.dt > b.dt ? -1 : a.dt < b.dt ? 1 : 0);
+  const lastWeight = sorted.length > 0 ? sorted[0].wt : 65;
   return {
     records,
     profile: sanitizeProfile({ ...createDefaultProfile(), ...safeParse(STORAGE_KEYS.profile, {}) }),
@@ -25682,8 +25733,8 @@ function loadState() {
       weight: "",
       date: todayLocal(),
       imageName: "",
-      pickerInt: 65,
-      pickerDec: 0,
+      pickerInt: Math.floor(lastWeight),
+      pickerDec: Math.round((lastWeight - Math.floor(lastWeight)) * 10),
       bodyFat: "",
       note: ""
     }
@@ -26194,6 +26245,7 @@ function render() {
             ${renderRecordingRate()}
             ${renderStreakCalendar()}
             ${renderConsistencyScore()}
+            ${renderWeightRangeSummary()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -27804,6 +27856,38 @@ function renderConsistencyScore() {
         ${bar(t("cscore.stability"), data.components.stability)}
         ${bar(t("cscore.momentum"), data.components.momentum)}
       </div>
+    </div>
+  `;
+}
+function renderWeightRangeSummary() {
+  const data = calcWeightRangeSummary(state.records);
+  if (!data.periods.length) return "";
+  const labelMap = { "7d": t("wrange.7d"), "30d": t("wrange.30d"), "90d": t("wrange.90d"), "all": t("wrange.all") };
+  const globalMin = Math.min(...data.periods.map((p) => p.min));
+  const globalMax = Math.max(...data.periods.map((p) => p.max));
+  const spread = globalMax - globalMin || 1;
+  const rows = data.periods.map((p) => {
+    const leftPct = ((p.min - globalMin) / spread * 80).toFixed(1);
+    const widthPct = Math.max(2, p.range / spread * 80).toFixed(1);
+    const avgPct = ((p.avg - globalMin) / spread * 80).toFixed(1);
+    return `<div class="wr-row">
+      <span class="wr-label">${labelMap[p.label] || p.label}</span>
+      <div class="wr-bar-wrap">
+        <div class="wr-bar" style="left:${leftPct}%;width:${widthPct}%">
+          <div class="wr-avg-marker" style="left:${p.range > 0 ? ((p.avg - p.min) / p.range * 100).toFixed(1) : 50}%"></div>
+        </div>
+      </div>
+      <span class="wr-vals">${p.min.toFixed(1)}\u2013${p.max.toFixed(1)}</span>
+    </div>`;
+  }).join("");
+  return `
+    <div class="wr-section">
+      <div class="helper">${t("wrange.title")}</div>
+      <div class="wr-legend">
+        <span>${t("wrange.min")}: ${globalMin.toFixed(1)}</span>
+        <span>${t("wrange.max")}: ${globalMax.toFixed(1)}</span>
+      </div>
+      ${rows}
     </div>
   `;
 }
@@ -29639,7 +29723,13 @@ function googleGetToken() {
       reject(new Error("not_configured"));
       return;
     }
+    if (gToken && Date.now() < gTokenExpiresAt) {
+      resolve(gToken);
+      return;
+    }
+    const timeout = setTimeout(() => reject(new Error("auth_timeout")), DRIVE_TIMEOUT);
     c.callback = (r) => {
+      clearTimeout(timeout);
       if (r.error) reject(new Error(r.error));
       else {
         gToken = r.access_token;
@@ -29647,8 +29737,7 @@ function googleGetToken() {
         resolve(r.access_token);
       }
     };
-    if (gToken && Date.now() < gTokenExpiresAt) resolve(gToken);
-    else c.requestAccessToken();
+    c.requestAccessToken();
   });
 }
 async function googleBackup() {

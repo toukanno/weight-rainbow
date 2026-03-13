@@ -2904,6 +2904,49 @@
       }
       .cs-bar-val { min-width: 28px; text-align: right; font-weight: 600; color: var(--sub); }
 
+      .wr-section { margin-top: 14px; }
+      .wr-legend {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.75rem;
+        color: var(--muted);
+        margin: 4px 0 8px;
+      }
+      .wr-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+        font-size: 0.85rem;
+      }
+      .wr-label { min-width: 36px; font-weight: 600; color: var(--sub); }
+      .wr-bar-wrap {
+        flex: 1;
+        height: 14px;
+        position: relative;
+        background: var(--border);
+        border-radius: 7px;
+        overflow: visible;
+      }
+      .wr-bar {
+        position: absolute;
+        top: 0;
+        height: 100%;
+        border-radius: 7px;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        min-width: 4px;
+      }
+      .wr-avg-marker {
+        position: absolute;
+        top: -3px;
+        width: 3px;
+        height: 20px;
+        background: var(--text);
+        border-radius: 1px;
+        transform: translateX(-1px);
+      }
+      .wr-vals { min-width: 80px; text-align: right; font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+
       .success-section {
         margin-top: 14px;
         text-align: center;

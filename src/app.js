@@ -110,6 +110,7 @@ import {
   calcMovingAvgCrossover,
   calcPredictionAccuracy,
   calcConsistencyScore,
+  calcWeightRangeSummary,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -230,6 +231,8 @@ function loadState() {
   const records = Array.isArray(rawRecords)
     ? rawRecords.filter((r) => r && r.dt && Number.isFinite(r.wt))
     : [];
+  const sorted = [...records].sort((a, b) => (a.dt > b.dt ? -1 : a.dt < b.dt ? 1 : 0));
+  const lastWeight = sorted.length > 0 ? sorted[0].wt : 65;
   return {
     records,
     profile: sanitizeProfile({ ...createDefaultProfile(), ...safeParse(STORAGE_KEYS.profile, {}) }),
@@ -238,8 +241,8 @@ function loadState() {
       weight: "",
       date: todayLocal(),
       imageName: "",
-      pickerInt: 65,
-      pickerDec: 0,
+      pickerInt: Math.floor(lastWeight),
+      pickerDec: Math.round((lastWeight - Math.floor(lastWeight)) * 10),
       bodyFat: "",
       note: "",
     },
@@ -790,6 +793,7 @@ function render() {
             ${renderRecordingRate()}
             ${renderStreakCalendar()}
             ${renderConsistencyScore()}
+            ${renderWeightRangeSummary()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -2504,6 +2508,43 @@ function renderConsistencyScore() {
         ${bar(t("cscore.stability"), data.components.stability)}
         ${bar(t("cscore.momentum"), data.components.momentum)}
       </div>
+    </div>
+  `;
+}
+
+function renderWeightRangeSummary() {
+  const data = calcWeightRangeSummary(state.records);
+  if (!data.periods.length) return "";
+
+  const labelMap = { "7d": t("wrange.7d"), "30d": t("wrange.30d"), "90d": t("wrange.90d"), "all": t("wrange.all") };
+  // Find global min/max for visual scaling
+  const globalMin = Math.min(...data.periods.map((p) => p.min));
+  const globalMax = Math.max(...data.periods.map((p) => p.max));
+  const spread = globalMax - globalMin || 1;
+
+  const rows = data.periods.map((p) => {
+    const leftPct = ((p.min - globalMin) / spread * 80).toFixed(1);
+    const widthPct = Math.max(2, ((p.range) / spread * 80)).toFixed(1);
+    const avgPct = ((p.avg - globalMin) / spread * 80).toFixed(1);
+    return `<div class="wr-row">
+      <span class="wr-label">${labelMap[p.label] || p.label}</span>
+      <div class="wr-bar-wrap">
+        <div class="wr-bar" style="left:${leftPct}%;width:${widthPct}%">
+          <div class="wr-avg-marker" style="left:${p.range > 0 ? ((p.avg - p.min) / p.range * 100).toFixed(1) : 50}%"></div>
+        </div>
+      </div>
+      <span class="wr-vals">${p.min.toFixed(1)}–${p.max.toFixed(1)}</span>
+    </div>`;
+  }).join("");
+
+  return `
+    <div class="wr-section">
+      <div class="helper">${t("wrange.title")}</div>
+      <div class="wr-legend">
+        <span>${t("wrange.min")}: ${globalMin.toFixed(1)}</span>
+        <span>${t("wrange.max")}: ${globalMax.toFixed(1)}</span>
+      </div>
+      ${rows}
     </div>
   `;
 }
@@ -4501,7 +4542,10 @@ function googleGetToken() {
   return new Promise((resolve, reject) => {
     const c = googleAuth();
     if (!c) { reject(new Error("not_configured")); return; }
+    if (gToken && Date.now() < gTokenExpiresAt) { resolve(gToken); return; }
+    const timeout = setTimeout(() => reject(new Error("auth_timeout")), DRIVE_TIMEOUT);
     c.callback = (r) => {
+      clearTimeout(timeout);
       if (r.error) reject(new Error(r.error));
       else {
         gToken = r.access_token;
@@ -4509,8 +4553,7 @@ function googleGetToken() {
         resolve(r.access_token);
       }
     };
-    if (gToken && Date.now() < gTokenExpiresAt) resolve(gToken);
-    else c.requestAccessToken();
+    c.requestAccessToken();
   });
 }
 
