@@ -263,7 +263,10 @@ function persist() {
     window.localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(state.profile));
     window.localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(state.settings));
     return true;
-  } catch {
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "QuotaExceededError") {
+      setStatus(t("error.storageQuota"), "error");
+    }
     return false;
   }
 }
@@ -3882,7 +3885,10 @@ async function shareChart() {
   const canvas = document.getElementById("chart");
   if (!canvas) return;
   try {
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    const blob = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("toBlob timeout")), 5000);
+      canvas.toBlob((b) => { clearTimeout(timer); resolve(b); }, "image/png");
+    });
     if (!blob) { setStatus(t("share.error"), "error"); return; }
     if (navigator.share && navigator.canShare) {
       const file = new File([blob], "weight-chart.png", { type: "image/png" });
@@ -4458,6 +4464,11 @@ function saveReminder() {
       persist();
       initReminder();
       setStatus(t("reminder.saved"));
+      render();
+    }).catch(() => {
+      state.settings.reminderEnabled = false;
+      setStatus(t("reminder.denied"), "error");
+      persist();
       render();
     });
     return;

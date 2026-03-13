@@ -682,6 +682,10 @@
         cursor: zoom-in;
         animation: fadeIn 0.3s ease-out;
       }
+      .photo-preview:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
 
       .record-note {
         font-style: italic;
@@ -2794,7 +2798,7 @@
         display: flex;
         justify-content: space-between;
         font-size: 0.85rem;
-        color: var(--sub);
+        color: var(--muted);
         margin-bottom: 8px;
       }
       .mac-row {
@@ -2888,7 +2892,7 @@
         gap: 8px;
         font-size: 0.85rem;
       }
-      .cs-bar-label { min-width: 100px; color: var(--sub); }
+      .cs-bar-label { min-width: 100px; color: var(--muted); }
       .cs-bar-track {
         flex: 1;
         height: 8px;
@@ -2902,7 +2906,7 @@
         border-radius: 4px;
         transition: width 0.3s ease;
       }
-      .cs-bar-val { min-width: 28px; text-align: right; font-weight: 600; color: var(--sub); }
+      .cs-bar-val { min-width: 28px; text-align: right; font-weight: 600; color: var(--muted); }
 
       .wr-section { margin-top: 14px; }
       .wr-legend {
@@ -2919,7 +2923,7 @@
         margin-bottom: 6px;
         font-size: 0.85rem;
       }
-      .wr-label { min-width: 36px; font-weight: 600; color: var(--sub); }
+      .wr-label { min-width: 36px; font-weight: 600; color: var(--muted); }
       .wr-bar-wrap {
         flex: 1;
         height: 14px;

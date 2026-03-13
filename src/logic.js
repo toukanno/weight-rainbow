@@ -885,7 +885,7 @@ export function calcRecordingTimeStats(records) {
     evening: { count: buckets.evening, pct: Math.round((buckets.evening / total) * 100) },
     night: { count: buckets.night, pct: Math.round((buckets.night / total) * 100) },
     avgHour,
-    mostCommon: most[0],
+    mostCommon: most?.[0] || "morning",
     total,
   };
 }

@@ -8170,3 +8170,64 @@ describe("calcConsistencyScore", () => {
     expect(result.components).toHaveProperty("momentum");
   });
 });
+
+describe("calcWeightRangeSummary", () => {
+  it("returns empty for fewer than 2 records", () => {
+    expect(calcWeightRangeSummary([{ dt: "2025-01-01", wt: 70 }]).periods).toEqual([]);
+    expect(calcWeightRangeSummary([]).periods).toEqual([]);
+    expect(calcWeightRangeSummary(null).periods).toEqual([]);
+  });
+
+  it("returns periods with correct structure", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-03-${String(i + 1).padStart(2, "0")}`,
+      wt: 65 + i,
+    }));
+    const result = calcWeightRangeSummary(records);
+    expect(result.periods.length).toBeGreaterThan(0);
+    const p = result.periods[0];
+    expect(p).toHaveProperty("label");
+    expect(p).toHaveProperty("min");
+    expect(p).toHaveProperty("max");
+    expect(p).toHaveProperty("range");
+    expect(p).toHaveProperty("avg");
+    expect(p).toHaveProperty("count");
+  });
+
+  it("calculates correct min/max/range for known data", () => {
+    const today = new Date();
+    const records = Array.from({ length: 5 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      return { dt: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`, wt: 60 + i * 2 };
+    });
+    const result = calcWeightRangeSummary(records);
+    const allPeriod = result.periods.find((p) => p.label === "all");
+    expect(allPeriod).toBeDefined();
+    expect(allPeriod.min).toBe(60);
+    expect(allPeriod.max).toBe(68);
+    expect(allPeriod.range).toBe(8);
+  });
+
+  it("includes all-time period", () => {
+    const records = [
+      { dt: "2024-01-01", wt: 70 },
+      { dt: "2025-03-01", wt: 65 },
+    ];
+    const result = calcWeightRangeSummary(records);
+    const all = result.periods.find((p) => p.label === "all");
+    expect(all).toBeDefined();
+    expect(all.count).toBe(2);
+  });
+
+  it("calculates average correctly", () => {
+    const today = new Date();
+    const records = [
+      { dt: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, wt: 60 },
+      { dt: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(Math.max(1,today.getDate()-1)).padStart(2,"0")}`, wt: 80 },
+    ];
+    const result = calcWeightRangeSummary(records);
+    const all = result.periods.find((p) => p.label === "all");
+    expect(all.avg).toBe(70);
+  });
+});

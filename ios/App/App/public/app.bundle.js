@@ -1512,7 +1512,7 @@ function calcRecordingTimeStats(records) {
     evening: { count: buckets.evening, pct: Math.round(buckets.evening / total * 100) },
     night: { count: buckets.night, pct: Math.round(buckets.night / total * 100) },
     avgHour,
-    mostCommon: most[0],
+    mostCommon: most?.[0] || "morning",
     total
   };
 }
@@ -3682,6 +3682,7 @@ var translations = {
     "error.reload": "\u518D\u8AAD\u307F\u8FBC\u307F",
     "error.resetData": "\u30C7\u30FC\u30BF\u30EA\u30BB\u30C3\u30C8",
     "error.resetConfirm": "\u3059\u3079\u3066\u306E\u30C7\u30FC\u30BF\u3092\u524A\u9664\u3057\u307E\u3059\u304B\uFF1F\u3053\u306E\u64CD\u4F5C\u306F\u53D6\u308A\u6D88\u305B\u307E\u305B\u3093\u3002",
+    "error.storageQuota": "\u30B9\u30C8\u30EC\u30FC\u30B8\u5BB9\u91CF\u304C\u4E0D\u8DB3\u3057\u3066\u3044\u307E\u3059\u3002\u4E0D\u8981\u306A\u30C7\u30FC\u30BF\u3092\u524A\u9664\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
     "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01\uFF08-{diff}kg\uFF09",
     "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
@@ -4514,6 +4515,7 @@ var translations = {
     "error.reload": "Reload",
     "error.resetData": "Reset Data",
     "error.resetConfirm": "Delete all data? This cannot be undone.",
+    "error.storageQuota": "Storage is full. Please delete unnecessary data.",
     "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
@@ -25753,7 +25755,10 @@ function persist() {
     window.localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(state.profile));
     window.localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(state.settings));
     return true;
-  } catch {
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "QuotaExceededError") {
+      setStatus(t("error.storageQuota"), "error");
+    }
     return false;
   }
 }
@@ -29133,7 +29138,13 @@ async function shareChart() {
   const canvas = document.getElementById("chart");
   if (!canvas) return;
   try {
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    const blob = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("toBlob timeout")), 5e3);
+      canvas.toBlob((b) => {
+        clearTimeout(timer);
+        resolve(b);
+      }, "image/png");
+    });
     if (!blob) {
       setStatus(t("share.error"), "error");
       return;
@@ -29647,6 +29658,11 @@ function saveReminder() {
       persist();
       initReminder();
       setStatus(t("reminder.saved"));
+      render();
+    }).catch(() => {
+      state.settings.reminderEnabled = false;
+      setStatus(t("reminder.denied"), "error");
+      persist();
       render();
     });
     return;
