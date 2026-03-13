@@ -3491,6 +3491,7 @@ var translations = {
     "status.reset": "\u7AEF\u672B\u5185\u30C7\u30FC\u30BF\u3092\u524A\u9664\u3057\u307E\u3057\u305F\u3002",
     "status.permissionDenied": "\u5FC5\u8981\u306A\u6A29\u9650\u304C\u8A31\u53EF\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002\u8A2D\u5B9A\u30A2\u30D7\u30EA\u304B\u3089\u5199\u771F\u307E\u305F\u306F\u30DE\u30A4\u30AF\u306E\u6A29\u9650\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "confirm.reset": "\u4FDD\u5B58\u6E08\u307F\u30D7\u30ED\u30D5\u30A3\u30FC\u30EB\u3068\u4F53\u91CD\u8A18\u9332\u3092\u3059\u3079\u3066\u524A\u9664\u3057\u307E\u3059\u3002\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F",
+    "confirm.resetFinal": "\u3053\u306E\u64CD\u4F5C\u306F\u53D6\u308A\u6D88\u305B\u307E\u305B\u3093\u3002\u672C\u5F53\u306B\u5168\u30C7\u30FC\u30BF\u3092\u524A\u9664\u3057\u307E\u3059\u304B\uFF1F",
     "confirm.deleteRecord": "\u3053\u306E\u8A18\u9332\u3092\u524A\u9664\u3057\u307E\u3059\u304B\uFF1F",
     "lang.ja": "\u65E5\u672C\u8A9E",
     "lang.en": "English",
@@ -4305,6 +4306,7 @@ var translations = {
     "status.reset": "On-device data deleted.",
     "status.permissionDenied": "A required permission is missing. Check photo or microphone access in Settings.",
     "confirm.reset": "Delete all saved profile and weight records from this device?",
+    "confirm.resetFinal": "This action cannot be undone. Are you sure you want to delete all data?",
     "confirm.deleteRecord": "Delete this record?",
     "lang.ja": "\u65E5\u672C\u8A9E",
     "lang.en": "English",
@@ -29083,6 +29085,7 @@ function resetData() {
 
 (${state.records.length} ${t("chart.records")})` : t("confirm.reset");
   if (!window.confirm(msg)) return;
+  if (!window.confirm(t("confirm.resetFinal"))) return;
   state = {
     ...loadState(),
     profile: createDefaultProfile(),

@@ -3947,6 +3947,7 @@ function resetData() {
     ? `${t("confirm.reset")}\n\n(${state.records.length} ${t("chart.records")})`
     : t("confirm.reset");
   if (!window.confirm(msg)) return;
+  if (!window.confirm(t("confirm.resetFinal"))) return;
 
   state = {
     ...loadState(),
