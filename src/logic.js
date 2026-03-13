@@ -1356,3 +1356,35 @@ export function calcSeasonality(records) {
     seasonalRange,
   };
 }
+
+export function calcWeightDistribution(records, bucketSize = 1) {
+  if (records.length < 5) return null;
+  const weights = records.map((r) => r.wt);
+  const min = Math.floor(Math.min(...weights));
+  const max = Math.ceil(Math.max(...weights));
+  if (min === max) return null;
+
+  const buckets = [];
+  for (let start = min; start < max; start += bucketSize) {
+    const end = start + bucketSize;
+    const count = weights.filter((w) => w >= start && w < end).length;
+    buckets.push({ start, end, count });
+  }
+  // Include max in last bucket
+  const lastBucket = buckets[buckets.length - 1];
+  lastBucket.count += weights.filter((w) => w === max).length;
+
+  const maxCount = Math.max(...buckets.map((b) => b.count));
+  const latest = weights[weights.length - 1];
+  const latestBucket = buckets.findIndex((b) => latest >= b.start && latest < b.end) ?? buckets.length - 1;
+  const modeBucket = buckets.reduce((best, b, i) => b.count > buckets[best].count ? i : best, 0);
+
+  return {
+    buckets,
+    maxCount,
+    latestBucket: latestBucket >= 0 ? latestBucket : buckets.length - 1,
+    modeBucket,
+    modeRange: `${buckets[modeBucket].start}-${buckets[modeBucket].end}`,
+    total: records.length,
+  };
+}

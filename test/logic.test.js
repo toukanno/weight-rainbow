@@ -65,6 +65,7 @@ import {
   calcMomentumScore,
   calcNextMilestones,
   calcSeasonality,
+  calcWeightDistribution,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -3789,5 +3790,51 @@ describe("calcWeightVelocity edge cases", () => {
       expect(typeof result.week.dailyRate).toBe("number");
       expect(typeof result.week.monthlyProjection).toBe("number");
     }
+  });
+});
+
+describe("calcWeightDistribution", () => {
+  it("returns null with fewer than 5 records", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }, { dt: "2025-01-02", wt: 71 }];
+    expect(calcWeightDistribution(records)).toBeNull();
+  });
+
+  it("creates buckets for weight range", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 68.5 },
+      { dt: "2025-01-02", wt: 69.2 },
+      { dt: "2025-01-03", wt: 70.1 },
+      { dt: "2025-01-04", wt: 70.8 },
+      { dt: "2025-01-05", wt: 71.3 },
+    ];
+    const result = calcWeightDistribution(records);
+    expect(result).not.toBeNull();
+    expect(result.buckets.length).toBeGreaterThan(0);
+    expect(result.total).toBe(5);
+    expect(result.maxCount).toBeGreaterThan(0);
+  });
+
+  it("identifies mode bucket correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70.1 },
+      { dt: "2025-01-02", wt: 70.3 },
+      { dt: "2025-01-03", wt: 70.5 },
+      { dt: "2025-01-04", wt: 70.7 },
+      { dt: "2025-01-05", wt: 72.0 },
+    ];
+    const result = calcWeightDistribution(records);
+    expect(result).not.toBeNull();
+    expect(result.modeRange).toBe("70-71");
+    expect(result.buckets[result.modeBucket].count).toBe(4);
+  });
+
+  it("marks latest weight bucket", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i,
+    }));
+    const result = calcWeightDistribution(records);
+    expect(result).not.toBeNull();
+    expect(result.latestBucket).toBeGreaterThanOrEqual(0);
   });
 });

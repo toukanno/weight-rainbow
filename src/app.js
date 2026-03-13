@@ -67,6 +67,7 @@ import {
   calcMomentumScore,
   calcNextMilestones,
   calcSeasonality,
+  calcWeightDistribution,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -689,6 +690,7 @@ function render() {
                 ${renderWeightPlateau()}
                 ${renderRecordGaps()}
                 ${renderSeasonality()}
+                ${renderWeightDistribution()}
               </div>
               ` : ""}
             </div>
@@ -1441,6 +1443,30 @@ function renderSeasonality() {
         <div>${t("season.range").replace("{range}", s.seasonalRange)}</div>
       </div>
       <div class="helper hint-small">${t("season.hint")}</div>
+    </div>
+  `;
+}
+
+function renderWeightDistribution() {
+  const d = calcWeightDistribution(state.records);
+  if (!d) return "";
+  const bars = d.buckets.map((b, i) => {
+    const pct = d.maxCount > 0 ? Math.round((b.count / d.maxCount) * 100) : 0;
+    const isCurrent = i === d.latestBucket;
+    const isMode = i === d.modeBucket;
+    const color = isCurrent ? "var(--accent)" : isMode ? "var(--ok, #10b981)" : "color-mix(in srgb, var(--accent) 40%, transparent)";
+    return `<div class="dist-bar-wrap">
+      ${isCurrent ? `<div class="dist-current-marker">${t("dist.current")}</div>` : ""}
+      <div class="dist-bar" style="height:${Math.max(2, pct)}%;background:${color};" title="${b.start}-${b.end}kg: ${b.count}"></div>
+      <div class="dist-bar-label">${b.start}</div>
+    </div>`;
+  }).join("");
+  return `
+    <div class="dist-section">
+      <div class="helper">${t("dist.title")}</div>
+      <div class="dist-chart">${bars}</div>
+      <div class="dist-info">${t("dist.mode").replace("{range}", d.modeRange).replace("{count}", d.buckets[d.modeBucket].count)}</div>
+      <div class="helper hint-small">${t("dist.hint")}</div>
     </div>
   `;
 }

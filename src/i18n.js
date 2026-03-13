@@ -498,6 +498,10 @@ export const translations = {
     "season.month.4": "4月", "season.month.5": "5月", "season.month.6": "6月",
     "season.month.7": "7月", "season.month.8": "8月", "season.month.9": "9月",
     "season.month.10": "10月", "season.month.11": "11月", "season.month.12": "12月",
+    "dist.title": "体重分布",
+    "dist.mode": "最頻値帯: {range}kg ({count}回)",
+    "dist.current": "▼ 現在",
+    "dist.hint": "体重がどの範囲に集中しているかを表示",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -998,6 +1002,10 @@ export const translations = {
     "season.month.4": "Apr", "season.month.5": "May", "season.month.6": "Jun",
     "season.month.7": "Jul", "season.month.8": "Aug", "season.month.9": "Sep",
     "season.month.10": "Oct", "season.month.11": "Nov", "season.month.12": "Dec",
+    "dist.title": "Weight Distribution",
+    "dist.mode": "Most common: {range}kg ({count} times)",
+    "dist.current": "▼ Current",
+    "dist.hint": "Shows where your weights cluster",
   },
 };
 
