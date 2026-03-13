@@ -401,6 +401,12 @@
       .panel {
         padding: 22px;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
+        animation: panelIn 0.3s ease-out;
+      }
+
+      @keyframes panelIn {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
       }
 
       @media (hover: hover) {
@@ -1469,6 +1475,15 @@
       .calendar-cell.has-record {
         color: white;
         font-weight: 600;
+        transition: transform 0.12s;
+      }
+
+      @media (hover: hover) {
+        .calendar-cell.has-record:hover {
+          transform: scale(1.1);
+          z-index: 1;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
       }
 
       .calendar-cell.today {
@@ -1648,6 +1663,7 @@
       }
 
       .achievement-badge {
+        position: relative;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -1661,6 +1677,25 @@
 
       .achievement-badge:hover {
         transform: scale(1.2);
+      }
+
+      .achievement-badge:hover::after {
+        content: attr(title);
+        position: absolute;
+        bottom: calc(100% + 6px);
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 4px 10px;
+        border-radius: 8px;
+        background: var(--surface-strong);
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-size: 11px;
+        font-weight: 600;
+        white-space: nowrap;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        pointer-events: none;
+        z-index: 10;
       }
 
       .achievement-badge.bronze {
