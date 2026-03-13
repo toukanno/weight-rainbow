@@ -84,6 +84,8 @@ import {
   calcBodyComposition,
   generateWeightSummary,
   getFrequentNotes,
+  detectDuplicates,
+  validateWeightEntry,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -624,6 +626,7 @@ function render() {
                   <div class="helper hint-small desktop-only">⌘+Enter</div>
                 </div>
               </div>
+              <div class="validate-warnings" style="display:none"></div>
             </div>
 
             <div class="status ${statusKind === "error" ? "warn" : ""}" role="status" aria-live="polite">
@@ -740,6 +743,7 @@ function render() {
                 ${renderPeriodComparison()}
                 ${renderBodyComposition()}
                 ${renderShareSummary()}
+                ${renderDuplicateCheck()}
               </div>
               ` : ""}
             </div>
@@ -1915,6 +1919,24 @@ function renderShareSummary() {
   `;
 }
 
+function renderDuplicateCheck() {
+  const dd = detectDuplicates(state.records);
+  if (dd.duplicates.length === 0 && dd.suspicious.length === 0) return "";
+  const items = [];
+  for (const d of dd.duplicates) {
+    items.push(`<div class="dupes-item dupes-warn">${t("dupes.duplicate").replace("{date}", d.date).replace("{count}", d.count)}</div>`);
+  }
+  for (const s of dd.suspicious) {
+    items.push(`<div class="dupes-item dupes-info">${t("dupes.suspicious").replace("{weight}", s.weight).replace("{count}", s.count).replace("{from}", s.from).replace("{to}", s.to)}</div>`);
+  }
+  return `
+    <div class="dupes-section">
+      <div class="helper">${t("dupes.title")}</div>
+      ${items.join("")}
+    </div>
+  `;
+}
+
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -2161,6 +2183,13 @@ function bindEvents() {
   app.querySelector('[data-action="save-profile"]')?.addEventListener("click", saveProfile);
   app.querySelector('[data-action="save-settings"]')?.addEventListener("click", saveSettings);
   app.querySelector('[data-action="save-record"]')?.addEventListener("click", saveRecordFromPicker);
+  app.addEventListener("click", (e) => {
+    if (e.target.closest('[data-action="confirm-save"]')) {
+      const container = document.querySelector(".validate-warnings");
+      if (container) { container.style.display = "none"; container.innerHTML = ""; }
+      saveRecordFromPicker();
+    }
+  });
   app.querySelector('[data-action="export-data"]')?.addEventListener("click", exportData);
   app.querySelector('[data-action="reset-data"]')?.addEventListener("click", resetData);
   app.querySelector('[data-action="pick-native-photo"]')?.addEventListener("click", pickNativePhoto);
@@ -2479,6 +2508,7 @@ function quickSaveRecord() {
 
 let lastUndoState = null;
 let undoTimer = null;
+let validationBypass = false;
 
 function saveRecordWithWeight(weight, source) {
   const weightResult = validateWeight(String(weight));
@@ -2486,6 +2516,26 @@ function saveRecordWithWeight(weight, source) {
     setStatus(t(weightResult.error || "entry.noWeight"), "error");
     return;
   }
+
+  // Entry validation warnings (skip if user already confirmed)
+  if (!validationBypass && state.records.length > 0) {
+    const warnings = validateWeightEntry(weightResult.weight, state.records);
+    if (warnings.length > 0) {
+      const container = document.querySelector(".validate-warnings");
+      if (container) {
+        const msgs = warnings.map((w) => {
+          if (w.type === "largeDiff") return t("validate.largeDiff").replace("{diff}", w.diff).replace("{previous}", w.previous).replace("{date}", w.date);
+          if (w.type === "outsideRange") return t("validate.outsideRange").replace("{min}", w.min).replace("{max}", w.max);
+          return "";
+        }).filter(Boolean);
+        container.innerHTML = `<div class="validate-warning-box"><p class="validate-warning-title">${t("validate.title")}</p>${msgs.map((m) => `<p class="validate-warning-msg">${m}</p>`).join("")}<button type="button" class="btn ghost validate-confirm" data-action="confirm-save">${t("entry.save")}</button></div>`;
+        container.style.display = "block";
+        validationBypass = true;
+        return;
+      }
+    }
+  }
+  validationBypass = false;
 
   const bfResult = validateBodyFat(state.form.bodyFat);
   if (!bfResult.valid) {
@@ -2541,6 +2591,8 @@ function saveRecordWithWeight(weight, source) {
     return;
   }
   if (navigator.vibrate) navigator.vibrate(50);
+  const vwContainer = document.querySelector(".validate-warnings");
+  if (vwContainer) { vwContainer.style.display = "none"; vwContainer.innerHTML = ""; }
   showUndoSnackbar(`${t("entry.saved")} · ${record.wt.toFixed(1)}kg`);
   // Scroll to chart after save
   setTimeout(() => {

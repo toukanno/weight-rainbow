@@ -634,6 +634,9 @@ export const translations = {
     "dupes.duplicate": "{date}: {count}件の重複記録",
     "dupes.suspicious": "{weight}kgが{count}日間連続（{from}〜{to}）",
     "dupes.clean": "問題なし",
+    "validate.largeDiff": "前回（{previous}kg、{date}）から{diff}kg以上の変動です。入力値を確認してください。",
+    "validate.outsideRange": "入力値が過去の記録範囲（{min}〜{max}kg）を大きく超えています。",
+    "validate.title": "入力確認",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1270,6 +1273,9 @@ export const translations = {
     "dupes.duplicate": "{date}: {count} duplicate entries",
     "dupes.suspicious": "{weight}kg repeated {count} days ({from} – {to})",
     "dupes.clean": "No issues found",
+    "validate.largeDiff": "Weight changed by {diff}kg or more from last entry ({previous}kg on {date}). Please verify.",
+    "validate.outsideRange": "Weight is well outside your historical range ({min} – {max}kg).",
+    "validate.title": "Entry Validation",
   },
 };
 

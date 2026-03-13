@@ -2555,6 +2555,32 @@ function detectDuplicates(records) {
   }
   return { duplicates, suspicious };
 }
+function validateWeightEntry(newWeight, records, threshold = 3) {
+  const warnings = [];
+  if (!Number.isFinite(newWeight) || records.length === 0) return warnings;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1];
+  const diff = Math.abs(newWeight - latest.wt);
+  if (diff >= threshold) {
+    warnings.push({
+      type: "largeDiff",
+      diff: Math.round(diff * 10) / 10,
+      previous: latest.wt,
+      date: latest.dt
+    });
+  }
+  const weights = sorted.map((r) => r.wt);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  if (newWeight < min - 2 || newWeight > max + 2) {
+    warnings.push({
+      type: "outsideRange",
+      min,
+      max
+    });
+  }
+  return warnings;
+}
 
 // src/i18n.js
 var translations = {
@@ -3205,7 +3231,10 @@ var translations = {
     "dupes.title": "\u30C7\u30FC\u30BF\u54C1\u8CEA\u30C1\u30A7\u30C3\u30AF",
     "dupes.duplicate": "{date}: {count}\u4EF6\u306E\u91CD\u8907\u8A18\u9332",
     "dupes.suspicious": "{weight}kg\u304C{count}\u65E5\u9593\u9023\u7D9A\uFF08{from}\u301C{to}\uFF09",
-    "dupes.clean": "\u554F\u984C\u306A\u3057"
+    "dupes.clean": "\u554F\u984C\u306A\u3057",
+    "validate.largeDiff": "\u524D\u56DE\uFF08{previous}kg\u3001{date}\uFF09\u304B\u3089{diff}kg\u4EE5\u4E0A\u306E\u5909\u52D5\u3067\u3059\u3002\u5165\u529B\u5024\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
+    "validate.outsideRange": "\u5165\u529B\u5024\u304C\u904E\u53BB\u306E\u8A18\u9332\u7BC4\u56F2\uFF08{min}\u301C{max}kg\uFF09\u3092\u5927\u304D\u304F\u8D85\u3048\u3066\u3044\u307E\u3059\u3002",
+    "validate.title": "\u5165\u529B\u78BA\u8A8D"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3854,7 +3883,10 @@ var translations = {
     "dupes.title": "Data Quality Check",
     "dupes.duplicate": "{date}: {count} duplicate entries",
     "dupes.suspicious": "{weight}kg repeated {count} days ({from} \u2013 {to})",
-    "dupes.clean": "No issues found"
+    "dupes.clean": "No issues found",
+    "validate.largeDiff": "Weight changed by {diff}kg or more from last entry ({previous}kg on {date}). Please verify.",
+    "validate.outsideRange": "Weight is well outside your historical range ({min} \u2013 {max}kg).",
+    "validate.title": "Entry Validation"
   }
 };
 function createTranslator(language) {
@@ -24860,6 +24892,7 @@ function render() {
                   <div class="helper hint-small desktop-only">\u2318+Enter</div>
                 </div>
               </div>
+              <div class="validate-warnings" style="display:none"></div>
             </div>
 
             <div class="status ${statusKind === "error" ? "warn" : ""}" role="status" aria-live="polite">
@@ -26329,6 +26362,16 @@ function bindEvents() {
   app.querySelector('[data-action="save-profile"]')?.addEventListener("click", saveProfile);
   app.querySelector('[data-action="save-settings"]')?.addEventListener("click", saveSettings);
   app.querySelector('[data-action="save-record"]')?.addEventListener("click", saveRecordFromPicker);
+  app.addEventListener("click", (e) => {
+    if (e.target.closest('[data-action="confirm-save"]')) {
+      const container = document.querySelector(".validate-warnings");
+      if (container) {
+        container.style.display = "none";
+        container.innerHTML = "";
+      }
+      saveRecordFromPicker();
+    }
+  });
   app.querySelector('[data-action="export-data"]')?.addEventListener("click", exportData);
   app.querySelector('[data-action="reset-data"]')?.addEventListener("click", resetData);
   app.querySelector('[data-action="pick-native-photo"]')?.addEventListener("click", pickNativePhoto);
@@ -26630,12 +26673,31 @@ function quickSaveRecord() {
 }
 var lastUndoState = null;
 var undoTimer = null;
+var validationBypass = false;
 function saveRecordWithWeight(weight, source) {
   const weightResult = validateWeight(String(weight));
   if (!weightResult.valid) {
     setStatus(t(weightResult.error || "entry.noWeight"), "error");
     return;
   }
+  if (!validationBypass && state.records.length > 0) {
+    const warnings = validateWeightEntry(weightResult.weight, state.records);
+    if (warnings.length > 0) {
+      const container = document.querySelector(".validate-warnings");
+      if (container) {
+        const msgs = warnings.map((w) => {
+          if (w.type === "largeDiff") return t("validate.largeDiff").replace("{diff}", w.diff).replace("{previous}", w.previous).replace("{date}", w.date);
+          if (w.type === "outsideRange") return t("validate.outsideRange").replace("{min}", w.min).replace("{max}", w.max);
+          return "";
+        }).filter(Boolean);
+        container.innerHTML = `<div class="validate-warning-box"><p class="validate-warning-title">${t("validate.title")}</p>${msgs.map((m) => `<p class="validate-warning-msg">${m}</p>`).join("")}<button type="button" class="btn ghost validate-confirm" data-action="confirm-save">${t("entry.save")}</button></div>`;
+        container.style.display = "block";
+        validationBypass = true;
+        return;
+      }
+    }
+  }
+  validationBypass = false;
   const bfResult = validateBodyFat(state.form.bodyFat);
   if (!bfResult.valid) {
     setStatus(t(bfResult.error), "error");
@@ -26682,6 +26744,11 @@ function saveRecordWithWeight(weight, source) {
     return;
   }
   if (navigator.vibrate) navigator.vibrate(50);
+  const vwContainer = document.querySelector(".validate-warnings");
+  if (vwContainer) {
+    vwContainer.style.display = "none";
+    vwContainer.innerHTML = "";
+  }
   showUndoSnackbar(`${t("entry.saved")} \xB7 ${record.wt.toFixed(1)}kg`);
   setTimeout(() => {
     document.getElementById("chart")?.scrollIntoView({ behavior: "smooth", block: "center" });

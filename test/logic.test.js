@@ -82,6 +82,7 @@ import {
   generateWeightSummary,
   getFrequentNotes,
   detectDuplicates,
+  validateWeightEntry,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -6359,5 +6360,45 @@ describe("detectDuplicates", () => {
     const result = detectDuplicates(records);
     expect(result.duplicates).toHaveLength(1);
     expect(result.suspicious).toHaveLength(1);
+  });
+});
+
+describe("validateWeightEntry", () => {
+  it("returns empty array for normal weight", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70.5 },
+    ];
+    const result = validateWeightEntry(70.3, records);
+    expect(result).toEqual([]);
+  });
+
+  it("warns on large weight difference", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70.5 },
+    ];
+    const result = validateWeightEntry(75, records);
+    expect(result.some((w) => w.type === "largeDiff")).toBe(true);
+    expect(result[0].diff).toBe(4.5);
+  });
+
+  it("warns when outside historical range", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 72 },
+    ];
+    const result = validateWeightEntry(80, records);
+    expect(result.some((w) => w.type === "outsideRange")).toBe(true);
+  });
+
+  it("returns empty for empty records", () => {
+    expect(validateWeightEntry(70, [])).toEqual([]);
+  });
+
+  it("returns empty for non-finite weight", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    expect(validateWeightEntry(NaN, records)).toEqual([]);
+    expect(validateWeightEntry(Infinity, records)).toEqual([]);
   });
 });
