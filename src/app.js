@@ -1646,7 +1646,7 @@ function renderBMIHistory() {
 function renderWeightHeatmap() {
   const hm = calcWeightHeatmap(state.records);
   if (!hm) return "";
-  const dayLabels = ["S", "M", "T", "W", "T", "F", "S"];
+  const dayLabels = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].map((d) => t("recCal." + d));
   const rows = dayLabels.map((label, dayIdx) => {
     const cells = hm.weeks.map((week) => {
       const day = week[dayIdx];
