@@ -948,9 +948,11 @@
         transition: transform 0.15s ease, box-shadow 0.15s ease;
       }
 
-      .record-item:hover {
-        transform: translateX(4px);
-        box-shadow: -4px 0 0 var(--accent);
+      @media (hover: hover) {
+        .record-item:hover {
+          transform: translateX(4px);
+          box-shadow: -4px 0 0 var(--accent);
+        }
       }
 
       .record-item.record-best {
@@ -1142,9 +1144,11 @@
         transition: transform 0.12s, color 0.12s;
       }
 
-      .date-shortcut:hover {
-        color: var(--accent);
-        transform: translateY(-1px);
+      @media (hover: hover) {
+        .date-shortcut:hover {
+          color: var(--accent);
+          transform: translateY(-1px);
+        }
       }
 
       body[data-theme="midnight"] .date-shortcut {
@@ -1157,7 +1161,7 @@
         margin-top: 16px;
         padding: 18px;
         border-radius: 20px;
-        background: linear-gradient(135deg, var(--surface), var(--surface));
+        background: linear-gradient(135deg, var(--surface-strong), var(--surface));
         border: 1px solid var(--border);
       }
 
@@ -1326,9 +1330,11 @@
         transition: transform 0.15s, box-shadow 0.15s;
       }
 
-      .google-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+      @media (hover: hover) {
+        .google-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+        }
       }
 
       .google-btn svg {
@@ -1560,9 +1566,11 @@
         background: none;
       }
 
-      .theme-swatch:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+      @media (hover: hover) {
+        .theme-swatch:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        }
       }
 
       .theme-swatch.active {
@@ -1828,9 +1836,11 @@
       .record-delete:active {
         transform: scale(0.95);
       }
-      .quick-buttons button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      @media (hover: hover) {
+        .quick-buttons button:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
       }
 
       /* Rate Box */
@@ -1961,11 +1971,12 @@
         transition: transform 0.15s;
       }
 
-      .achievement-badge:hover {
-        transform: scale(1.2);
-      }
+      @media (hover: hover) {
+        .achievement-badge:hover {
+          transform: scale(1.2);
+        }
 
-      .achievement-badge:hover::after {
+        .achievement-badge:hover::after {
         content: attr(title);
         position: absolute;
         bottom: calc(100% + 6px);
@@ -1982,6 +1993,7 @@
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         pointer-events: none;
         z-index: 10;
+        }
       }
 
       .achievement-badge.bronze {
