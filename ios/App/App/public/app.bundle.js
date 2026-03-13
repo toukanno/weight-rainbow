@@ -4021,7 +4021,13 @@ var translations = {
     "journey.gain": "\u5897\u91CF\u671F",
     "journey.maintain": "\u7DAD\u6301\u671F",
     "journey.total": "\u5168\u4F53\u5909\u5316",
-    "scroll.top": "\u30C8\u30C3\u30D7\u3078\u623B\u308B"
+    "scroll.top": "\u30C8\u30C3\u30D7\u3078\u623B\u308B",
+    "scenario.title": "\u76EE\u6A19\u9054\u6210\u30B7\u30CA\u30EA\u30AA",
+    "scenario.gentle": "\u3086\u308B\u3084\u304B",
+    "scenario.moderate": "\u6A19\u6E96",
+    "scenario.aggressive": "\u7A4D\u6975\u7684",
+    "scenario.weeks": "{weeks}\u9031\u9593",
+    "scenario.perWeek": "/\u9031"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4802,7 +4808,13 @@ var translations = {
     "journey.gain": "Gain",
     "journey.maintain": "Maintain",
     "journey.total": "Total change",
-    "scroll.top": "Back to top"
+    "scroll.top": "Back to top",
+    "scenario.title": "Goal Scenarios",
+    "scenario.gentle": "Gentle",
+    "scenario.moderate": "Moderate",
+    "scenario.aggressive": "Aggressive",
+    "scenario.weeks": "{weeks} weeks",
+    "scenario.perWeek": "/wk"
   }
 };
 function createTranslator(language) {
@@ -26749,8 +26761,8 @@ function renderDayOfWeekChange() {
       <div class="helper">${t("dowChange.title")}</div>
       <div class="dow-change-chart">${bars}</div>
       <div class="dow-change-info">
-        ${d.bestDay !== null ? `<div>${t("dowChange.best").replace("{day}", t("day." + d.bestDay)).replace("{avg}", d.avgs[d.bestDay])}</div>` : ""}
-        ${d.worstDay !== null ? `<div>${t("dowChange.worst").replace("{day}", t("day." + d.worstDay)).replace("{avg}", d.avgs[d.worstDay])}</div>` : ""}
+        ${d.bestDay !== null ? `<div>${t("dowChange.best").replace("{day}", t("day." + d.bestDay)).replace("{avg}", Number(d.avgs[d.bestDay]).toFixed(2))}</div>` : ""}
+        ${d.worstDay !== null ? `<div>${t("dowChange.worst").replace("{day}", t("day." + d.worstDay)).replace("{avg}", Number(d.avgs[d.worstDay]).toFixed(2))}</div>` : ""}
       </div>
       <div class="helper hint-small">${t("dowChange.hint")}</div>
     </div>
@@ -26991,7 +27003,7 @@ function renderPeriodComparison() {
     if (!period.current && !period.previous) return "";
     const cur = period.current;
     const prev = period.previous;
-    const diffStr = period.avgDiff != null ? period.avgDiff > 0 ? "+" + period.avgDiff : String(period.avgDiff) : "\u2014";
+    const diffStr = period.avgDiff != null ? period.avgDiff > 0 ? "+" + period.avgDiff.toFixed(1) : period.avgDiff.toFixed(1) : "\u2014";
     const diffColor = period.avgDiff != null ? period.avgDiff < 0 ? "var(--ok)" : period.avgDiff > 0 ? "var(--error)" : "var(--text)" : "var(--text)";
     return `
       <div class="compare-pair">

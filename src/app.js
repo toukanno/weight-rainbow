@@ -105,6 +105,7 @@ import {
   calcRecordingRate,
   calcMilestoneHistory,
   calcWeightJourney,
+  calcGoalScenarios,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -1624,8 +1625,8 @@ function renderDayOfWeekChange() {
       <div class="helper">${t("dowChange.title")}</div>
       <div class="dow-change-chart">${bars}</div>
       <div class="dow-change-info">
-        ${d.bestDay !== null ? `<div>${t("dowChange.best").replace("{day}", t("day." + d.bestDay)).replace("{avg}", d.avgs[d.bestDay])}</div>` : ""}
-        ${d.worstDay !== null ? `<div>${t("dowChange.worst").replace("{day}", t("day." + d.worstDay)).replace("{avg}", d.avgs[d.worstDay])}</div>` : ""}
+        ${d.bestDay !== null ? `<div>${t("dowChange.best").replace("{day}", t("day." + d.bestDay)).replace("{avg}", Number(d.avgs[d.bestDay]).toFixed(2))}</div>` : ""}
+        ${d.worstDay !== null ? `<div>${t("dowChange.worst").replace("{day}", t("day." + d.worstDay)).replace("{avg}", Number(d.avgs[d.worstDay]).toFixed(2))}</div>` : ""}
       </div>
       <div class="helper hint-small">${t("dowChange.hint")}</div>
     </div>
@@ -1886,7 +1887,7 @@ function renderPeriodComparison() {
     const cur = period.current;
     const prev = period.previous;
     const diffStr = period.avgDiff != null
-      ? (period.avgDiff > 0 ? "+" + period.avgDiff : String(period.avgDiff))
+      ? (period.avgDiff > 0 ? "+" + period.avgDiff.toFixed(1) : period.avgDiff.toFixed(1))
       : "—";
     const diffColor = period.avgDiff != null
       ? (period.avgDiff < 0 ? "var(--ok)" : period.avgDiff > 0 ? "var(--error)" : "var(--text)")
