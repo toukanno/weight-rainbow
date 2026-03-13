@@ -1041,10 +1041,10 @@
         margin: 8px 0 6px;
       }
       .time-stats-segment { min-width: 2px; }
-      .time-morning { background: #f59e0b; }
-      .time-afternoon { background: #f97316; }
-      .time-evening { background: #8b5cf6; }
-      .time-night { background: #3b82f6; }
+      .time-morning { background: var(--warn); }
+      .time-afternoon { background: color-mix(in srgb, var(--warn) 70%, var(--error)); }
+      .time-evening { background: var(--accent-2); }
+      .time-night { background: var(--accent-3); }
       .time-stats-legend {
         display: flex;
         flex-wrap: wrap;
@@ -2002,7 +2002,7 @@
       .countdown-bar-fill {
         height: 100%;
         border-radius: 4px;
-        background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #10b981));
+        background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, var(--ok)));
         transition: width 0.5s ease;
       }
       .countdown-pct {
