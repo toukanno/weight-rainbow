@@ -89,6 +89,7 @@ import {
   calcNoteTagStats,
   calcIdealWeightRange,
   calcDataFreshness,
+  calcMultiPeriodRate,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -6928,5 +6929,57 @@ describe("calcDataFreshness", () => {
     const result = calcDataFreshness([{ dt: dt1, wt: 70 }, { dt: dt2, wt: 71 }]);
     expect(result.level).toBe("today");
     expect(result.lastWeight).toBe(71);
+  });
+});
+
+describe("calcMultiPeriodRate", () => {
+  it("returns null for fewer than 2 records", () => {
+    expect(calcMultiPeriodRate([])).toBeNull();
+    expect(calcMultiPeriodRate([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns 3 periods (7, 30, 90 days)", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-02-01", wt: 73 },
+      { dt: "2025-03-01", wt: 71 },
+      { dt: "2025-04-01", wt: 70 },
+    ];
+    const result = calcMultiPeriodRate(records);
+    expect(result.periods).toHaveLength(3);
+    expect(result.periods[0].days).toBe(7);
+    expect(result.periods[1].days).toBe(30);
+    expect(result.periods[2].days).toBe(90);
+  });
+
+  it("calculates negative change for weight loss", () => {
+    const records = [
+      { dt: "2025-03-01", wt: 73 },
+      { dt: "2025-03-15", wt: 72 },
+      { dt: "2025-04-01", wt: 70 },
+    ];
+    const result = calcMultiPeriodRate(records);
+    const p30 = result.periods.find((p) => p.days === 30);
+    expect(p30.hasData).toBe(true);
+    expect(p30.change).toBeLessThan(0);
+  });
+
+  it("marks periods without data as hasData: false", () => {
+    const records = [
+      { dt: "2025-04-01", wt: 70 },
+      { dt: "2025-04-02", wt: 70.5 },
+    ];
+    const result = calcMultiPeriodRate(records);
+    // 7-day period has data, but 90-day uses same closest record
+    expect(result.periods[0].hasData).toBe(true);
+  });
+
+  it("returns latestWeight", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-04-01", wt: 70 },
+    ];
+    const result = calcMultiPeriodRate(records);
+    expect(result.latestWeight).toBe(70);
   });
 });

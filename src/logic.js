@@ -2398,3 +2398,40 @@ export function calcDataFreshness(records) {
     level,
   };
 }
+
+/**
+ * Calculate weight change rate over multiple time windows.
+ * Returns { periods: [{ days, change, weeklyRate, hasData }] } for 7, 30, 90 day windows.
+ */
+export function calcMultiPeriodRate(records) {
+  if (records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1];
+  const latestDate = new Date(latest.dt + "T00:00:00");
+  const windows = [7, 30, 90];
+
+  const periods = windows.map((days) => {
+    const cutoff = new Date(latestDate);
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+    // Find the record closest to the cutoff date
+    let closest = null;
+    let closestDist = Infinity;
+    for (const r of sorted) {
+      const dist = Math.abs(new Date(r.dt + "T00:00:00") - cutoff);
+      if (dist < closestDist && r.dt <= latest.dt) {
+        closestDist = dist;
+        closest = r;
+      }
+    }
+    if (!closest || closest.dt === latest.dt) {
+      return { days, change: 0, weeklyRate: 0, hasData: false };
+    }
+    const actualDays = Math.max(1, Math.round((latestDate - new Date(closest.dt + "T00:00:00")) / 86400000));
+    const change = Math.round((latest.wt - closest.wt) * 10) / 10;
+    const weeklyRate = Math.round((change / actualDays) * 7 * 10) / 10;
+    return { days, change, weeklyRate, hasData: true };
+  });
+
+  return { periods, latestWeight: latest.wt };
+}

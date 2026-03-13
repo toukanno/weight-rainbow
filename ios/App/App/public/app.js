@@ -2745,6 +2745,35 @@ function calcDataFreshness(records) {
     level
   };
 }
+function calcMultiPeriodRate(records) {
+  if (records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1];
+  const latestDate = /* @__PURE__ */ new Date(latest.dt + "T00:00:00");
+  const windows = [7, 30, 90];
+  const periods = windows.map((days2) => {
+    const cutoff = new Date(latestDate);
+    cutoff.setDate(cutoff.getDate() - days2);
+    const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+    let closest = null;
+    let closestDist = Infinity;
+    for (const r of sorted) {
+      const dist = Math.abs(/* @__PURE__ */ new Date(r.dt + "T00:00:00") - cutoff);
+      if (dist < closestDist && r.dt <= latest.dt) {
+        closestDist = dist;
+        closest = r;
+      }
+    }
+    if (!closest || closest.dt === latest.dt) {
+      return { days: days2, change: 0, weeklyRate: 0, hasData: false };
+    }
+    const actualDays = Math.max(1, Math.round((latestDate - /* @__PURE__ */ new Date(closest.dt + "T00:00:00")) / 864e5));
+    const change = Math.round((latest.wt - closest.wt) * 10) / 10;
+    const weeklyRate = Math.round(change / actualDays * 7 * 10) / 10;
+    return { days: days2, change, weeklyRate, hasData: true };
+  });
+  return { periods, latestWeight: latest.wt };
+}
 
 // src/i18n.js
 var translations = {
@@ -2863,6 +2892,7 @@ var translations = {
     "status.photoReady": "\u5199\u771F\u3092\u8AAD\u307F\u8FBC\u307F\u307E\u3057\u305F\u3002\u5019\u88DC\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "status.photoNoDetection": "\u5199\u771F\u304B\u3089\u6570\u5024\u3092\u691C\u51FA\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u624B\u5165\u529B\u3067\u4F53\u91CD\u3092\u8A2D\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "status.voiceError": "\u97F3\u58F0\u5165\u529B\u3092\u958B\u59CB\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u30DE\u30A4\u30AF\u6A29\u9650\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
+    "status.voiceNoSpeech": "\u97F3\u58F0\u304C\u691C\u51FA\u3055\u308C\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u3082\u3046\u4E00\u5EA6\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002",
     "status.exported": "\u7AEF\u672B\u5185\u30C7\u30FC\u30BF\u3092\u66F8\u304D\u51FA\u3057\u307E\u3057\u305F\u3002",
     "status.reset": "\u7AEF\u672B\u5185\u30C7\u30FC\u30BF\u3092\u524A\u9664\u3057\u307E\u3057\u305F\u3002",
     "status.permissionDenied": "\u5FC5\u8981\u306A\u6A29\u9650\u304C\u8A31\u53EF\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002\u8A2D\u5B9A\u30A2\u30D7\u30EA\u304B\u3089\u5199\u771F\u307E\u305F\u306F\u30DE\u30A4\u30AF\u306E\u6A29\u9650\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
@@ -3431,7 +3461,12 @@ var translations = {
     "fresh.today": "\u4ECA\u65E5\u306E\u8A18\u9332\u6E08\u307F",
     "fresh.recent": "{days}\u65E5\u524D\u306B\u8A18\u9332\uFF08{weight}kg\uFF09",
     "fresh.stale": "{days}\u65E5\u9593\u672A\u8A18\u9332\u3067\u3059\u3002\u4ECA\u65E5\u306E\u4F53\u91CD\u3092\u8A18\u9332\u3057\u307E\u3057\u3087\u3046\uFF01",
-    "fresh.veryStale": "{days}\u65E5\u9593\u672A\u8A18\u9332\u3067\u3059\u3002\u8A18\u9332\u3092\u518D\u958B\u3057\u307E\u3057\u3087\u3046\uFF01"
+    "fresh.veryStale": "{days}\u65E5\u9593\u672A\u8A18\u9332\u3067\u3059\u3002\u8A18\u9332\u3092\u518D\u958B\u3057\u307E\u3057\u3087\u3046\uFF01",
+    "multiRate.title": "\u671F\u9593\u5225\u5909\u5316\u30DA\u30FC\u30B9",
+    "multiRate.days": "\u904E\u53BB{days}\u65E5",
+    "multiRate.change": "{change}kg",
+    "multiRate.weekly": "\u9031\u3042\u305F\u308A {rate}kg",
+    "multiRate.noData": "\u2014"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3550,6 +3585,7 @@ var translations = {
     "status.photoReady": "Photo loaded. Review detected candidates.",
     "status.photoNoDetection": "No weight detected from photo. Please enter the value manually.",
     "status.voiceError": "Unable to start voice input. Check microphone permission.",
+    "status.voiceNoSpeech": "No speech detected. Please try again.",
     "status.exported": "On-device data exported.",
     "status.reset": "On-device data deleted.",
     "status.permissionDenied": "A required permission is missing. Check photo or microphone access in Settings.",
@@ -4116,7 +4152,12 @@ var translations = {
     "fresh.today": "Recorded today",
     "fresh.recent": "Last recorded {days} day(s) ago ({weight}kg)",
     "fresh.stale": "No record for {days} days. Log today's weight!",
-    "fresh.veryStale": "No record for {days} days. Time to get back on track!"
+    "fresh.veryStale": "No record for {days} days. Time to get back on track!",
+    "multiRate.title": "Change Rate by Period",
+    "multiRate.days": "Last {days}d",
+    "multiRate.change": "{change}kg",
+    "multiRate.weekly": "{rate}kg/week",
+    "multiRate.noData": "\u2014"
   }
 };
 function createTranslator(language) {
@@ -25200,6 +25241,7 @@ function render() {
             ${renderBMIDistribution()}
             ${renderIdealWeight()}
             ${renderWeightVelocity()}
+            ${renderMultiPeriodRate()}
             ${renderCalorieEstimate()}
             ${renderWeightConfidence()}
             ${renderBodyFatStats()}
@@ -26519,6 +26561,31 @@ function renderDataFreshness() {
   const cls = fresh.level === "veryStale" ? "fresh-warn" : fresh.level === "stale" ? "fresh-nudge" : "fresh-info";
   return `<div class="freshness-banner ${cls}">${msg}</div>`;
 }
+function renderMultiPeriodRate() {
+  const data = calcMultiPeriodRate(state.records);
+  if (!data) return "";
+  const hasAny = data.periods.some((p) => p.hasData);
+  if (!hasAny) return "";
+  const cols = data.periods.map((p) => {
+    if (!p.hasData) {
+      return `<div class="mpr-col"><div class="mpr-label">${t("multiRate.days").replace("{days}", p.days)}</div><div class="mpr-value">${t("multiRate.noData")}</div></div>`;
+    }
+    const sign = p.change > 0 ? "+" : "";
+    const cls = p.change < -0.1 ? "mpr-down" : p.change > 0.1 ? "mpr-up" : "mpr-flat";
+    const wsign = p.weeklyRate > 0 ? "+" : "";
+    return `<div class="mpr-col ${cls}">
+      <div class="mpr-label">${t("multiRate.days").replace("{days}", p.days)}</div>
+      <div class="mpr-value">${sign}${p.change.toFixed(1)}kg</div>
+      <div class="mpr-weekly">${wsign}${p.weeklyRate.toFixed(1)}kg/w</div>
+    </div>`;
+  }).join("");
+  return `
+    <div class="mpr-section">
+      <div class="helper">${t("multiRate.title")}</div>
+      <div class="mpr-grid">${cols}</div>
+    </div>
+  `;
+}
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -27324,9 +27391,13 @@ async function toggleVoiceInput() {
     }
     render();
   };
-  recognition.onerror = () => {
+  recognition.onerror = (e) => {
     voiceActive = false;
-    setStatus(t("status.voiceError"), "error");
+    if (e.error === "no-speech") {
+      setStatus(t("status.voiceNoSpeech"), "warn");
+    } else {
+      setStatus(t("status.voiceError"), "error");
+    }
   };
   recognition.onend = () => {
     voiceActive = false;
@@ -28181,7 +28252,12 @@ async function googleRestore() {
       { headers: { Authorization: `Bearer ${tk}` } }
     );
     if (!cr.ok) throw new Error("drive_error");
-    const bd = await cr.json();
+    let bd;
+    try {
+      bd = await cr.json();
+    } catch {
+      throw new Error("drive_error");
+    }
     if (!bd.records?.length) {
       setStatus(t("google.noData"), "error");
       return;
@@ -28261,8 +28337,7 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && voiceActive) {
     event.preventDefault();
     void toggleVoiceInput();
-  }
-  if (event.key === "Escape" && rainbowVisible) {
+  } else if (event.key === "Escape" && rainbowVisible) {
     rainbowVisible = false;
     document.getElementById("rainbowOverlay")?.remove();
   }

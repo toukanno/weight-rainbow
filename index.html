@@ -2334,6 +2334,44 @@
         font-weight: 600;
       }
 
+      .mpr-section {
+        margin-top: 14px;
+      }
+      .mpr-grid {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .mpr-col {
+        flex: 1;
+        text-align: center;
+        padding: 8px 4px;
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--border) 15%, transparent);
+      }
+      .mpr-col.mpr-down {
+        background: color-mix(in srgb, var(--accent-3) 10%, transparent);
+      }
+      .mpr-col.mpr-up {
+        background: color-mix(in srgb, var(--accent-2) 10%, transparent);
+      }
+      .mpr-label {
+        font-size: 0.7rem;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+      .mpr-value {
+        font-size: 1rem;
+        font-weight: 600;
+      }
+      .mpr-down .mpr-value { color: var(--accent-3); }
+      .mpr-up .mpr-value { color: var(--accent-2); }
+      .mpr-weekly {
+        font-size: 0.7rem;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+
       .analytics-toggle-section {
         margin-top: 14px;
         padding-top: 12px;

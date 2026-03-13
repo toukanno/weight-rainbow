@@ -92,6 +92,7 @@ import {
   calcNoteTagStats,
   calcIdealWeightRange,
   calcDataFreshness,
+  calcMultiPeriodRate,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -718,6 +719,7 @@ function render() {
             ${renderBMIDistribution()}
             ${renderIdealWeight()}
             ${renderWeightVelocity()}
+            ${renderMultiPeriodRate()}
             ${renderCalorieEstimate()}
             ${renderWeightConfidence()}
             ${renderBodyFatStats()}
@@ -2105,6 +2107,32 @@ function renderDataFreshness() {
   return `<div class="freshness-banner ${cls}">${msg}</div>`;
 }
 
+function renderMultiPeriodRate() {
+  const data = calcMultiPeriodRate(state.records);
+  if (!data) return "";
+  const hasAny = data.periods.some((p) => p.hasData);
+  if (!hasAny) return "";
+  const cols = data.periods.map((p) => {
+    if (!p.hasData) {
+      return `<div class="mpr-col"><div class="mpr-label">${t("multiRate.days").replace("{days}", p.days)}</div><div class="mpr-value">${t("multiRate.noData")}</div></div>`;
+    }
+    const sign = p.change > 0 ? "+" : "";
+    const cls = p.change < -0.1 ? "mpr-down" : p.change > 0.1 ? "mpr-up" : "mpr-flat";
+    const wsign = p.weeklyRate > 0 ? "+" : "";
+    return `<div class="mpr-col ${cls}">
+      <div class="mpr-label">${t("multiRate.days").replace("{days}", p.days)}</div>
+      <div class="mpr-value">${sign}${p.change.toFixed(1)}kg</div>
+      <div class="mpr-weekly">${wsign}${p.weeklyRate.toFixed(1)}kg/w</div>
+    </div>`;
+  }).join("");
+  return `
+    <div class="mpr-section">
+      <div class="helper">${t("multiRate.title")}</div>
+      <div class="mpr-grid">${cols}</div>
+    </div>
+  `;
+}
+
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -2986,9 +3014,13 @@ async function toggleVoiceInput() {
     render();
   };
 
-  recognition.onerror = () => {
+  recognition.onerror = (e) => {
     voiceActive = false;
-    setStatus(t("status.voiceError"), "error");
+    if (e.error === "no-speech") {
+      setStatus(t("status.voiceNoSpeech"), "warn");
+    } else {
+      setStatus(t("status.voiceError"), "error");
+    }
   };
 
   recognition.onend = () => {
@@ -3910,7 +3942,8 @@ async function googleRestore() {
       { headers: { Authorization: `Bearer ${tk}` } },
     );
     if (!cr.ok) throw new Error("drive_error");
-    const bd = await cr.json();
+    let bd;
+    try { bd = await cr.json(); } catch { throw new Error("drive_error"); }
     if (!bd.records?.length) { setStatus(t("google.noData"), "error"); return; }
     const validBackupRecords = bd.records.filter((r) => r.dt && Number.isFinite(r.wt));
     if (!window.confirm(t("google.restoreConfirm") + ` (${validBackupRecords.length} ${t("chart.records")})`)) return;
@@ -3987,9 +4020,7 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && voiceActive) {
     event.preventDefault();
     void toggleVoiceInput();
-  }
-
-  if (event.key === "Escape" && rainbowVisible) {
+  } else if (event.key === "Escape" && rainbowVisible) {
     rainbowVisible = false;
     document.getElementById("rainbowOverlay")?.remove();
   }
