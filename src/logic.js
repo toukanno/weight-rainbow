@@ -912,18 +912,39 @@ export function calcMovingAverages(records, shortWindow = 7, longWindow = 30) {
   };
 }
 
+export function calcConsistencyStreak(records, tolerance = 0.5) {
+  if (records.length < 2) return null;
+  const latest = records[records.length - 1].wt;
+  let streak = 1;
+  for (let i = records.length - 2; i >= 0; i--) {
+    if (Math.abs(records[i].wt - latest) <= tolerance) streak++;
+    else break;
+  }
+  // Find best ever consistency streak
+  let best = 1;
+  let current = 1;
+  for (let i = 1; i < records.length; i++) {
+    if (Math.abs(records[i].wt - records[i - 1].wt) <= tolerance) {
+      current++;
+      if (current > best) best = current;
+    } else {
+      current = 1;
+    }
+  }
+  return { streak, best, tolerance, latest };
+}
+
+export function csvEscape(val) {
+  const str = String(val ?? "");
+  if (/[,"\r\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
+  return str;
+}
+
 export function exportRecordsToCSV(records) {
   if (!records.length) return "";
   const header = "date,weight,bmi,bodyFat,source,note";
-  const escapeCSV = (val) => {
-    const str = String(val ?? "");
-    if (str.includes(",") || str.includes('"') || str.includes("\n")) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
-  };
   const rows = records.map((r) =>
-    [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source ?? "", escapeCSV(r.note ?? "")].join(",")
+    [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source ?? "", r.note ?? ""].map(csvEscape).join(",")
   );
   return [header, ...rows].join("\n");
 }

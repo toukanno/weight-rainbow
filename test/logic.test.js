@@ -37,6 +37,7 @@ import {
   calcWeightStability,
   detectMilestone,
   exportRecordsToCSV,
+  csvEscape,
   parseCSVImport,
   calcBodyFatStats,
   calcDaysSinceLastRecord,
@@ -1782,6 +1783,61 @@ describe("exportRecordsToCSV edge cases", () => {
     const records = [{ dt: "2025-01-01", wt: 70, bmi: 24.2, bf: null, source: "manual", note: "line1\nline2" }];
     const csv = exportRecordsToCSV(records);
     expect(csv).toContain('"line1\nline2"');
+  });
+
+  it("escapes fields with commas and quotes", () => {
+    const records = [{ dt: "2025-01-01", wt: 70, bmi: null, bf: null, source: "manual", note: 'ate "pizza", cake' }];
+    const csv = exportRecordsToCSV(records);
+    expect(csv).toContain('"ate ""pizza"", cake"');
+  });
+});
+
+describe("csvEscape", () => {
+  it("returns plain string as-is", () => {
+    expect(csvEscape("hello")).toBe("hello");
+  });
+
+  it("wraps strings with commas in quotes", () => {
+    expect(csvEscape("a,b")).toBe('"a,b"');
+  });
+
+  it("escapes double quotes", () => {
+    expect(csvEscape('say "hi"')).toBe('"say ""hi"""');
+  });
+
+  it("handles null and undefined", () => {
+    expect(csvEscape(null)).toBe("");
+    expect(csvEscape(undefined)).toBe("");
+  });
+});
+
+describe("CSV roundtrip", () => {
+  it("export → import preserves data", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70.5, bmi: 24.2, bf: 20.1, source: "manual", note: "morning" },
+      { dt: "2025-01-02", wt: 69.8, bmi: 23.9, bf: null, source: "voice", note: "ate pizza, cake" },
+      { dt: "2025-01-03", wt: 71.0, bmi: null, bf: null, source: "photo", note: 'said "hello"' },
+    ];
+    const csv = exportRecordsToCSV(records);
+    const { records: imported, errors } = parseCSVImport(csv);
+    expect(errors).toHaveLength(0);
+    expect(imported).toHaveLength(3);
+    expect(imported[0].dt).toBe("2025-01-01");
+    expect(imported[0].wt).toBe(70.5);
+    expect(imported[0].note).toBe("morning");
+    expect(imported[1].note).toBe("ate pizza, cake");
+    expect(imported[2].note).toBe('said "hello"');
+  });
+
+  it("roundtrip with newlines in notes", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bmi: null, bf: null, source: "manual", note: "line1\nline2" },
+    ];
+    const csv = exportRecordsToCSV(records);
+    const { records: imported, errors } = parseCSVImport(csv);
+    expect(errors).toHaveLength(0);
+    expect(imported).toHaveLength(1);
+    expect(imported[0].note).toBe("line1\nline2");
   });
 });
 

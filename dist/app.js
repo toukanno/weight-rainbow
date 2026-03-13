@@ -1537,6 +1537,11 @@ function calcMovingAverages(records, shortWindow = 7, longWindow = 30) {
     crossing: prevSignal
   };
 }
+function csvEscape(val) {
+  const str = String(val ?? "");
+  if (/[,"\r\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
+  return str;
+}
 
 // src/i18n.js
 var translations = {
@@ -24572,11 +24577,6 @@ function exportExcel() {
   } catch {
     setStatus(t("export.error"), "error");
   }
-}
-function csvEscape(value) {
-  const str = String(value ?? "");
-  if (/[,"\r\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
-  return str;
 }
 function exportCSV() {
   if (!state.records.length) {

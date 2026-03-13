@@ -39,6 +39,7 @@ import {
   calcWeightStability,
   detectMilestone,
   exportRecordsToCSV,
+  csvEscape,
   parseCSVImport,
   calcBodyFatStats,
   calcDaysSinceLastRecord,
@@ -1947,11 +1948,7 @@ function exportExcel() {
   }
 }
 
-function csvEscape(value) {
-  const str = String(value ?? "");
-  if (/[,"\r\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
-  return str;
-}
+
 
 function exportCSV() {
   if (!state.records.length) {
