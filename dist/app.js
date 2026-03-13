@@ -25664,10 +25664,10 @@ function renderCalendar() {
     if (hasRecord && change !== void 0) {
       if (change < 0) {
         const alpha = Math.min(50, Math.round(Math.abs(change) * 30 + 15));
-        bg = `background: color-mix(in srgb, var(--ok, #10b981) ${alpha}%, transparent)`;
+        bg = `background: color-mix(in srgb, var(--ok) ${alpha}%, transparent)`;
       } else if (change > 0) {
         const alpha = Math.min(50, Math.round(change * 30 + 15));
-        bg = `background: color-mix(in srgb, var(--warn, #f59e0b) ${alpha}%, transparent)`;
+        bg = `background: color-mix(in srgb, var(--warn) ${alpha}%, transparent)`;
       } else {
         bg = `background: color-mix(in srgb, var(--accent) 20%, transparent)`;
       }
@@ -25772,7 +25772,7 @@ function renderDataHealth() {
   const health = calcDataHealth(state.records);
   if (!health) return "";
   const level = health.score >= 80 ? "high" : health.score >= 50 ? "medium" : "low";
-  const issueHtml = health.issues.length === 0 ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("health.perfect")}</div>` : health.issues.slice(0, 3).map((issue) => {
+  const issueHtml = health.issues.length === 0 ? `<div class="helper hint-small" style="color:var(--ok);font-weight:600;">${t("health.perfect")}</div>` : health.issues.slice(0, 3).map((issue) => {
     if (issue.type === "gap") return `<div class="health-issue">\u{1F4C5} ${t("health.gap").replace("{days}", issue.days).replace("{from}", issue.from).replace("{to}", issue.to)}</div>`;
     if (issue.type === "outlier") return `<div class="health-issue">\u{1F4CA} ${t("health.outlier").replace("{date}", issue.date).replace("{weight}", issue.weight).replace("{expected}", issue.expected)}</div>`;
     if (issue.type === "noBMI") return `<div class="health-issue">\u{1F4CF} ${t("health.noBMI")}</div>`;
@@ -25870,7 +25870,7 @@ function renderWeeklyFrequency() {
       <div class="helper">${t("freq.title")}</div>
       <div class="freq-chart">${bars}</div>
       <div class="helper hint-small">${t("freq.avg").replace("{avg}", freq.avgPerWeek)} \xB7 ${t("freq.hint").replace("{weeks}", freq.weeks)}</div>
-      ${hasPerfect ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;margin-top:2px;">${t("freq.perfect")}</div>` : ""}
+      ${hasPerfect ? `<div class="helper hint-small" style="color:var(--ok);font-weight:600;margin-top:2px;">${t("freq.perfect")}</div>` : ""}
     </div>
   `;
 }
@@ -25902,7 +25902,7 @@ function renderWeightVelocity() {
 function renderWeightVariance() {
   const v = calcWeightVariance(state.records);
   if (!v) return "";
-  const levelColor = v.level === "veryLow" || v.level === "low" ? "var(--ok, #10b981)" : v.level === "moderate" ? "var(--warn, #f59e0b)" : "var(--error, #ef4444)";
+  const levelColor = v.level === "veryLow" || v.level === "low" ? "var(--ok)" : v.level === "moderate" ? "var(--warn)" : "var(--error)";
   return `
     <div class="variance-section">
       <div class="helper">${t("variance.title")}</div>
@@ -25919,7 +25919,7 @@ function renderWeightVariance() {
 function renderWeightPlateau() {
   const p = calcWeightPlateau(state.records);
   if (!p) return "";
-  const statusColor = p.isPlateau ? "var(--warn, #f59e0b)" : "var(--ok, #10b981)";
+  const statusColor = p.isPlateau ? "var(--warn)" : "var(--ok)";
   const statusIcon = p.isPlateau ? "\u23F8" : "\u{1F4C8}";
   return `
     <div class="plateau-section">
@@ -25960,7 +25960,7 @@ function renderCalorieEstimate() {
   const renderPeriod = (data, labelKey) => {
     if (!data) return "";
     const status = data.dailyKcal > 50 ? "surplus" : data.dailyKcal < -50 ? "deficit" : "balanced";
-    const color = status === "deficit" ? "var(--ok, #10b981)" : status === "surplus" ? "var(--warn, #f59e0b)" : "var(--text)";
+    const color = status === "deficit" ? "var(--ok)" : status === "surplus" ? "var(--warn)" : "var(--text)";
     return `
       <div class="calorie-card">
         <div class="calorie-label">${t("calorie." + labelKey)}</div>
@@ -25983,7 +25983,7 @@ function renderCalorieEstimate() {
 function renderMomentumScore() {
   const m = calcMomentumScore(state.records, state.settings.goalWeight);
   if (!m) return "";
-  const color = m.level === "great" ? "var(--ok, #10b981)" : m.level === "good" ? "var(--accent)" : m.level === "fair" ? "var(--warn, #f59e0b)" : "var(--error, #ef4444)";
+  const color = m.level === "great" ? "var(--ok)" : m.level === "good" ? "var(--accent)" : m.level === "fair" ? "var(--warn)" : "var(--error)";
   const pct = m.score;
   return `
     <div class="momentum-section">
@@ -26023,7 +26023,7 @@ function renderSeasonality() {
     if (avg === null) return `<div class="season-bar-wrap"><div class="season-bar-label">${t("season.month." + (i + 1))}</div><div class="season-bar" style="height:0"></div></div>`;
     const diff = avg - s.overallAvg;
     const pct = Math.min(100, Math.max(5, 50 + diff * 10));
-    const color = i === s.lightestMonth ? "var(--ok, #10b981)" : i === s.heaviestMonth ? "var(--warn, #f59e0b)" : "var(--accent)";
+    const color = i === s.lightestMonth ? "var(--ok)" : i === s.heaviestMonth ? "var(--warn)" : "var(--accent)";
     return `<div class="season-bar-wrap"><div class="season-bar" style="height:${pct}%;background:${color};" title="${avg}kg"></div><div class="season-bar-label">${t("season.month." + (i + 1))}</div></div>`;
   }).join("");
   return `
@@ -26046,7 +26046,7 @@ function renderWeightDistribution() {
     const pct = d.maxCount > 0 ? Math.round(b.count / d.maxCount * 100) : 0;
     const isCurrent = i === d.latestBucket;
     const isMode = i === d.modeBucket;
-    const color = isCurrent ? "var(--accent)" : isMode ? "var(--ok, #10b981)" : "color-mix(in srgb, var(--accent) 40%, transparent)";
+    const color = isCurrent ? "var(--accent)" : isMode ? "var(--ok)" : "color-mix(in srgb, var(--accent) 40%, transparent)";
     return `<div class="dist-bar-wrap">
       ${isCurrent ? `<div class="dist-current-marker">${t("dist.current")}</div>` : ""}
       <div class="dist-bar" style="height:${Math.max(2, pct)}%;background:${color};" title="${b.start}-${b.end}kg: ${b.count}"></div>
@@ -26073,7 +26073,7 @@ function renderDayOfWeekChange() {
     const pct = Math.round(Math.abs(avg) / maxAbs * 50);
     const isGain = avg > 0.01;
     const isLoss = avg < -0.01;
-    const color = isLoss ? "var(--ok, #10b981)" : isGain ? "var(--warn, #f59e0b)" : "var(--text)";
+    const color = isLoss ? "var(--ok)" : isGain ? "var(--warn)" : "var(--text)";
     const isBest = i === d.bestDay;
     const isWorst = i === d.worstDay;
     return `<div class="dow-change-col ${isBest ? "best" : ""} ${isWorst ? "worst" : ""}">
@@ -26118,8 +26118,8 @@ function renderPersonalRecords() {
 function renderWeightRegression() {
   const reg = calcWeightRegression(state.records);
   if (!reg) return "";
-  const dirColor = reg.direction === "losing" ? "var(--ok, #10b981)" : reg.direction === "gaining" ? "var(--warn, #f59e0b)" : "var(--text)";
-  const fitColor = reg.fit === "strong" ? "var(--ok, #10b981)" : reg.fit === "moderate" ? "var(--warn, #f59e0b)" : "var(--text)";
+  const dirColor = reg.direction === "losing" ? "var(--ok)" : reg.direction === "gaining" ? "var(--warn)" : "var(--text)";
+  const fitColor = reg.fit === "strong" ? "var(--ok)" : reg.fit === "moderate" ? "var(--warn)" : "var(--text)";
   const r2Pct = Math.round(reg.r2 * 100);
   return `
     <div class="regression-section">
@@ -26676,7 +26676,7 @@ function renderConsistencyStreak() {
       <div class="consistency-display">
         <span class="consistency-badge${cs.streak >= 5 ? " great" : ""}">${cs.streak >= 5 ? "\u{1F3AF}" : "\u{1F4CA}"} ${t("consistency.current").replace("{days}", cs.streak).replace("{tol}", cs.tolerance)}</span>
         ${cs.best > cs.streak ? `<span class="helper hint-small">${t("consistency.best").replace("{days}", cs.best)}</span>` : ""}
-        ${cs.streak >= 5 ? `<span class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("consistency.great")}</span>` : ""}
+        ${cs.streak >= 5 ? `<span class="helper hint-small" style="color:var(--ok);font-weight:600;">${t("consistency.great")}</span>` : ""}
       </div>
     </div>
   `;
@@ -26685,10 +26685,10 @@ function renderBMIDistribution() {
   const dist = calcBMIDistribution(state.records);
   if (!dist) return "";
   const zones = [
-    { key: "under", color: "var(--accent-3, #3b82f6)" },
-    { key: "normal", color: "var(--ok, #10b981)" },
-    { key: "over", color: "var(--warn, #f59e0b)" },
-    { key: "obese", color: "var(--error, #ef4444)" }
+    { key: "under", color: "var(--accent-3)" },
+    { key: "normal", color: "var(--ok)" },
+    { key: "over", color: "var(--warn)" },
+    { key: "obese", color: "var(--error)" }
   ];
   const bars = zones.filter((z) => dist[z.key].pct > 0).map((z) => `<div class="bmi-dist-segment" style="width:${dist[z.key].pct}%;background:${z.color}" title="${t("bmiDist." + z.key)}: ${dist[z.key].count} (${dist[z.key].pct}%)"></div>`).join("");
   const legend = zones.map((z) => `<span class="bmi-dist-legend-item"><span class="bmi-dist-dot" style="background:${z.color}"></span>${t("bmiDist." + z.key)} ${dist[z.key].pct}%</span>`).join("");
@@ -26715,7 +26715,7 @@ function renderWeightPercentile() {
         <div class="percentile-details">
           <div class="percentile-label">${t("percentile.value").replace("{pct}", pctl.percentile)}</div>
           <div class="helper hint-small">${t("percentile.rank").replace("{rank}", pctl.rank).replace("{total}", pctl.total)}</div>
-          ${pctl.percentile <= 10 ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("percentile.best")}</div>` : ""}
+          ${pctl.percentile <= 10 ? `<div class="helper hint-small" style="color:var(--ok);font-weight:600;">${t("percentile.best")}</div>` : ""}
         </div>
       </div>
     </div>
