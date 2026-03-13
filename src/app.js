@@ -409,6 +409,7 @@ function render() {
               <div class="field">
                 <label for="entryNote">${t("entry.note")}</label>
                 <input id="entryNote" name="note" type="text" maxlength="100" placeholder="${escapeAttr(t("entry.noteHint"))}" value="${escapeAttr(state.form.note)}" />
+                ${(state.form.note || "").length > 50 ? `<div class="hint-small" style="text-align:right;">${(state.form.note || "").length}/100</div>` : ""}
                 <div class="note-tags-row">
                   ${NOTE_TAGS.map((tag) => {
                     const active = (state.form.note || "").includes(`#${tag}`);
@@ -579,7 +580,15 @@ function render() {
               </div>
             </div>` : ""}
             <div class="record-list">
-              ${state.records.length ? renderRecordList() : `<div class="empty-state"><div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">📊</div><div class="helper">${t("records.empty")}</div></div>`}
+              ${state.records.length ? renderRecordList() : `<div class="empty-state">
+                <div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">📊</div>
+                <div class="helper">${t("records.empty")}</div>
+                <div class="empty-state-actions">
+                  <button type="button" class="btn secondary" data-mode="manual">✏️ ${t("entry.manual")}</button>
+                  <button type="button" class="btn secondary" data-mode="voice">🎤 ${t("entry.voice")}</button>
+                  <button type="button" class="btn secondary" data-mode="photo">📷 ${t("entry.photo")}</button>
+                </div>
+              </div>`}
             </div>
             <div class="export-grid">
               <button type="button" class="btn secondary" data-action="export-excel">📊 ${t("export.excel")}</button>
@@ -1775,7 +1784,10 @@ function handleImportData(event) {
 }
 
 function resetData() {
-  if (!window.confirm(t("confirm.reset"))) return;
+  const msg = state.records.length
+    ? `${t("confirm.reset")}\n\n(${state.records.length} ${t("chart.records")})`
+    : t("confirm.reset");
+  if (!window.confirm(msg)) return;
 
   state = {
     ...loadState(),
