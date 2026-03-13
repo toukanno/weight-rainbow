@@ -41,6 +41,7 @@ import {
   calcBodyFatStats,
   calcDaysSinceLastRecord,
   calcLongestStreak,
+  calcTrendForecast,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -1311,5 +1312,47 @@ describe("calcLongestStreak", () => {
       { dt: "2025-01-13", wt: 70 },
     ];
     expect(calcLongestStreak(records)).toBe(4);
+  });
+});
+
+describe("calcTrendForecast", () => {
+  it("returns null with fewer than 7 records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72 },
+      { dt: "2025-01-02", wt: 71 },
+    ];
+    expect(calcTrendForecast(records)).toBeNull();
+  });
+
+  it("calculates forecast for downward trend", () => {
+    // Create records within the last 14 days
+    const now = new Date();
+    const records = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      records.push({ dt, wt: 72 - (13 - i) * 0.1 });
+    }
+    const result = calcTrendForecast(records);
+    expect(result).not.toBeNull();
+    expect(result.slope).toBeLessThan(0);
+    expect(result.forecast.length).toBeGreaterThan(1);
+    // Forecast weights should decrease
+    expect(result.forecast[result.forecast.length - 1].weight).toBeLessThan(result.forecast[0].weight);
+  });
+
+  it("calculates forecast for upward trend", () => {
+    const now = new Date();
+    const records = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      records.push({ dt, wt: 68 + (13 - i) * 0.1 });
+    }
+    const result = calcTrendForecast(records);
+    expect(result).not.toBeNull();
+    expect(result.slope).toBeGreaterThan(0);
   });
 });

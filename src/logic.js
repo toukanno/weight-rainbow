@@ -725,6 +725,45 @@ export function calcLongestStreak(records) {
   return longest;
 }
 
+export function calcTrendForecast(records, forecastDays = 14) {
+  if (records.length < 7) return null;
+  // Use last 14 days to calculate linear regression
+  const cutoff = daysAgoStr(14);
+  const recent = records.filter((r) => r.dt >= cutoff);
+  if (recent.length < 4) return null;
+
+  // Simple linear regression: day index vs weight
+  const startDate = new Date(recent[0].dt + "T00:00:00");
+  const points = recent.map((r) => {
+    const dayIdx = (new Date(r.dt + "T00:00:00") - startDate) / 86400000;
+    return { x: dayIdx, y: r.wt };
+  });
+
+  const n = points.length;
+  const sumX = points.reduce((s, p) => s + p.x, 0);
+  const sumY = points.reduce((s, p) => s + p.y, 0);
+  const sumXY = points.reduce((s, p) => s + p.x * p.y, 0);
+  const sumX2 = points.reduce((s, p) => s + p.x * p.x, 0);
+
+  const denom = n * sumX2 - sumX * sumX;
+  if (denom === 0) return null;
+
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+
+  // Generate forecast points
+  const lastDayIdx = points[points.length - 1].x;
+  const forecast = [];
+  for (let d = 0; d <= forecastDays; d++) {
+    const dayIdx = lastDayIdx + d;
+    const weight = Math.round((slope * dayIdx + intercept) * 10) / 10;
+    if (weight < 20 || weight > 300) break;
+    forecast.push({ dayOffset: d, weight });
+  }
+
+  return { slope: Math.round(slope * 100) / 100, forecast };
+}
+
 export function exportRecordsToCSV(records) {
   if (!records.length) return "";
   const header = "date,weight,bmi,bodyFat,source,note";

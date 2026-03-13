@@ -43,6 +43,7 @@ import {
   calcBodyFatStats,
   calcDaysSinceLastRecord,
   calcLongestStreak,
+  calcTrendForecast,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -2257,6 +2258,43 @@ function drawChart() {
     context.font = "bold 11px sans-serif";
     context.textAlign = "left";
     context.fillText(`${t("goal.title")} ${goalWeight.toFixed(1)}`, padX + 4, goalY - 6);
+    context.restore();
+  }
+
+  // Trend forecast line
+  const trendForecast = calcTrendForecast(chartRecords);
+  if (trendForecast && trendForecast.forecast.length >= 2) {
+    context.save();
+    context.setLineDash([3, 5]);
+    context.strokeStyle = cs.getPropertyValue("--accent-2").trim() || "#ff9a00";
+    context.lineWidth = 1.5;
+    context.globalAlpha = 0.5;
+    context.beginPath();
+    const lastX = toX(chartRecords.length - 1);
+    const lastY = toY(chartRecords[chartRecords.length - 1].wt);
+    context.moveTo(lastX, lastY);
+    const totalDays = trendForecast.forecast[trendForecast.forecast.length - 1].dayOffset;
+    const pxPerDay = totalDays > 0 ? (width - padX - lastX) * 0.8 / totalDays : 0;
+    for (const pt of trendForecast.forecast) {
+      if (pt.dayOffset === 0) continue;
+      const fx = lastX + pt.dayOffset * pxPerDay;
+      const fy = toY(Math.max(min, Math.min(max, pt.weight)));
+      if (fx > width - padX) break;
+      context.lineTo(fx, fy);
+    }
+    context.stroke();
+    // Label
+    const lastPt = trendForecast.forecast[Math.min(trendForecast.forecast.length - 1, 7)];
+    if (lastPt) {
+      const labelX = Math.min(lastX + lastPt.dayOffset * pxPerDay, width - padX - 40);
+      const labelY = toY(Math.max(min, Math.min(max, lastPt.weight)));
+      context.setLineDash([]);
+      context.globalAlpha = 0.7;
+      context.fillStyle = cs.getPropertyValue("--accent-2").trim() || "#ff9a00";
+      context.font = "9px sans-serif";
+      context.textAlign = "left";
+      context.fillText(t("chart.forecast"), labelX + 4, labelY - 4);
+    }
     context.restore();
   }
 
