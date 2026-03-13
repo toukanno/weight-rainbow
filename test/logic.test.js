@@ -112,6 +112,7 @@ import {
   calcBMITrend,
   calcWeeklySummaryComparison,
   calcGoalProgressRing,
+  calcBodyFatTrend,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -8484,5 +8485,63 @@ describe("calcGoalProgressRing", () => {
     const result = calcGoalProgressRing(records, 70);
     expect(typeof result.weeklyRate).toBe("number");
     expect(typeof result.onTrack).toBe("boolean");
+  });
+});
+
+describe("calcBodyFatTrend", () => {
+  it("returns empty for no records", () => {
+    expect(calcBodyFatTrend([]).current).toBeNull();
+    expect(calcBodyFatTrend(null).current).toBeNull();
+  });
+
+  it("returns current for single record with bf", () => {
+    const result = calcBodyFatTrend([{ dt: "2025-01-01", wt: 70, bf: 20 }]);
+    expect(result.current).toBe(20);
+    expect(result.points.length).toBe(0); // need 2+ for trend
+  });
+
+  it("returns trend data for records with body fat", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bf: 25.0 },
+      { dt: "2025-01-02", wt: 69, bf: 24.5 },
+      { dt: "2025-01-03", wt: 68, bf: 24.0 },
+    ];
+    const result = calcBodyFatTrend(records);
+    expect(result.current).toBe(24.0);
+    expect(result.direction).toBe("down");
+    expect(result.change).toBeLessThan(0);
+    expect(result.points.length).toBe(3);
+  });
+
+  it("skips records without bf data", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bf: 22.0 },
+      { dt: "2025-01-02", wt: 69 },
+      { dt: "2025-01-03", wt: 68, bf: 21.5 },
+    ];
+    const result = calcBodyFatTrend(records);
+    expect(result.points.length).toBe(2);
+  });
+
+  it("returns min, max, avg", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bf: 20 },
+      { dt: "2025-01-02", wt: 69, bf: 25 },
+      { dt: "2025-01-03", wt: 68, bf: 22 },
+    ];
+    const result = calcBodyFatTrend(records);
+    expect(result.min).toBe(20);
+    expect(result.max).toBe(25);
+    expect(result.avg).toBeCloseTo(22.3, 0);
+  });
+
+  it("limits points to last 30", () => {
+    const records = Array.from({ length: 50 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+      bf: 20 + i * 0.1,
+    }));
+    const result = calcBodyFatTrend(records);
+    expect(result.points.length).toBeLessThanOrEqual(30);
   });
 });

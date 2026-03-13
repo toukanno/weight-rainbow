@@ -3167,6 +3167,11 @@ function bindEvents() {
 
   app.querySelectorAll("[data-mode]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (voiceActive && button.dataset.mode !== "voice") {
+        recognition?.stop();
+        recognition = null;
+        voiceActive = false;
+      }
       activeEntryMode = button.dataset.mode;
       render();
       // Focus primary input in the selected mode
