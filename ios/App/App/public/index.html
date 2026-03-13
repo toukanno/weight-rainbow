@@ -2658,6 +2658,39 @@
         color: var(--text);
       }
 
+      .scroll-top-btn {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        border: none;
+        background: var(--accent);
+        color: #fff;
+        font-size: 1.2rem;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(20px);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+        z-index: 90;
+      }
+      .scroll-top-btn.visible {
+        opacity: 0.85;
+        pointer-events: auto;
+        transform: translateY(0);
+      }
+      .scroll-top-btn:hover {
+        opacity: 1;
+        transform: translateY(-2px);
+      }
+      .scroll-top-btn:active {
+        transform: translateY(0);
+      }
+
       .success-section {
         margin-top: 14px;
         text-align: center;
@@ -4382,6 +4415,45 @@
         animation: rainbow-fade-in 0.6s ease-out, rainbow-pulse 1.5s ease-in-out infinite 0.6s;
       }
 
+      /* Scroll-to-top Button */
+      .scroll-top-btn {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        border: 1px solid var(--border);
+        background: var(--surface-strong);
+        color: var(--text);
+        font-size: 1.2rem;
+        cursor: pointer;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        z-index: 10;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+      }
+      .scroll-top-btn.visible {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      @media (hover: hover) {
+        .scroll-top-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(0,0,0,0.14);
+        }
+      }
+      .scroll-top-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      body[data-theme="midnight"] .scroll-top-btn {
+        background: rgba(30, 35, 55, 0.9);
+        border-color: rgba(139, 146, 176, 0.2);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      }
+
       /* Undo Button */
       .undo-btn {
         display: inline-flex;
@@ -4973,7 +5045,7 @@
         .tab-row, .export-row, .export-grid, .data-actions,
         .google-actions, .record-delete, .quick-section,
         .voice-box, .photo-box, .note-tags-row, .date-shortcuts,
-        .record-search, .record-date-range, .ad-slot,
+        .record-search, .record-date-range, .ad-slot, .scroll-top-btn,
         [data-action="save-record"], [data-action="save-profile"],
         [data-action="save-settings"], [data-action="toggle-records"] {
           display: none !important;

@@ -1061,6 +1061,7 @@ function render() {
         </div>
       </div>
     </main>
+    <button type="button" class="scroll-top-btn" id="scrollTopBtn" aria-label="${t("scroll.top")}" title="${t("scroll.top")}">↑</button>
     ${rainbowVisible ? `
     <div class="rainbow-overlay" id="rainbowOverlay" role="alert" aria-live="assertive">
       <div class="confetti-container" id="confettiContainer"></div>
@@ -4509,5 +4510,19 @@ window.addEventListener("keydown", (event) => {
       searchInput.focus();
       searchInput.select();
     }
+  }
+});
+
+// Scroll-to-top button visibility
+window.addEventListener("scroll", () => {
+  const btn = document.getElementById("scrollTopBtn");
+  if (btn) {
+    btn.classList.toggle("visible", window.scrollY > 400);
+  }
+}, { passive: true });
+
+document.addEventListener("click", (e) => {
+  if (e.target.id === "scrollTopBtn" || e.target.closest("#scrollTopBtn")) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 });

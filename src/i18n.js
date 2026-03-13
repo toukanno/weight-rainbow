@@ -763,6 +763,7 @@ export const translations = {
     "journey.gain": "増量期",
     "journey.maintain": "維持期",
     "journey.total": "全体変化",
+    "scroll.top": "トップへ戻る",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1528,6 +1529,7 @@ export const translations = {
     "journey.gain": "Gain",
     "journey.maintain": "Maintain",
     "journey.total": "Total change",
+    "scroll.top": "Back to top",
   },
 };
 

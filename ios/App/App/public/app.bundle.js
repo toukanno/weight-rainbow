@@ -4018,7 +4018,8 @@ var translations = {
     "journey.loss": "\u6E1B\u91CF\u671F",
     "journey.gain": "\u5897\u91CF\u671F",
     "journey.maintain": "\u7DAD\u6301\u671F",
-    "journey.total": "\u5168\u4F53\u5909\u5316"
+    "journey.total": "\u5168\u4F53\u5909\u5316",
+    "scroll.top": "\u30C8\u30C3\u30D7\u3078\u623B\u308B"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4796,7 +4797,8 @@ var translations = {
     "journey.loss": "Loss",
     "journey.gain": "Gain",
     "journey.maintain": "Maintain",
-    "journey.total": "Total change"
+    "journey.total": "Total change",
+    "scroll.top": "Back to top"
   }
 };
 function createTranslator(language) {
@@ -26211,6 +26213,7 @@ function render() {
         </div>
       </div>
     </main>
+    <button type="button" class="scroll-top-btn" id="scrollTopBtn" aria-label="${t("scroll.top")}" title="${t("scroll.top")}">\u2191</button>
     ${rainbowVisible ? `
     <div class="rainbow-overlay" id="rainbowOverlay" role="alert" aria-live="assertive">
       <div class="confetti-container" id="confettiContainer"></div>
@@ -29433,6 +29436,17 @@ window.addEventListener("keydown", (event) => {
       searchInput.focus();
       searchInput.select();
     }
+  }
+});
+window.addEventListener("scroll", () => {
+  const btn = document.getElementById("scrollTopBtn");
+  if (btn) {
+    btn.classList.toggle("visible", window.scrollY > 400);
+  }
+}, { passive: true });
+document.addEventListener("click", (e) => {
+  if (e.target.id === "scrollTopBtn" || e.target.closest("#scrollTopBtn")) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 });
 /*! Bundled license information:
