@@ -3571,7 +3571,7 @@ var translations = {
     "import.success": "\u30C7\u30FC\u30BF\u3092\u8AAD\u307F\u8FBC\u307F\u307E\u3057\u305F",
     "import.invalid": "\u7121\u52B9\u306A\u30D5\u30A1\u30A4\u30EB\u5F62\u5F0F\u3067\u3059\u3002weight-rainbow\u306E\u30A8\u30AF\u30B9\u30DD\u30FC\u30C8\u30D5\u30A1\u30A4\u30EB\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044\u3002",
     "import.confirm": "{count}\u4EF6\u306E\u30C7\u30FC\u30BF\u3092\u73FE\u5728\u306E\u30C7\u30FC\u30BF\u306B\u7D71\u5408\u3057\u307E\u3059\u3002\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F",
-    "import.new": "\u4EF6\u304C\u65B0\u898F",
+    "import.new": "\u4EF6 \u65B0\u898F",
     "goal.prediction": "\u9054\u6210\u4E88\u6E2C\u65E5",
     "goal.predictionDays": "\u7D04{days}\u65E5\u5F8C",
     "goal.predictionAchieved": "\u9054\u6210\u6E08\u307F\uFF01",
@@ -25370,7 +25370,7 @@ window.onerror = function(msg, src, line, col, err) {
       <h2 style="color:#dc2626;">\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F / An error occurred</h2>
       <p style="color:#666;margin:12px 0;">${escHtml(msg)}</p>
       <p style="color:#999;font-size:0.8rem;">Line ${line}:${col}</p>
-      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
+      <button type="button" onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
     </div>`;
   }
 };
@@ -25423,8 +25423,8 @@ try {
   app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
     <h2 style="color:#dc2626;">${t("error.init")}</h2>
     <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
-    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
-    <button onclick="if(confirm('${escHtml(t("error.resetConfirm"))}')){localStorage.clear();location.reload()}" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">${t("error.resetData")}</button>
+    <button type="button" onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
+    <button type="button" onclick="if(confirm('${escHtml(t("error.resetConfirm"))}')){localStorage.clear();location.reload()}" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">${t("error.resetData")}</button>
   </div>`;
 }
 initReminder();
@@ -26298,7 +26298,7 @@ function render() {
       <h2 style="color:#dc2626;">${t("error.render")}</h2>
       <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
       <p style="color:#999;font-size:0.8rem;">${e.stack ? e.stack.split("\n").slice(0, 3).map((l) => escHtml(l)).join("<br>") : ""}</p>
-      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
+      <button type="button" onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
     </div>`;
   }
 }

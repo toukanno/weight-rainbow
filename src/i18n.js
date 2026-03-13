@@ -301,7 +301,7 @@ export const translations = {
     "import.success": "データを読み込みました",
     "import.invalid": "無効なファイル形式です。weight-rainbowのエクスポートファイルを選んでください。",
     "import.confirm": "{count}件のデータを現在のデータに統合します。よろしいですか？",
-    "import.new": "件が新規",
+    "import.new": "件 新規",
     "goal.prediction": "達成予測日",
     "goal.predictionDays": "約{days}日後",
     "goal.predictionAchieved": "達成済み！",
