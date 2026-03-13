@@ -767,6 +767,33 @@
         font-weight: 700;
       }
 
+      .quick-notes-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px;
+        margin-top: 6px;
+      }
+      .quick-notes-label {
+        font-size: 0.68rem;
+        color: var(--text);
+        opacity: 0.6;
+      }
+      .quick-note-chip {
+        font-size: 0.68rem;
+        padding: 3px 8px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+        color: var(--text);
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s;
+      }
+      .quick-note-chip:hover {
+        background: color-mix(in srgb, var(--accent) 16%, transparent);
+        border-color: var(--accent);
+      }
+
       .source-breakdown {
         margin-top: 14px;
         padding-top: 12px;
@@ -3628,6 +3655,12 @@
         background: color-mix(in srgb, var(--accent) 20%, rgba(30, 35, 55, 0.6));
         color: var(--accent);
         border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+      }
+
+      body[data-theme="midnight"] .quick-note-chip {
+        background: rgba(30, 35, 55, 0.6);
+        border-color: rgba(139, 146, 176, 0.2);
+        color: #c4c8d8;
       }
 
       body[data-theme="midnight"] .data-actions label.btn.secondary {

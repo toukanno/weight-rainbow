@@ -627,6 +627,8 @@ export const translations = {
     "share.bmi": "BMI: {bmi}（{zone}）",
     "share.records": "記録数: {n}件",
     "share.footer": "— Rainbow体重管理で記録",
+    "quickNote.label": "よく使うメモ",
+    "quickNote.none": "メモ履歴なし",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1256,6 +1258,8 @@ export const translations = {
     "share.bmi": "BMI: {bmi} ({zone})",
     "share.records": "Records: {n}",
     "share.footer": "— Tracked with Rainbow Weight Log",
+    "quickNote.label": "Frequent notes",
+    "quickNote.none": "No note history",
   },
 };
 

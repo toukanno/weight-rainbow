@@ -2503,6 +2503,17 @@ function generateWeightSummary(records, profile = {}) {
     bmi: bmiInfo
   };
 }
+function getFrequentNotes(records, maxResults = 5) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const r of records) {
+    if (r.note && r.note.trim()) {
+      const note = r.note.trim();
+      counts.set(note, (counts.get(note) || 0) + 1);
+    }
+  }
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, maxResults);
+  return sorted.map(([text, count]) => ({ text, count }));
+}
 
 // src/i18n.js
 var translations = {
@@ -3146,7 +3157,9 @@ var translations = {
     "share.range": "\u7BC4\u56F2: {min}kg \u301C {max}kg\uFF08\u5E73\u5747 {avg}kg\uFF09",
     "share.bmi": "BMI: {bmi}\uFF08{zone}\uFF09",
     "share.records": "\u8A18\u9332\u6570: {n}\u4EF6",
-    "share.footer": "\u2014 Rainbow\u4F53\u91CD\u7BA1\u7406\u3067\u8A18\u9332"
+    "share.footer": "\u2014 Rainbow\u4F53\u91CD\u7BA1\u7406\u3067\u8A18\u9332",
+    "quickNote.label": "\u3088\u304F\u4F7F\u3046\u30E1\u30E2",
+    "quickNote.none": "\u30E1\u30E2\u5C65\u6B74\u306A\u3057"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3788,7 +3801,9 @@ var translations = {
     "share.range": "Range: {min}kg \u2013 {max}kg (avg {avg}kg)",
     "share.bmi": "BMI: {bmi} ({zone})",
     "share.records": "Records: {n}",
-    "share.footer": "\u2014 Tracked with Rainbow Weight Log"
+    "share.footer": "\u2014 Tracked with Rainbow Weight Log",
+    "quickNote.label": "Frequent notes",
+    "quickNote.none": "No note history"
   }
 };
 function createTranslator(language) {
@@ -24722,6 +24737,14 @@ function render() {
       return `<button type="button" class="note-tag${active ? " active" : ""}" data-note-tag="${tag}">${t("note.tag." + tag)}</button>`;
     }).join("")}
                 </div>
+                ${(() => {
+      const freq = getFrequentNotes(state.records, 4);
+      if (freq.length === 0) return "";
+      return `<div class="quick-notes-row">
+                    <span class="quick-notes-label">${t("quickNote.label")}:</span>
+                    ${freq.map((n) => `<button type="button" class="quick-note-chip" data-quick-note="${escapeAttr(n.text)}">${n.text.length > 15 ? n.text.slice(0, 15) + "\u2026" : n.text}</button>`).join("")}
+                  </div>`;
+    })()}
               </div>
 
               <!-- Quick Record Section -->
@@ -26400,6 +26423,12 @@ function bindEvents() {
   app.querySelectorAll("[data-note-tag]").forEach((button) => {
     button.addEventListener("click", () => {
       state.form.note = toggleNoteTag(state.form.note, button.dataset.noteTag);
+      render();
+    });
+  });
+  app.querySelectorAll("[data-quick-note]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.form.note = button.dataset.quickNote;
       render();
     });
   });
