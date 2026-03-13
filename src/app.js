@@ -114,6 +114,7 @@ import {
   calcTrendStreak,
   calcBMITrend,
   calcWeeklySummaryComparison,
+  calcGoalProgressRing,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -2653,6 +2654,48 @@ function renderWeeklySummaryComparison() {
   `;
 }
 
+function renderGoalProgressRing() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const data = calcGoalProgressRing(state.records, goalWeight);
+  if (!data) return "";
+
+  const r = 54, cx = 60, cy = 60, stroke = 10;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (data.percent / 100) * circ;
+  const trackColor = "var(--border)";
+  const fillColor = data.percent >= 100 ? "var(--ok)" : data.onTrack ? "var(--accent)" : "var(--danger)";
+
+  const statusLabel = data.percent >= 100 ? t("gring.done")
+    : data.onTrack ? t("gring.onTrack") : t("gring.offTrack");
+  const statusCls = data.percent >= 100 ? "gr-done" : data.onTrack ? "gr-on" : "gr-off";
+  const rateSign = data.weeklyRate > 0 ? "-" : data.weeklyRate < 0 ? "+" : "";
+  const etaText = data.estimatedWeeks ? t("gring.eta").replace("{weeks}", data.estimatedWeeks) : "";
+
+  return `
+    <div class="gr-section">
+      <div class="helper">${t("gring.title")}</div>
+      <div class="gr-layout">
+        <svg class="gr-ring" viewBox="0 0 120 120">
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${trackColor}" stroke-width="${stroke}"/>
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${fillColor}" stroke-width="${stroke}"
+            stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}"
+            stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"
+            style="transition:stroke-dashoffset 0.5s ease"/>
+          <text x="${cx}" y="${cy - 6}" text-anchor="middle" class="gr-pct-text">${data.percent}%</text>
+          <text x="${cx}" y="${cy + 14}" text-anchor="middle" class="gr-goal-text">${data.goalWeight.toFixed(1)}kg</text>
+        </svg>
+        <div class="gr-stats">
+          <div class="gr-stat"><span class="gr-stat-label">${t("gring.lost")}</span><span class="gr-stat-val">${data.lost.toFixed(1)}kg</span></div>
+          <div class="gr-stat"><span class="gr-stat-label">${t("gring.remaining")}</span><span class="gr-stat-val">${data.remaining.toFixed(1)}kg</span></div>
+          <div class="gr-stat"><span class="gr-stat-label">${t("gring.rate")}</span><span class="gr-stat-val">${rateSign}${Math.abs(data.weeklyRate).toFixed(1)}kg/w</span></div>
+          <div class="gr-badge ${statusCls}">${statusLabel}</div>
+          ${etaText ? `<div class="gr-eta">${etaText}</div>` : ""}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderRecentEntries() {
   const entries = getRecentEntries(state.records, 5);
   if (entries.length === 0) return "";
@@ -4800,7 +4843,7 @@ if (GOOGLE_CLIENT_ID) {
 function handlePhotoZoom() {
   if (!imagePreviewUrl) return;
   const ov = document.createElement("div");
-  ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
+  ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
   ov.setAttribute("role", "dialog");
   ov.setAttribute("aria-label", t("photo.zoomHint"));
   const im = document.createElement("img");
@@ -4822,6 +4865,12 @@ let resizeTimer;
 window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(drawChart, 150);
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    scheduleRender();
+    drawChart();
+  }
 });
 window.addEventListener("beforeunload", () => {
   if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);

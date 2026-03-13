@@ -3447,3 +3447,59 @@ export function calcWeeklySummaryComparison(records) {
     },
   };
 }
+
+/**
+ * Calculate detailed goal progress data for a ring/donut chart.
+ * Returns { percent, startWeight, currentWeight, goalWeight, lost, remaining,
+ *           weeklyRate, estimatedWeeks, onTrack }
+ */
+export function calcGoalProgressRing(records, goalWeight) {
+  if (!records || records.length < 1 || !Number.isFinite(goalWeight) || goalWeight <= 0) {
+    return null;
+  }
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const startWeight = sorted[0].wt;
+  const currentWeight = sorted[sorted.length - 1].wt;
+  const totalToLose = startWeight - goalWeight;
+
+  if (Math.abs(totalToLose) < 0.1) {
+    return { percent: 100, startWeight, currentWeight, goalWeight, lost: 0, remaining: 0, weeklyRate: 0, estimatedWeeks: 0, onTrack: true };
+  }
+
+  const lost = startWeight - currentWeight;
+  const direction = totalToLose > 0 ? 1 : -1; // 1 = need to lose, -1 = need to gain
+  const progress = (lost * direction) / (Math.abs(totalToLose));
+  const percent = Math.min(100, Math.max(0, Math.round(progress * 100)));
+  const remaining = +(Math.abs(currentWeight - goalWeight)).toFixed(1);
+
+  // Weekly rate from last 4 weeks
+  let weeklyRate = 0;
+  if (sorted.length >= 7) {
+    const fourWeeksAgo = new Date();
+    fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+    const cutoffStr = `${fourWeeksAgo.getFullYear()}-${String(fourWeeksAgo.getMonth() + 1).padStart(2, "0")}-${String(fourWeeksAgo.getDate()).padStart(2, "0")}`;
+    const recent = sorted.filter((r) => r.dt >= cutoffStr);
+    if (recent.length >= 2) {
+      const firstR = recent[0].wt;
+      const lastR = recent[recent.length - 1].wt;
+      const daySpan = Math.max(1, Math.ceil((new Date(recent[recent.length - 1].dt + "T00:00:00") - new Date(recent[0].dt + "T00:00:00")) / 86400000));
+      weeklyRate = +((firstR - lastR) / daySpan * 7).toFixed(2);
+    }
+  }
+
+  const estimatedWeeks = weeklyRate * direction > 0.05 ? Math.ceil(remaining / Math.abs(weeklyRate)) : null;
+  const onTrack = weeklyRate * direction > 0;
+
+  return {
+    percent,
+    startWeight: +startWeight.toFixed(1),
+    currentWeight: +currentWeight.toFixed(1),
+    goalWeight: +goalWeight,
+    lost: +(lost * direction).toFixed(1),
+    remaining,
+    weeklyRate: +weeklyRate.toFixed(2),
+    estimatedWeeks,
+    onTrack,
+  };
+}

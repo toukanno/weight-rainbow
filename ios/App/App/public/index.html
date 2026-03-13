@@ -263,7 +263,7 @@
         border-radius: 28px;
         padding: 28px;
         box-shadow: var(--shadow);
-        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
         transition: background 0.4s ease, border-color 0.3s ease, box-shadow 0.3s ease;
       }
 
@@ -381,7 +381,7 @@
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: 20px;
-        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
         box-shadow: var(--shadow);
       }
 
@@ -3217,7 +3217,7 @@
         overflow: hidden;
         background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 6%, var(--surface)), color-mix(in srgb, var(--accent-2) 4%, var(--surface)));
         border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
-        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
       }
       .ai-coach-panel::before {
         content: "";
@@ -3325,7 +3325,7 @@
         padding: 12px;
         border-radius: 14px;
         background: color-mix(in srgb, var(--surface-strong) 80%, transparent);
-        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
         border: 1px solid var(--border);
         display: flex;
         flex-direction: column;
@@ -4175,7 +4175,7 @@
           rgba(139,69,219,0.15), rgba(255,0,0,0.15));
         background-size: 400% 400%;
         animation: rainbow-bg 2s ease infinite, rainbow-fade-in 0.6s ease-out;
-        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
       }
 
       .rainbow-overlay.fade-out {
@@ -4290,7 +4290,7 @@
         align-items: center;
         justify-content: center;
         background: rgba(0, 0, 0, 0.5);
-        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
       }
 
       .lang-modal {

@@ -4399,7 +4399,15 @@ var translations = {
     "wcomp.min": "\u6700\u5C0F",
     "wcomp.max": "\u6700\u5927",
     "wcomp.count": "\u8A18\u9332\u6570",
-    "wcomp.nodata": "\u4E21\u9031\u306E\u30C7\u30FC\u30BF\u304C\u5FC5\u8981\u3067\u3059"
+    "wcomp.nodata": "\u4E21\u9031\u306E\u30C7\u30FC\u30BF\u304C\u5FC5\u8981\u3067\u3059",
+    "gring.title": "\u76EE\u6A19\u30D7\u30ED\u30B0\u30EC\u30B9",
+    "gring.lost": "\u9054\u6210\u6E08\u307F",
+    "gring.remaining": "\u6B8B\u308A",
+    "gring.rate": "\u9031\u9593\u30DA\u30FC\u30B9",
+    "gring.eta": "\u63A8\u5B9A {weeks}\u9031\u9593\u5F8C",
+    "gring.onTrack": "\u9806\u8ABF",
+    "gring.offTrack": "\u30DA\u30FC\u30B9\u898B\u76F4\u3057",
+    "gring.done": "\u76EE\u6A19\u9054\u6210\uFF01"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5253,7 +5261,15 @@ var translations = {
     "wcomp.min": "Min",
     "wcomp.max": "Max",
     "wcomp.count": "Records",
-    "wcomp.nodata": "Need data for both weeks"
+    "wcomp.nodata": "Need data for both weeks",
+    "gring.title": "Goal Progress",
+    "gring.lost": "Achieved",
+    "gring.remaining": "Remaining",
+    "gring.rate": "Weekly Pace",
+    "gring.eta": "Est. {weeks} weeks",
+    "gring.onTrack": "On Track",
+    "gring.offTrack": "Off Track",
+    "gring.done": "Goal Reached!"
   }
 };
 function createTranslator(language) {
@@ -30137,7 +30153,7 @@ if (GOOGLE_CLIENT_ID) {
 function handlePhotoZoom() {
   if (!imagePreviewUrl) return;
   const ov = document.createElement("div");
-  ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
+  ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
   ov.setAttribute("role", "dialog");
   ov.setAttribute("aria-label", t("photo.zoomHint"));
   const im = document.createElement("img");
@@ -30162,6 +30178,12 @@ var resizeTimer;
 window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(drawChart, 150);
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    scheduleRender();
+    drawChart();
+  }
 });
 window.addEventListener("beforeunload", () => {
   if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
