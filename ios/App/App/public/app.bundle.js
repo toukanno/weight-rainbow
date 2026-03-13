@@ -1468,7 +1468,6 @@ var translations = {
     "camera.photo": "\u30D5\u30A9\u30C8\u30E9\u30A4\u30D6\u30E9\u30EA",
     "camera.picture": "\u30AB\u30E1\u30E9",
     "record.dailyLimit": "\u540C\u3058\u65E5\u4ED8\u306E\u8A18\u9332\u306F\u4E0A\u66F8\u304D\u3055\u308C\u307E\u3059",
-    "record.dailyLimitReached": "\u672C\u65E5\u306E\u8A18\u9332\u4E0A\u9650\uFF0810\u56DE\uFF09\u306B\u9054\u3057\u307E\u3057\u305F",
     "entry.note": "\u30E1\u30E2",
     "entry.noteHint": "\u98DF\u4E8B\u30FB\u904B\u52D5\u306A\u3069\uFF08100\u6587\u5B57\u307E\u3067\uFF09",
     "rate.title": "\u9031\u9593\u30DA\u30FC\u30B9",
@@ -1772,7 +1771,6 @@ var translations = {
     "camera.photo": "Photo Library",
     "camera.picture": "Camera",
     "record.dailyLimit": "Records on the same date are overwritten",
-    "record.dailyLimitReached": "Daily record limit (10) reached",
     "rate.title": "Weekly Rate",
     "rate.value": "{rate}kg/week",
     "rate.period": "{change}kg over {days} days",
@@ -24085,8 +24083,14 @@ function drawChart() {
   if (canvas._chartClickHandler) {
     canvas.removeEventListener("click", canvas._chartClickHandler);
   }
+  if (canvas._chartMoveHandler) {
+    canvas.removeEventListener("mousemove", canvas._chartMoveHandler);
+  }
+  if (canvas._chartLeaveHandler) {
+    canvas.removeEventListener("mouseleave", canvas._chartLeaveHandler);
+  }
   const snapRecords = [...chartRecords];
-  canvas._chartClickHandler = (e) => {
+  const showTooltipForEvent = (e) => {
     const cr = canvas.getBoundingClientRect();
     const cx = (e.touches ? e.touches[0].clientX : e.clientX) - cr.left;
     let ci = 0;
@@ -24104,14 +24108,28 @@ function drawChart() {
       tip.textContent = `${r.dt}: ${r.wt.toFixed(1)}kg${r.bmi ? ` (BMI ${r.bmi.toFixed(1)})` : ""}${r.bf ? ` BF ${Number(r.bf).toFixed(1)}%` : ""}${r.note ? ` \u2014 ${r.note}` : ""}`;
       tip.style.display = "block";
       clearTimeout(canvas._tooltipTimer);
-      canvas._tooltipTimer = setTimeout(() => {
-        tip.style.display = "none";
-      }, 3e3);
     } else if (tip) {
       tip.style.display = "none";
     }
   };
+  canvas._chartClickHandler = (e) => {
+    showTooltipForEvent(e);
+    clearTimeout(canvas._tooltipTimer);
+    canvas._tooltipTimer = setTimeout(() => {
+      const tip = document.getElementById("chartTooltip");
+      if (tip) tip.style.display = "none";
+    }, 3e3);
+  };
+  canvas._chartMoveHandler = (e) => {
+    showTooltipForEvent(e);
+  };
+  canvas._chartLeaveHandler = () => {
+    const tip = document.getElementById("chartTooltip");
+    if (tip) tip.style.display = "none";
+  };
   canvas.addEventListener("click", canvas._chartClickHandler);
+  canvas.addEventListener("mousemove", canvas._chartMoveHandler);
+  canvas.addEventListener("mouseleave", canvas._chartLeaveHandler);
 }
 function signedWeight(weight) {
   return `${weight > 0 ? "+" : ""}${weight.toFixed(1)}kg`;

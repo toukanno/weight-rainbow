@@ -1993,12 +1993,18 @@ function drawChart() {
       context.fillText(record.dt.slice(5), toX(index), height - 8);
     });
 
-  // Touch/click tooltip - store handler on canvas to avoid listener leak
+  // Touch/click/hover tooltip - store handlers to avoid listener leak
   if (canvas._chartClickHandler) {
     canvas.removeEventListener("click", canvas._chartClickHandler);
   }
+  if (canvas._chartMoveHandler) {
+    canvas.removeEventListener("mousemove", canvas._chartMoveHandler);
+  }
+  if (canvas._chartLeaveHandler) {
+    canvas.removeEventListener("mouseleave", canvas._chartLeaveHandler);
+  }
   const snapRecords = [...chartRecords];
-  canvas._chartClickHandler = (e) => {
+  const showTooltipForEvent = (e) => {
     const cr = canvas.getBoundingClientRect();
     const cx = (e.touches ? e.touches[0].clientX : e.clientX) - cr.left;
     let ci = 0;
@@ -2012,14 +2018,28 @@ function drawChart() {
       const r = snapRecords[ci];
       tip.textContent = `${r.dt}: ${r.wt.toFixed(1)}kg${r.bmi ? ` (BMI ${r.bmi.toFixed(1)})` : ""}${r.bf ? ` BF ${Number(r.bf).toFixed(1)}%` : ""}${r.note ? ` — ${r.note}` : ""}`;
       tip.style.display = "block";
-      // Auto-hide after 3 seconds
       clearTimeout(canvas._tooltipTimer);
-      canvas._tooltipTimer = setTimeout(() => { tip.style.display = "none"; }, 3000);
     } else if (tip) {
       tip.style.display = "none";
     }
   };
+  canvas._chartClickHandler = (e) => {
+    showTooltipForEvent(e);
+    // Auto-hide after 3 seconds on click/touch
+    clearTimeout(canvas._tooltipTimer);
+    canvas._tooltipTimer = setTimeout(() => {
+      const tip = document.getElementById("chartTooltip");
+      if (tip) tip.style.display = "none";
+    }, 3000);
+  };
+  canvas._chartMoveHandler = (e) => { showTooltipForEvent(e); };
+  canvas._chartLeaveHandler = () => {
+    const tip = document.getElementById("chartTooltip");
+    if (tip) tip.style.display = "none";
+  };
   canvas.addEventListener("click", canvas._chartClickHandler);
+  canvas.addEventListener("mousemove", canvas._chartMoveHandler);
+  canvas.addEventListener("mouseleave", canvas._chartLeaveHandler);
 }
 
 function signedWeight(weight) {
