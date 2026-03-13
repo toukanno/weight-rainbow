@@ -2424,7 +2424,7 @@ function calcGoalCountdown(records, goalWeight) {
   const recent = sorted.slice(-14);
   let etaDays = null;
   if (recent.length >= 3) {
-    const daySpan = Math.max(1, Math.round((new Date(recent[recent.length - 1].dt) - new Date(recent[0].dt)) / 864e5));
+    const daySpan = Math.max(1, Math.round((/* @__PURE__ */ new Date(recent[recent.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(recent[0].dt + "T00:00:00")) / 864e5));
     const rate = (recent[recent.length - 1].wt - recent[0].wt) / daySpan;
     if (rate < -0.01 && remaining > 0) {
       etaDays = Math.ceil(remaining / Math.abs(rate));

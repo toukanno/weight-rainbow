@@ -1970,7 +1970,7 @@ export function calcGoalCountdown(records, goalWeight) {
   const recent = sorted.slice(-14);
   let etaDays = null;
   if (recent.length >= 3) {
-    const daySpan = Math.max(1, Math.round((new Date(recent[recent.length - 1].dt) - new Date(recent[0].dt)) / 86400000));
+    const daySpan = Math.max(1, Math.round((new Date(recent[recent.length - 1].dt + "T00:00:00") - new Date(recent[0].dt + "T00:00:00")) / 86400000));
     const rate = (recent[recent.length - 1].wt - recent[0].wt) / daySpan; // kg/day
     // Only estimate if trend is in the right direction
     if (rate < -0.01 && remaining > 0) {
