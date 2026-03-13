@@ -4732,7 +4732,15 @@ var translations = {
     "anniv.1year": "1\u5E74",
     "anniv.2years": "2\u5E74",
     "anniv.reached": "\u9054\u6210",
-    "anniv.upcoming": "\u307E\u3082\u306A\u304F"
+    "anniv.upcoming": "\u307E\u3082\u306A\u304F",
+    "tfc.title": "\u4F53\u91CD\u4E88\u6E2C\uFF0814\u65E5\u9593\uFF09",
+    "tfc.trend": "\u50BE\u5411",
+    "tfc.perWeek": "\u9031\u3042\u305F\u308A",
+    "tfc.in7days": "7\u65E5\u5F8C",
+    "tfc.in14days": "14\u65E5\u5F8C",
+    "tfc.losing": "\u6E1B\u5C11\u4E2D",
+    "tfc.gaining": "\u5897\u52A0\u4E2D",
+    "tfc.stable": "\u5B89\u5B9A"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5643,7 +5651,15 @@ var translations = {
     "anniv.1year": "1 Year",
     "anniv.2years": "2 Years",
     "anniv.reached": "Reached",
-    "anniv.upcoming": "Upcoming"
+    "anniv.upcoming": "Upcoming",
+    "tfc.title": "Weight Forecast (14 days)",
+    "tfc.trend": "Trend",
+    "tfc.perWeek": "per week",
+    "tfc.in7days": "In 7 days",
+    "tfc.in14days": "In 14 days",
+    "tfc.losing": "Losing",
+    "tfc.gaining": "Gaining",
+    "tfc.stable": "Stable"
   }
 };
 function createTranslator(language) {
@@ -26294,6 +26310,9 @@ function persist() {
   } catch (e) {
     if (e instanceof DOMException && e.name === "QuotaExceededError") {
       setStatus(t("error.storageQuota"), "error");
+    } else {
+      console.error("[persist] storage error:", e?.name, e?.message);
+      setStatus(t("status.storageError"), "error");
     }
     return false;
   }
@@ -26799,6 +26818,7 @@ function render() {
             ${renderStreakFreeze()}
             ${renderRecentWeightBars()}
             ${renderWeightAnniversary()}
+            ${renderTrendForecast()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -28744,6 +28764,36 @@ function renderWeightAnniversary() {
     </div>
   `;
 }
+function renderTrendForecast() {
+  const data = calcTrendForecast(state.records, 14);
+  if (!data || data.forecast.length < 8) return "";
+  const weeklyChange = +(data.slope * 7).toFixed(2);
+  const trendLabel = weeklyChange < -0.05 ? t("forecast.losing") : weeklyChange > 0.05 ? t("forecast.gaining") : t("forecast.stable");
+  const trendCls = weeklyChange < -0.05 ? "fc-loss" : weeklyChange > 0.05 ? "fc-gain" : "fc-stable";
+  const day7 = data.forecast.find((f) => f.dayOffset === 7);
+  const day14 = data.forecast.find((f) => f.dayOffset === 14);
+  const current = data.forecast[0]?.weight;
+  return `
+    <div class="fc-section">
+      <div class="helper">${t("forecast.title")}</div>
+      <div class="fc-trend ${trendCls}">
+        ${trendLabel} \xB7 ${weeklyChange > 0 ? "+" : ""}${weeklyChange}kg ${t("forecast.perWeek")}
+      </div>
+      <div class="fc-grid">
+        ${day7 ? `<div class="fc-cell">
+          <span class="fc-label">${t("forecast.in7days")}</span>
+          <span class="fc-val">${day7.weight.toFixed(1)}kg</span>
+          <span class="fc-diff ${day7.weight - current < 0 ? "fc-loss" : "fc-gain"}">${day7.weight - current > 0 ? "+" : ""}${(day7.weight - current).toFixed(1)}</span>
+        </div>` : ""}
+        ${day14 ? `<div class="fc-cell">
+          <span class="fc-label">${t("forecast.in14days")}</span>
+          <span class="fc-val">${day14.weight.toFixed(1)}kg</span>
+          <span class="fc-diff ${day14.weight - current < 0 ? "fc-loss" : "fc-gain"}">${day14.weight - current > 0 ? "+" : ""}${(day14.weight - current).toFixed(1)}</span>
+        </div>` : ""}
+      </div>
+    </div>
+  `;
+}
 function renderRecentEntries() {
   const entries = getRecentEntries(state.records, 5);
   if (entries.length === 0) return "";
@@ -29758,7 +29808,7 @@ async function pickNativePhoto() {
     detectedWeights = [];
     if (photo.webPath) {
       try {
-        const response = await fetch(photo.webPath);
+        const response = await fetchWithTimeout(photo.webPath);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const blob = await response.blob();
         const candidates = await detectWeightsFromImage(blob);

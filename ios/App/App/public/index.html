@@ -3224,6 +3224,35 @@
       .av-ms-val { font-weight: 700; }
       .av-ms-soon { font-size: 0.75rem; color: var(--muted); font-style: italic; }
 
+      .fc-section { margin-top: 14px; }
+      .fc-trend {
+        text-align: center;
+        font-weight: 600;
+        font-size: 0.9rem;
+        padding: 6px 10px;
+        border-radius: 8px;
+        margin: 6px 0;
+      }
+      .fc-loss { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+      .fc-gain { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+      .fc-stable { color: var(--accent-3); background: color-mix(in srgb, var(--accent-3) 12%, transparent); }
+      .fc-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .fc-cell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 8px;
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--accent) 8%, transparent);
+      }
+      .fc-label { font-size: 0.75rem; color: var(--muted); }
+      .fc-val { font-size: 1.3rem; font-weight: 800; }
+      .fc-diff { font-size: 0.78rem; font-weight: 600; }
+
       .wc-section { margin-top: 14px; }
       .wc-header, .wc-row {
         display: grid;

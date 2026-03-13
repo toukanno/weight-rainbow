@@ -277,6 +277,9 @@ function persist() {
   } catch (e) {
     if (e instanceof DOMException && e.name === "QuotaExceededError") {
       setStatus(t("error.storageQuota"), "error");
+    } else {
+      console.error("[persist] storage error:", e?.name, e?.message);
+      setStatus(t("status.storageError"), "error");
     }
     return false;
   }
@@ -820,6 +823,7 @@ function render() {
             ${renderStreakFreeze()}
             ${renderRecentWeightBars()}
             ${renderWeightAnniversary()}
+            ${renderTrendForecast()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -2922,6 +2926,40 @@ function renderWeightAnniversary() {
   `;
 }
 
+function renderTrendForecast() {
+  const data = calcTrendForecast(state.records, 14);
+  if (!data || data.forecast.length < 8) return "";
+
+  const weeklyChange = +(data.slope * 7).toFixed(2);
+  const trendLabel = weeklyChange < -0.05 ? t("tfc.losing") : weeklyChange > 0.05 ? t("tfc.gaining") : t("tfc.stable");
+  const trendCls = weeklyChange < -0.05 ? "fc-loss" : weeklyChange > 0.05 ? "fc-gain" : "fc-stable";
+
+  const day7 = data.forecast.find((f) => f.dayOffset === 7);
+  const day14 = data.forecast.find((f) => f.dayOffset === 14);
+  const current = data.forecast[0]?.weight;
+
+  return `
+    <div class="fc-section">
+      <div class="helper">${t("tfc.title")}</div>
+      <div class="fc-trend ${trendCls}">
+        ${trendLabel} · ${weeklyChange > 0 ? "+" : ""}${weeklyChange}kg ${t("tfc.perWeek")}
+      </div>
+      <div class="fc-grid">
+        ${day7 ? `<div class="fc-cell">
+          <span class="fc-label">${t("tfc.in7days")}</span>
+          <span class="fc-val">${day7.weight.toFixed(1)}kg</span>
+          <span class="fc-diff ${(day7.weight - current) < 0 ? "fc-loss" : "fc-gain"}">${(day7.weight - current) > 0 ? "+" : ""}${(day7.weight - current).toFixed(1)}</span>
+        </div>` : ""}
+        ${day14 ? `<div class="fc-cell">
+          <span class="fc-label">${t("tfc.in14days")}</span>
+          <span class="fc-val">${day14.weight.toFixed(1)}kg</span>
+          <span class="fc-diff ${(day14.weight - current) < 0 ? "fc-loss" : "fc-gain"}">${(day14.weight - current) > 0 ? "+" : ""}${(day14.weight - current).toFixed(1)}</span>
+        </div>` : ""}
+      </div>
+    </div>
+  `;
+}
+
 function renderRecentEntries() {
   const entries = getRecentEntries(state.records, 5);
   if (entries.length === 0) return "";
@@ -4004,7 +4042,7 @@ async function pickNativePhoto() {
 
     if (photo.webPath) {
       try {
-        const response = await fetch(photo.webPath);
+        const response = await fetchWithTimeout(photo.webPath);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const blob = await response.blob();
         const candidates = await detectWeightsFromImage(blob);
