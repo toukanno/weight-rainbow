@@ -22959,7 +22959,7 @@ function render() {
       imageName: state.form.imageName
     }).bmi : null;
     app.innerHTML = `
-    <div class="app-shell">
+    <main class="app-shell">
       <section class="hero">
         <div class="hero-top">
           <div>
@@ -23489,7 +23489,7 @@ function render() {
           ` : ""}
         </div>
       </div>
-    </div>
+    </main>
     ${rainbowVisible ? `
     <div class="rainbow-overlay" id="rainbowOverlay" role="alert" aria-live="assertive">
       <div class="confetti-container" id="confettiContainer"></div>
