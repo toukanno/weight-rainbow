@@ -27032,8 +27032,7 @@ function renderWeeklyAverages() {
 function renderRecordingCalendar() {
   if (state.records.length === 0) return "";
   const cal = calcMonthlyRecordingMap(state.records);
-  const today = /* @__PURE__ */ new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const todayStr = todayLocal();
   const dayHeaders = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].map((d) => `<div class="rec-cal-header">${t("recCal." + d)}</div>`).join("");
   const firstDow = cal.days[0].dayOfWeek;
   const blanks = Array.from({ length: firstDow }, () => `<div class="rec-cal-blank"></div>`).join("");
@@ -28221,6 +28220,7 @@ async function pickNativePhoto() {
       const requested = await Camera2.requestPermissions({ permissions: ["photos", "camera"] });
       if (requested.photos === "denied" || requested.camera === "denied") {
         setStatus(t("status.permissionDenied"), "error");
+        if (photoBtn) photoBtn.classList.remove("loading");
         return;
       }
     }

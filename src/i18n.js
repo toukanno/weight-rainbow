@@ -754,6 +754,10 @@ export const translations = {
     "recRate.title": "記録率",
     "recRate.summary": "{recorded}日 / {total}日",
     "recRate.weeks": "直近4週間",
+    "msHist.title": "マイルストーン履歴",
+    "msHist.reached": "{kg}kg達成 — {date}（{days}日目）",
+    "msHist.down": "減量の軌跡",
+    "msHist.up": "増量の軌跡",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1510,6 +1514,10 @@ export const translations = {
     "recRate.title": "Recording Rate",
     "recRate.summary": "{recorded} / {total} days",
     "recRate.weeks": "Last 4 weeks",
+    "msHist.title": "Milestone History",
+    "msHist.reached": "{kg}kg reached — {date} (day {days})",
+    "msHist.down": "Weight loss journey",
+    "msHist.up": "Weight gain journey",
   },
 };
 

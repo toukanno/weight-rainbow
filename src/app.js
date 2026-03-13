@@ -103,6 +103,7 @@ import {
   calcWeightAnomalies,
   calcSuccessRate,
   calcRecordingRate,
+  calcMilestoneHistory,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -808,6 +809,7 @@ function render() {
                 ${renderDuplicateCheck()}
                 ${renderNoteTagStats()}
                 ${renderWeightAnomalies()}
+                ${renderMilestoneHistory()}
               </div>
               ` : ""}
             </div>
@@ -2037,8 +2039,7 @@ function renderWeeklyAverages() {
 function renderRecordingCalendar() {
   if (state.records.length === 0) return "";
   const cal = calcMonthlyRecordingMap(state.records);
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const todayStr = todayLocal();
   const dayHeaders = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
     .map((d) => `<div class="rec-cal-header">${t("recCal." + d)}</div>`).join("");
   const firstDow = cal.days[0].dayOfWeek;
@@ -2292,6 +2293,27 @@ function renderRecordingRate() {
       <div class="helper hint-small">${summary}</div>
       <div class="helper hint-small" style="margin-top:6px;">${t("recRate.weeks")}</div>
       <div class="rr-weeks">${weekBars}</div>
+    </div>
+  `;
+}
+
+function renderMilestoneHistory() {
+  const mh = calcMilestoneHistory(state.records);
+  if (!mh || mh.milestones.length === 0) return "";
+  const dirLabel = mh.direction === "down" ? t("msHist.down") : t("msHist.up");
+  const recent = mh.milestones.slice(-8).reverse();
+  const rows = recent.map((m) => {
+    const text = t("msHist.reached")
+      .replace("{kg}", m.kg)
+      .replace("{date}", m.date.slice(5).replace("-", "/"))
+      .replace("{days}", m.daysFromStart);
+    return `<div class="msh-row">${mh.direction === "down" ? "📉" : "📈"} ${text}</div>`;
+  }).join("");
+  return `
+    <div class="msh-section">
+      <div class="helper">${t("msHist.title")}</div>
+      <div class="helper hint-small">${dirLabel}</div>
+      ${rows}
     </div>
   `;
 }
@@ -2943,6 +2965,7 @@ function handleFieldInput(event) {
 
   if (["name", "heightCm", "age", "gender"].includes(name)) {
     state.profile = { ...state.profile, [name]: value };
+    persist();
     if (name === "heightCm") render();
     return;
   }
@@ -2969,34 +2992,40 @@ function handleFieldInput(event) {
   if (name === "language") {
     state.settings.language = value;
     t = createTranslator(value);
+    persist();
     render();
     return;
   }
 
   if (name === "theme" || name === "chartStyle") {
     state.settings[name] = value;
+    persist();
     render();
     return;
   }
 
   if (name === "adPreviewEnabled") {
     state.settings.adPreviewEnabled = value === "true";
+    persist();
     render();
     return;
   }
 
   if (name === "goalWeight") {
     state.settings.goalWeight = value;
+    persist();
     return;
   }
 
   if (name === "reminderEnabled") {
     state.settings.reminderEnabled = value === "true";
+    persist();
     return;
   }
 
   if (name === "reminderTime") {
     state.settings.reminderTime = value;
+    persist();
     return;
   }
 
@@ -3306,6 +3335,7 @@ async function pickNativePhoto() {
       const requested = await Camera.requestPermissions({ permissions: ["photos", "camera"] });
       if (requested.photos === "denied" || requested.camera === "denied") {
         setStatus(t("status.permissionDenied"), "error");
+        if (photoBtn) photoBtn.classList.remove("loading");
         return;
       }
     }
