@@ -1299,6 +1299,7 @@ var translations = {
     "export.header.bmi": "BMI",
     "export.header.bodyFat": "\u4F53\u8102\u80AA\u7387 (%)",
     "export.header.source": "\u5165\u529B\u65B9\u6CD5",
+    "export.header.note": "\u30E1\u30E2",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
     "entry.source.quick": "\u9023\u6253",
     "diff.title": "\u524D\u65E5\u6BD4",
@@ -1588,6 +1589,7 @@ var translations = {
     "export.header.bmi": "BMI",
     "export.header.bodyFat": "Body Fat (%)",
     "export.header.source": "Source",
+    "export.header.note": "Note",
     "rainbow.congrats": "Congrats! Weight decreased!",
     "entry.source.quick": "Quick",
     "diff.title": "Daily Diff",
@@ -22600,7 +22602,7 @@ function render() {
                   <button type="button" class="btn secondary" data-action="toggle-voice" ${supportsSpeech ? "" : "disabled"}>
                     ${voiceActive ? t("entry.voiceStop") : t("entry.voiceStart")}
                   </button>
-                  <span class="helper">${voiceActive ? t("status.listening") : ""}</span>
+                  ${voiceActive ? `<span class="voice-active-indicator">${t("status.listening")}</span>` : ""}
                 </div>
                 <div class="voice-transcript">${voiceTranscript || t("entry.lastVoice")}</div>
               </div>
@@ -23593,7 +23595,7 @@ function exportExcel() {
     [t("export.header.bmi")]: r.bmi ?? "",
     [t("export.header.bodyFat")]: r.bf ?? "",
     [t("export.header.source")]: r.source,
-    [t("entry.note")]: r.note ?? ""
+    [t("export.header.note")]: r.note ?? ""
   }));
   const ws = utils.json_to_sheet(rows);
   const wb = utils.book_new();
@@ -23611,7 +23613,7 @@ function exportCSV() {
     setStatus(t("records.empty"), "error");
     return;
   }
-  const headers = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source"), t("entry.note")];
+  const headers = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source"), t("export.header.note")];
   const header = headers.map(csvEscape).join(",");
   const lines = state.records.map(
     (r) => [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source, r.note ?? ""].map(csvEscape).join(",")

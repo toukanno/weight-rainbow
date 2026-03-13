@@ -424,7 +424,7 @@ function render() {
                   <button type="button" class="btn secondary" data-action="toggle-voice" ${supportsSpeech ? "" : "disabled"}>
                     ${voiceActive ? t("entry.voiceStop") : t("entry.voiceStart")}
                   </button>
-                  <span class="helper">${voiceActive ? t("status.listening") : ""}</span>
+                  ${voiceActive ? `<span class="voice-active-indicator">${t("status.listening")}</span>` : ""}
                 </div>
                 <div class="voice-transcript">${voiceTranscript || t("entry.lastVoice")}</div>
               </div>
@@ -1511,7 +1511,7 @@ function exportExcel() {
     [t("export.header.bmi")]: r.bmi ?? "",
     [t("export.header.bodyFat")]: r.bf ?? "",
     [t("export.header.source")]: r.source,
-    [t("entry.note")]: r.note ?? "",
+    [t("export.header.note")]: r.note ?? "",
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -1531,7 +1531,7 @@ function exportCSV() {
     setStatus(t("records.empty"), "error");
     return;
   }
-  const headers = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source"), t("entry.note")];
+  const headers = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source"), t("export.header.note")];
   const header = headers.map(csvEscape).join(",");
   const lines = state.records.map((r) =>
     [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source, r.note ?? ""].map(csvEscape).join(",")

@@ -633,6 +633,30 @@
         flex-wrap: wrap;
       }
 
+      /* Voice active pulse */
+      @keyframes voice-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+
+      .voice-active-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--accent);
+        font-weight: 700;
+        font-size: 13px;
+        animation: voice-pulse 1.2s ease-in-out infinite;
+      }
+
+      .voice-active-indicator::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
       .chip-row,
       .record-search {
         margin-bottom: 10px;
@@ -842,6 +866,10 @@
         font-size: 13px;
         color: var(--ok);
         animation: fadeIn 0.3s ease-out;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
       }
       @keyframes fadeIn {
         from { opacity: 0; transform: translateY(-4px); }
