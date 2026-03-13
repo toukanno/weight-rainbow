@@ -758,6 +758,11 @@ export const translations = {
     "msHist.reached": "{kg}kg達成 — {date}（{days}日目）",
     "msHist.down": "減量の軌跡",
     "msHist.up": "増量の軌跡",
+    "journey.title": "体重ジャーニー",
+    "journey.loss": "減量期",
+    "journey.gain": "増量期",
+    "journey.maintain": "維持期",
+    "journey.total": "全体変化",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1518,6 +1523,11 @@ export const translations = {
     "msHist.reached": "{kg}kg reached — {date} (day {days})",
     "msHist.down": "Weight loss journey",
     "msHist.up": "Weight gain journey",
+    "journey.title": "Weight Journey",
+    "journey.loss": "Loss",
+    "journey.gain": "Gain",
+    "journey.maintain": "Maintain",
+    "journey.total": "Total change",
   },
 };
 

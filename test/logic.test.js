@@ -101,6 +101,7 @@ import {
   calcSuccessRate,
   calcRecordingRate,
   calcMilestoneHistory,
+  calcWeightJourney,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -7850,5 +7851,49 @@ describe("calcMilestoneHistory", () => {
     ];
     const result = calcMilestoneHistory(records);
     expect(result.milestones[0].daysFromStart).toBe(10);
+  });
+});
+
+// ── calcWeightJourney ──
+describe("calcWeightJourney", () => {
+  it("returns null for fewer than 7 records", () => {
+    const records = Array.from({ length: 6 }, (_, i) => ({
+      dt: `2026-01-${String(i + 1).padStart(2, "0")}`, wt: 70,
+    }));
+    expect(calcWeightJourney(records)).toBeNull();
+  });
+
+  it("detects a loss phase", () => {
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2026-01-${String(i + 1).padStart(2, "0")}`, wt: 75 - i * 0.3,
+    }));
+    const result = calcWeightJourney(records);
+    expect(result).not.toBeNull();
+    expect(result.phases.length).toBeGreaterThan(0);
+    expect(result.phases.some((p) => p.type === "loss")).toBe(true);
+    expect(result.totalChange).toBeLessThan(0);
+  });
+
+  it("detects maintain phase for flat weight", () => {
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2026-01-${String(i + 1).padStart(2, "0")}`, wt: 70,
+    }));
+    const result = calcWeightJourney(records);
+    expect(result).not.toBeNull();
+    expect(result.phases.some((p) => p.type === "maintain")).toBe(true);
+    expect(result.totalChange).toBe(0);
+  });
+
+  it("calculates totalChange correctly", () => {
+    const records = [
+      ...Array.from({ length: 7 }, (_, i) => ({
+        dt: `2026-01-${String(i + 1).padStart(2, "0")}`, wt: 75,
+      })),
+      ...Array.from({ length: 7 }, (_, i) => ({
+        dt: `2026-01-${String(i + 8).padStart(2, "0")}`, wt: 73,
+      })),
+    ];
+    const result = calcWeightJourney(records);
+    expect(result.totalChange).toBe(-2);
   });
 });

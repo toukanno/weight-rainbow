@@ -3963,7 +3963,12 @@ var translations = {
     "msHist.title": "\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3\u5C65\u6B74",
     "msHist.reached": "{kg}kg\u9054\u6210 \u2014 {date}\uFF08{days}\u65E5\u76EE\uFF09",
     "msHist.down": "\u6E1B\u91CF\u306E\u8ECC\u8DE1",
-    "msHist.up": "\u5897\u91CF\u306E\u8ECC\u8DE1"
+    "msHist.up": "\u5897\u91CF\u306E\u8ECC\u8DE1",
+    "journey.title": "\u4F53\u91CD\u30B8\u30E3\u30FC\u30CB\u30FC",
+    "journey.loss": "\u6E1B\u91CF\u671F",
+    "journey.gain": "\u5897\u91CF\u671F",
+    "journey.maintain": "\u7DAD\u6301\u671F",
+    "journey.total": "\u5168\u4F53\u5909\u5316"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4736,7 +4741,12 @@ var translations = {
     "msHist.title": "Milestone History",
     "msHist.reached": "{kg}kg reached \u2014 {date} (day {days})",
     "msHist.down": "Weight loss journey",
-    "msHist.up": "Weight gain journey"
+    "msHist.up": "Weight gain journey",
+    "journey.title": "Weight Journey",
+    "journey.loss": "Loss",
+    "journey.gain": "Gain",
+    "journey.maintain": "Maintain",
+    "journey.total": "Total change"
   }
 };
 function createTranslator(language) {
@@ -28733,6 +28743,10 @@ function resetData() {
 function drawChart() {
   const canvas = document.getElementById("chart");
   if (!canvas) return;
+  if (canvas._tooltipTimer) {
+    clearTimeout(canvas._tooltipTimer);
+    canvas._tooltipTimer = null;
+  }
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   canvas.width = rect.width * dpr;

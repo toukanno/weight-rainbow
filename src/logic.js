@@ -2968,3 +2968,63 @@ export function calcMilestoneHistory(records) {
 
   return { direction, startWt, latestWt, milestones };
 }
+
+/**
+ * Summarize the weight journey as a series of phases (loss, gain, maintain).
+ * Uses a 7-day smoothed average to determine phases.
+ * Returns { phases: [{ type, startDate, endDate, startWt, endWt, change, days }], totalChange }
+ */
+export function calcWeightJourney(records) {
+  if (records.length < 7) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+
+  // Calculate 7-point moving averages
+  const avgs = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const start = Math.max(0, i - 3);
+    const end = Math.min(sorted.length - 1, i + 3);
+    let sum = 0, count = 0;
+    for (let j = start; j <= end; j++) { sum += sorted[j].wt; count++; }
+    avgs.push({ dt: sorted[i].dt, avg: Math.round((sum / count) * 10) / 10 });
+  }
+
+  const THRESHOLD = 0.3; // kg per phase transition
+  const phases = [];
+  let phaseStart = 0;
+  let phaseType = "maintain";
+
+  for (let i = 1; i < avgs.length; i++) {
+    const change = avgs[i].avg - avgs[phaseStart].avg;
+    let currentType;
+    if (change < -THRESHOLD) currentType = "loss";
+    else if (change > THRESHOLD) currentType = "gain";
+    else currentType = "maintain";
+
+    if (currentType !== phaseType && i - phaseStart >= 3) {
+      phases.push({
+        type: phaseType,
+        startDate: avgs[phaseStart].dt,
+        endDate: avgs[i - 1].dt,
+        startWt: avgs[phaseStart].avg,
+        endWt: avgs[i - 1].avg,
+        change: Math.round((avgs[i - 1].avg - avgs[phaseStart].avg) * 10) / 10,
+        days: Math.round((new Date(avgs[i - 1].dt + "T00:00:00") - new Date(avgs[phaseStart].dt + "T00:00:00")) / 86400000),
+      });
+      phaseStart = i;
+      phaseType = currentType;
+    }
+  }
+  // Final phase
+  phases.push({
+    type: phaseType,
+    startDate: avgs[phaseStart].dt,
+    endDate: avgs[avgs.length - 1].dt,
+    startWt: avgs[phaseStart].avg,
+    endWt: avgs[avgs.length - 1].avg,
+    change: Math.round((avgs[avgs.length - 1].avg - avgs[phaseStart].avg) * 10) / 10,
+    days: Math.round((new Date(avgs[avgs.length - 1].dt + "T00:00:00") - new Date(avgs[phaseStart].dt + "T00:00:00")) / 86400000),
+  });
+
+  const totalChange = Math.round((sorted[sorted.length - 1].wt - sorted[0].wt) * 10) / 10;
+  return { phases, totalChange };
+}

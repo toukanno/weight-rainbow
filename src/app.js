@@ -104,6 +104,7 @@ import {
   calcSuccessRate,
   calcRecordingRate,
   calcMilestoneHistory,
+  calcWeightJourney,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -3835,6 +3836,7 @@ function resetData() {
 function drawChart() {
   const canvas = document.getElementById("chart");
   if (!canvas) return;
+  if (canvas._tooltipTimer) { clearTimeout(canvas._tooltipTimer); canvas._tooltipTimer = null; }
 
   // Fix DPI scaling for retina displays
   const dpr = window.devicePixelRatio || 1;
