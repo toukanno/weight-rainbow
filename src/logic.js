@@ -145,13 +145,14 @@ export function parseVoiceWeight(transcript, fallbackWeight = null) {
   return pickWeightCandidate(candidates, fallbackWeight);
 }
 
-export function buildRecord({ date, weight, profile, source, imageName = "", bodyFat = null }) {
+export function buildRecord({ date, weight, profile, source, imageName = "", bodyFat = null, note = "" }) {
   const bmi = calculateBMI(weight, profile.heightCm);
   return {
     dt: date,
     wt: weight,
     bmi,
     bf: bodyFat,
+    note: String(note || "").trim().slice(0, 100),
     source,
     imageName,
     createdAt: new Date().toISOString(),

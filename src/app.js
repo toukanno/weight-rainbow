@@ -103,6 +103,7 @@ function loadState() {
       pickerInt: 65,
       pickerDec: 0,
       bodyFat: "",
+      note: "",
     },
   };
 }
@@ -365,6 +366,10 @@ function render() {
                   <input id="bodyFat" name="bodyFat" inputmode="decimal" placeholder="${t("bodyFat.hint")}" value="${escapeAttr(state.form.bodyFat)}" />
                 </div>
               </div>
+              <div class="field">
+                <label for="entryNote">${t("entry.note")}</label>
+                <input id="entryNote" name="note" type="text" maxlength="100" placeholder="${t("entry.noteHint")}" value="${escapeAttr(state.form.note)}" />
+              </div>
 
               <!-- Quick Record Section -->
               <div class="quick-section">
@@ -407,6 +412,7 @@ function render() {
                 </div>
                 ${imagePreviewUrl ? `
                   <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" style="cursor: zoom-in;" data-action="zoom-photo" />
+                  <p class="helper" style="margin-top: 4px; text-align: center; font-size: 0.72rem; opacity: 0.7;">${t("photo.zoomHint")}</p>
                   ${!supportsTextDetection && !detectedWeights.length ? `<p class="helper" style="margin-top: 8px; text-align: center;">${t("photo.manualHint")}</p>` : ""}
                 ` : ""}
                 ${detectedWeights.length ? `<div style="margin-top: 12px;"><div class="helper">${t("entry.photoDetected")}</div><div class="chip-row" style="margin-top: 8px;">${detectedWeights.map((weight) => `<button type="button" class="chip" data-pick-weight="${weight}">${formatWeight(weight)}</button>`).join("")}</div></div>` : ""}
@@ -551,6 +557,7 @@ function render() {
                   ${renderOption("true", String(state.settings.autoTheme), t("settings.autoTheme.on"))}
                   ${renderOption("false", String(state.settings.autoTheme), t("settings.autoTheme.off"))}
                 </select>
+                <div class="helper" style="font-size:0.72rem;">${t("settings.autoTheme.hint")}</div>
               </div>
               <div class="field">
                 <label>${t("settings.platforms")}</label>
@@ -778,6 +785,7 @@ function renderRecord(record, prevRecord) {
           <div class="helper">${escapeAttr(record.dt)}${record.imageName ? ` / ${escapeAttr(record.imageName)}` : ""}</div>
         </div>
         <div class="helper">${t("bmi.title")}: ${bmiText}${record.bf ? ` / ${t("bodyFat.label")}: ${record.bf}%` : ""}</div>
+        ${record.note ? `<div class="helper" style="font-style:italic;">📝 ${escapeAttr(record.note)}</div>` : ""}
       </div>
       <button type="button" class="record-delete" data-delete-date="${escapeAttr(record.dt)}">${t("records.delete")}</button>
     </div>
@@ -939,7 +947,7 @@ function handleFieldInput(event) {
     return;
   }
 
-  if (["weight", "date", "bodyFat"].includes(name)) {
+  if (["weight", "date", "bodyFat", "note"].includes(name)) {
     state.form = { ...state.form, [name]: value };
     return;
   }
@@ -1076,6 +1084,7 @@ function saveRecordWithWeight(weight, source) {
     source,
     imageName: state.form.imageName,
     bodyFat: bfResult.bodyFat,
+    note: state.form.note,
   });
 
   const updated = upsertRecord(state.records, record);
@@ -1088,11 +1097,13 @@ function saveRecordWithWeight(weight, source) {
     pickerDec: Math.round((weightResult.weight - Math.floor(weightResult.weight)) * 10),
     imageName: source === "photo" ? state.form.imageName : "",
     bodyFat: "",
+    note: "",
   };
   if (!persist()) {
     setStatus(t("status.storageError"), "error");
     return;
   }
+  if (navigator.vibrate) navigator.vibrate(50);
   showUndoSnackbar(`${t("entry.saved")} · ${record.wt.toFixed(1)}kg`);
   // Scroll to chart after save
   setTimeout(() => {
@@ -1387,11 +1398,11 @@ function exportExcel() {
     return;
   }
   const rows = state.records.map((r) => ({
-    Date: r.dt,
-    "Weight (kg)": r.wt,
-    BMI: r.bmi ?? "",
-    "Body Fat (%)": r.bf ?? "",
-    Source: r.source,
+    [t("export.header.date")]: r.dt,
+    [t("export.header.weight")]: r.wt,
+    [t("export.header.bmi")]: r.bmi ?? "",
+    [t("export.header.bodyFat")]: r.bf ?? "",
+    [t("export.header.source")]: r.source,
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -1405,7 +1416,7 @@ function exportCSV() {
     setStatus(t("records.empty"), "error");
     return;
   }
-  const header = "Date,Weight (kg),BMI,Body Fat (%),Source";
+  const header = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source")].join(",");
   const lines = state.records.map((r) =>
     `${r.dt},${r.wt},${r.bmi ?? ""},${r.bf ?? ""},${r.source}`
   );
@@ -1422,9 +1433,10 @@ function exportText() {
   const lines = state.records.map((r) => {
     const bmiStr = r.bmi ? ` / BMI: ${r.bmi.toFixed(1)}` : "";
     const bfStr = r.bf ? ` / BF: ${r.bf.toFixed(1)}%` : "";
-    return `${r.dt}  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})`;
+    const noteStr = r.note ? `  [${r.note}]` : "";
+    return `${r.dt}  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})${noteStr}`;
   });
-  const text = `Rainbow Weight Log - ${new Date().toISOString().slice(0, 10)}\n${"=".repeat(48)}\n${lines.join("\n")}`;
+  const text = `${t("app.title")} - ${new Date().toISOString().slice(0, 10)}\n${"=".repeat(48)}\n${lines.join("\n")}`;
   downloadFile(text, `weight-rainbow-${new Date().toISOString().slice(0, 10)}.txt`, "text/plain");
   setStatus(t("export.textDone"));
 }
@@ -1565,6 +1577,8 @@ function resetData() {
     imageName: "",
     pickerInt: 65,
     pickerDec: 0,
+    bodyFat: "",
+    note: "",
   };
   quickWeight = 65.0;
   voiceTranscript = "";

@@ -433,4 +433,37 @@ describe("buildRecord with bodyFat", () => {
     });
     expect(record.bf).toBeNull();
   });
+
+  it("includes note when provided", () => {
+    const record = buildRecord({
+      date: "2026-03-13",
+      weight: 65,
+      profile: { heightCm: 170 },
+      source: "manual",
+      note: "  ate out  ",
+    });
+    expect(record.note).toBe("ate out");
+  });
+
+  it("defaults note to empty string", () => {
+    const record = buildRecord({
+      date: "2026-03-13",
+      weight: 65,
+      profile: { heightCm: 170 },
+      source: "manual",
+    });
+    expect(record.note).toBe("");
+  });
+
+  it("truncates note to 100 characters", () => {
+    const longNote = "a".repeat(150);
+    const record = buildRecord({
+      date: "2026-03-13",
+      weight: 65,
+      profile: { heightCm: 170 },
+      source: "manual",
+      note: longNote,
+    });
+    expect(record.note).toHaveLength(100);
+  });
 });

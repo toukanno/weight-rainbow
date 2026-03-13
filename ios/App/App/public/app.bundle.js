@@ -875,13 +875,14 @@
     const candidates = extractWeightCandidates(transcript);
     return pickWeightCandidate(candidates, fallbackWeight);
   }
-  function buildRecord({ date, weight, profile, source, imageName = "", bodyFat = null }) {
+  function buildRecord({ date, weight, profile, source, imageName = "", bodyFat = null, note = "" }) {
     const bmi = calculateBMI(weight, profile.heightCm);
     return {
       dt: date,
       wt: weight,
       bmi,
       bf: bodyFat,
+      note: String(note || "").trim().slice(0, 100),
       source,
       imageName,
       createdAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -1194,6 +1195,11 @@
       "export.excelDone": "Excel\u30D5\u30A1\u30A4\u30EB\u3092\u51FA\u529B\u3057\u307E\u3057\u305F",
       "export.csvDone": "CSV\u30D5\u30A1\u30A4\u30EB\u3092\u51FA\u529B\u3057\u307E\u3057\u305F",
       "export.textDone": "\u30C6\u30AD\u30B9\u30C8\u30D5\u30A1\u30A4\u30EB\u3092\u51FA\u529B\u3057\u307E\u3057\u305F",
+      "export.header.date": "\u65E5\u4ED8",
+      "export.header.weight": "\u4F53\u91CD (kg)",
+      "export.header.bmi": "BMI",
+      "export.header.bodyFat": "\u4F53\u8102\u80AA\u7387 (%)",
+      "export.header.source": "\u5165\u529B\u65B9\u6CD5",
       "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
       "entry.source.quick": "\u9023\u6253",
       "diff.title": "\u524D\u65E5\u6BD4",
@@ -1302,7 +1308,9 @@
       "camera.photo": "\u30D5\u30A9\u30C8\u30E9\u30A4\u30D6\u30E9\u30EA",
       "camera.picture": "\u30AB\u30E1\u30E9",
       "record.dailyLimit": "1\u65E510\u56DE\u307E\u3067\u4F53\u91CD\u3092\u8A18\u9332\u3067\u304D\u307E\u3059",
-      "record.dailyLimitReached": "\u672C\u65E5\u306E\u8A18\u9332\u4E0A\u9650\uFF0810\u56DE\uFF09\u306B\u9054\u3057\u307E\u3057\u305F"
+      "record.dailyLimitReached": "\u672C\u65E5\u306E\u8A18\u9332\u4E0A\u9650\uFF0810\u56DE\uFF09\u306B\u9054\u3057\u307E\u3057\u305F",
+      "entry.note": "\u30E1\u30E2",
+      "entry.noteHint": "\u98DF\u4E8B\u30FB\u904B\u52D5\u306A\u3069\uFF08100\u6587\u5B57\u307E\u3067\uFF09"
     },
     en: {
       "app.title": "Rainbow Weight Log",
@@ -1345,6 +1353,8 @@
       "entry.voiceStop": "Stop voice input",
       "entry.voiceHint": "Uses microphone permission only to capture your spoken weight and fill the input locally.",
       "entry.voiceUnsupported": "Voice input is not supported in this browser.",
+      "entry.note": "Note",
+      "entry.noteHint": "Optional note (max 100 chars)",
       "entry.saved": "Weight saved",
       "entry.noWeight": "Enter a weight value",
       "entry.bmiReady": "BMI for this entry",
@@ -1442,6 +1452,11 @@
       "export.excelDone": "Excel file exported",
       "export.csvDone": "CSV file exported",
       "export.textDone": "Text file exported",
+      "export.header.date": "Date",
+      "export.header.weight": "Weight (kg)",
+      "export.header.bmi": "BMI",
+      "export.header.bodyFat": "Body Fat (%)",
+      "export.header.source": "Source",
       "rainbow.congrats": "Congrats! Weight decreased!",
       "entry.source.quick": "Quick",
       "diff.title": "Daily Diff",
@@ -22130,7 +22145,8 @@
         imageName: "",
         pickerInt: 65,
         pickerDec: 0,
-        bodyFat: ""
+        bodyFat: "",
+        note: ""
       }
     };
   }
@@ -22372,6 +22388,10 @@
                   <input id="bodyFat" name="bodyFat" inputmode="decimal" placeholder="${t("bodyFat.hint")}" value="${escapeAttr(state.form.bodyFat)}" />
                 </div>
               </div>
+              <div class="field">
+                <label for="entryNote">${t("entry.note")}</label>
+                <input id="entryNote" name="note" type="text" maxlength="100" placeholder="${t("entry.noteHint")}" value="${escapeAttr(state.form.note)}" />
+              </div>
 
               <!-- Quick Record Section -->
               <div class="quick-section">
@@ -22412,6 +22432,7 @@
                 </div>
                 ${imagePreviewUrl ? `
                   <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" style="cursor: zoom-in;" data-action="zoom-photo" />
+                  <p class="helper" style="margin-top: 4px; text-align: center; font-size: 0.72rem; opacity: 0.7;">${t("photo.zoomHint")}</p>
                   ${!supportsTextDetection && !detectedWeights.length ? `<p class="helper" style="margin-top: 8px; text-align: center;">${t("photo.manualHint")}</p>` : ""}
                 ` : ""}
                 ${detectedWeights.length ? `<div style="margin-top: 12px;"><div class="helper">${t("entry.photoDetected")}</div><div class="chip-row" style="margin-top: 8px;">${detectedWeights.map((weight) => `<button type="button" class="chip" data-pick-weight="${weight}">${formatWeight(weight)}</button>`).join("")}</div></div>` : ""}
@@ -22554,6 +22575,7 @@
                   ${renderOption("true", String(state.settings.autoTheme), t("settings.autoTheme.on"))}
                   ${renderOption("false", String(state.settings.autoTheme), t("settings.autoTheme.off"))}
                 </select>
+                <div class="helper" style="font-size:0.72rem;">${t("settings.autoTheme.hint")}</div>
               </div>
               <div class="field">
                 <label>${t("settings.platforms")}</label>
@@ -22772,6 +22794,7 @@
           <div class="helper">${escapeAttr(record.dt)}${record.imageName ? ` / ${escapeAttr(record.imageName)}` : ""}</div>
         </div>
         <div class="helper">${t("bmi.title")}: ${bmiText}${record.bf ? ` / ${t("bodyFat.label")}: ${record.bf}%` : ""}</div>
+        ${record.note ? `<div class="helper" style="font-style:italic;">\u{1F4DD} ${escapeAttr(record.note)}</div>` : ""}
       </div>
       <button type="button" class="record-delete" data-delete-date="${escapeAttr(record.dt)}">${t("records.delete")}</button>
     </div>
@@ -22918,7 +22941,7 @@
       render();
       return;
     }
-    if (["weight", "date", "bodyFat"].includes(name)) {
+    if (["weight", "date", "bodyFat", "note"].includes(name)) {
       state.form = { ...state.form, [name]: value };
       return;
     }
@@ -23032,7 +23055,8 @@
       profile: state.profile,
       source,
       imageName: state.form.imageName,
-      bodyFat: bfResult.bodyFat
+      bodyFat: bfResult.bodyFat,
+      note: state.form.note
     });
     const updated = upsertRecord(state.records, record);
     state.records = trimRecords(updated, MAX_RECORDS);
@@ -23043,13 +23067,18 @@
       pickerInt: Math.floor(weightResult.weight),
       pickerDec: Math.round((weightResult.weight - Math.floor(weightResult.weight)) * 10),
       imageName: source === "photo" ? state.form.imageName : "",
-      bodyFat: ""
+      bodyFat: "",
+      note: ""
     };
     if (!persist()) {
       setStatus(t("status.storageError"), "error");
       return;
     }
+    if (navigator.vibrate) navigator.vibrate(50);
     showUndoSnackbar(`${t("entry.saved")} \xB7 ${record.wt.toFixed(1)}kg`);
+    setTimeout(() => {
+      document.getElementById("chart")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
   }
   function showUndoSnackbar(message) {
     statusMessage = message;
@@ -23295,11 +23324,11 @@
       return;
     }
     const rows = state.records.map((r) => ({
-      Date: r.dt,
-      "Weight (kg)": r.wt,
-      BMI: r.bmi ?? "",
-      "Body Fat (%)": r.bf ?? "",
-      Source: r.source
+      [t("export.header.date")]: r.dt,
+      [t("export.header.weight")]: r.wt,
+      [t("export.header.bmi")]: r.bmi ?? "",
+      [t("export.header.bodyFat")]: r.bf ?? "",
+      [t("export.header.source")]: r.source
     }));
     const ws = utils.json_to_sheet(rows);
     const wb = utils.book_new();
@@ -23312,7 +23341,7 @@
       setStatus(t("records.empty"), "error");
       return;
     }
-    const header = "Date,Weight (kg),BMI,Body Fat (%),Source";
+    const header = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source")].join(",");
     const lines = state.records.map(
       (r) => `${r.dt},${r.wt},${r.bmi ?? ""},${r.bf ?? ""},${r.source}`
     );
@@ -23328,9 +23357,10 @@
     const lines = state.records.map((r) => {
       const bmiStr = r.bmi ? ` / BMI: ${r.bmi.toFixed(1)}` : "";
       const bfStr = r.bf ? ` / BF: ${r.bf.toFixed(1)}%` : "";
-      return `${r.dt}  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})`;
+      const noteStr = r.note ? `  [${r.note}]` : "";
+      return `${r.dt}  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})${noteStr}`;
     });
-    const text = `Rainbow Weight Log - ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}
+    const text = `${t("app.title")} - ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}
 ${"=".repeat(48)}
 ${lines.join("\n")}`;
     downloadFile(text, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.txt`, "text/plain");
@@ -23457,7 +23487,9 @@ ${lines.join("\n")}`;
       date: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
       imageName: "",
       pickerInt: 65,
-      pickerDec: 0
+      pickerDec: 0,
+      bodyFat: "",
+      note: ""
     };
     quickWeight = 65;
     voiceTranscript = "";
