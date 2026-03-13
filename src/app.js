@@ -108,6 +108,7 @@ import {
   calcGoalScenarios,
   calcStreakCalendar,
   calcMovingAvgCrossover,
+  calcPredictionAccuracy,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -824,6 +825,7 @@ function render() {
                 ${renderMilestoneHistory()}
                 ${renderWeightJourney()}
                 ${renderMovingAvgCrossover()}
+                ${renderPredictionAccuracy()}
               </div>
               ` : ""}
             </div>
@@ -2438,6 +2440,42 @@ function renderMovingAvgCrossover() {
   `;
 }
 
+function renderPredictionAccuracy() {
+  const data = calcPredictionAccuracy(state.records);
+  if (data.accuracy === null) return "";
+
+  const ratingLabels = { excellent: t("pred.excellent"), good: t("pred.good"), fair: t("pred.fair"), poor: t("pred.poor") };
+  const ratingColors = { excellent: "pa-excellent", good: "pa-good", fair: "pa-fair", poor: "pa-poor" };
+  const ratingLabel = ratingLabels[data.rating] || data.rating;
+  const ratingCls = ratingColors[data.rating] || "";
+
+  const recentRows = data.predictions.slice(-5).reverse().map((p) =>
+    `<div class="pa-row"><span class="pa-date">${p.date.slice(5).replace("-", "/")}</span><span class="pa-pred">${p.predicted.toFixed(1)}</span><span class="pa-arrow">→</span><span class="pa-actual">${p.actual.toFixed(1)}</span><span class="pa-err ${p.error <= 0.5 ? "pa-hit" : "pa-miss"}">±${p.error.toFixed(1)}</span></div>`
+  ).join("");
+
+  return `
+    <div class="pa-section">
+      <div class="helper">${t("pred.title")}</div>
+      <div class="pa-summary">
+        <div class="pa-stat">
+          <span class="pa-big ${ratingCls}">${data.accuracy}%</span>
+          <span class="pa-label">${t("pred.accuracy")}</span>
+        </div>
+        <div class="pa-stat">
+          <span class="pa-big">${data.avgError.toFixed(1)}kg</span>
+          <span class="pa-label">${t("pred.avgError")}</span>
+        </div>
+        <div class="pa-badge ${ratingCls}">${ratingLabel}</div>
+      </div>
+      <div class="pa-recent">
+        <div class="helper hint-small">${t("pred.recent")}</div>
+        <div class="pa-header"><span>${""}</span><span>${t("pred.predicted")}</span><span></span><span>${t("pred.actual")}</span><span></span></div>
+        ${recentRows}
+      </div>
+    </div>
+  `;
+}
+
 function renderRecentEntries() {
   const entries = getRecentEntries(state.records, 5);
   if (entries.length === 0) return "";
@@ -3245,7 +3283,7 @@ function saveRecordWithWeight(weight, source) {
           if (w.type === "outsideRange") return escHtml(t("validate.outsideRange").replace("{min}", w.min).replace("{max}", w.max));
           return "";
         }).filter(Boolean);
-        container.innerHTML = `<div class="validate-warning-box"><p class="validate-warning-title">${escHtml(t("validate.title"))}</p>${msgs.map((m) => `<p class="validate-warning-msg">${escHtml(m)}</p>`).join("")}<button type="button" class="btn ghost validate-confirm" data-action="confirm-save">${escHtml(t("entry.save"))}</button></div>`;
+        container.innerHTML = `<div class="validate-warning-box"><p class="validate-warning-title">${escHtml(t("validate.title"))}</p>${msgs.map((m) => `<p class="validate-warning-msg">${m}</p>`).join("")}<button type="button" class="btn ghost validate-confirm" data-action="confirm-save">${escHtml(t("entry.save"))}</button></div>`;
         container.style.display = "block";
         validationBypass = true;
         return;

@@ -1507,8 +1507,8 @@ export function calcBMIHistory(records) {
   const withBMI = records.filter((r) => r.bmi != null && Number.isFinite(r.bmi));
   if (withBMI.length < 3) return null;
   const bmis = withBMI.map((r) => r.bmi);
-  const first = bmis[0];
-  const latest = bmis[bmis.length - 1];
+  const first = Math.round(bmis[0] * 10) / 10;
+  const latest = Math.round(bmis[bmis.length - 1] * 10) / 10;
   const min = Math.round(Math.min(...bmis) * 10) / 10;
   const max = Math.round(Math.max(...bmis) * 10) / 10;
   const change = Math.round((latest - first) * 10) / 10;
@@ -2073,7 +2073,7 @@ export function generateWeightSummary(records, profile = {}) {
 
   return {
     period: { from: first.dt, to: latest.dt, days },
-    weight: { first: first.wt, latest: latest.wt, min, max, avg, totalChange },
+    weight: { first: Math.round(first.wt * 10) / 10, latest: Math.round(latest.wt * 10) / 10, min: Math.round(min * 10) / 10, max: Math.round(max * 10) / 10, avg, totalChange },
     records: sorted.length,
     bmi: bmiInfo,
   };
@@ -3146,5 +3146,58 @@ export function calcMovingAvgCrossover(records) {
     currentTrend,
     shortMA: +lastShort.toFixed(2),
     longMA: +lastLong.toFixed(2),
+  };
+}
+
+/**
+ * Calculate prediction accuracy by comparing past trend-based predictions to actual weights.
+ * Uses rolling 7-day windows to predict the next value and measures error.
+ * Returns { accuracy, avgError, predictions: [{ date, predicted, actual, error }], rating }
+ */
+export function calcPredictionAccuracy(records) {
+  if (!records || records.length < 14) {
+    return { accuracy: null, avgError: null, predictions: [], rating: "insufficient" };
+  }
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const predictions = [];
+
+  for (let i = 7; i < sorted.length; i++) {
+    // Use last 7 records to predict the next one via linear trend
+    const window = sorted.slice(i - 7, i);
+    const n = window.length;
+    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+    for (let j = 0; j < n; j++) {
+      sumX += j;
+      sumY += window[j].wt;
+      sumXY += j * window[j].wt;
+      sumX2 += j * j;
+    }
+    const denom = n * sumX2 - sumX * sumX;
+    if (denom === 0) continue;
+    const slope = (n * sumXY - sumX * sumY) / denom;
+    const intercept = (sumY - slope * sumX) / n;
+    const predicted = +(intercept + slope * n).toFixed(2);
+    const actual = sorted[i].wt;
+    const error = +Math.abs(predicted - actual).toFixed(2);
+
+    predictions.push({ date: sorted[i].dt, predicted, actual, error });
+  }
+
+  if (!predictions.length) {
+    return { accuracy: null, avgError: null, predictions: [], rating: "insufficient" };
+  }
+
+  const avgError = +(predictions.reduce((s, p) => s + p.error, 0) / predictions.length).toFixed(2);
+  // Accuracy: percentage of predictions within 0.5kg
+  const withinThreshold = predictions.filter((p) => p.error <= 0.5).length;
+  const accuracy = +((withinThreshold / predictions.length) * 100).toFixed(1);
+  const rating = accuracy >= 80 ? "excellent" : accuracy >= 60 ? "good" : accuracy >= 40 ? "fair" : "poor";
+
+  return {
+    accuracy,
+    avgError,
+    predictions: predictions.slice(-10),
+    rating,
   };
 }

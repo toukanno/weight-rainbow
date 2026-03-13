@@ -2809,6 +2809,48 @@
       .mac-date { color: var(--muted); min-width: 40px; }
       .mac-label { flex: 1; }
 
+      .pa-section { margin-top: 14px; }
+      .pa-summary {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin: 8px 0;
+        flex-wrap: wrap;
+      }
+      .pa-stat { display: flex; flex-direction: column; align-items: center; }
+      .pa-big { font-size: 1.5rem; font-weight: 700; }
+      .pa-label { font-size: 0.75rem; color: var(--muted); }
+      .pa-badge {
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+      }
+      .pa-excellent { color: var(--ok); }
+      .pa-good { color: var(--accent-3); }
+      .pa-fair { color: var(--accent); }
+      .pa-poor { color: var(--danger); }
+      .pa-badge.pa-excellent { background: color-mix(in srgb, var(--ok) 15%, transparent); }
+      .pa-badge.pa-good { background: color-mix(in srgb, var(--accent-3) 15%, transparent); }
+      .pa-badge.pa-fair { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+      .pa-badge.pa-poor { background: color-mix(in srgb, var(--danger) 15%, transparent); }
+      .pa-recent { margin-top: 8px; }
+      .pa-header, .pa-row {
+        display: grid;
+        grid-template-columns: 40px 1fr 20px 1fr 50px;
+        gap: 4px;
+        align-items: center;
+        font-size: 0.85rem;
+        padding: 3px 0;
+      }
+      .pa-header { color: var(--muted); font-size: 0.75rem; }
+      .pa-row { border-bottom: 1px solid var(--border); }
+      .pa-row:last-child { border-bottom: none; }
+      .pa-date { color: var(--muted); }
+      .pa-arrow { text-align: center; color: var(--muted); }
+      .pa-hit { color: var(--ok); font-weight: 600; }
+      .pa-miss { color: var(--danger); }
+
       .success-section {
         margin-top: 14px;
         text-align: center;

@@ -2088,8 +2088,8 @@ function calcBMIHistory(records) {
   const withBMI = records.filter((r) => r.bmi != null && Number.isFinite(r.bmi));
   if (withBMI.length < 3) return null;
   const bmis = withBMI.map((r) => r.bmi);
-  const first = bmis[0];
-  const latest = bmis[bmis.length - 1];
+  const first = Math.round(bmis[0] * 10) / 10;
+  const latest = Math.round(bmis[bmis.length - 1] * 10) / 10;
   const min = Math.round(Math.min(...bmis) * 10) / 10;
   const max = Math.round(Math.max(...bmis) * 10) / 10;
   const change = Math.round((latest - first) * 10) / 10;
@@ -2501,7 +2501,7 @@ function generateWeightSummary(records, profile = {}) {
   }
   return {
     period: { from: first.dt, to: latest.dt, days: days2 },
-    weight: { first: first.wt, latest: latest.wt, min, max, avg, totalChange },
+    weight: { first: Math.round(first.wt * 10) / 10, latest: Math.round(latest.wt * 10) / 10, min: Math.round(min * 10) / 10, max: Math.round(max * 10) / 10, avg, totalChange },
     records: sorted.length,
     bmi: bmiInfo
   };
@@ -3328,6 +3328,45 @@ function calcMovingAvgCrossover(records) {
     longMA: +lastLong.toFixed(2)
   };
 }
+function calcPredictionAccuracy(records) {
+  if (!records || records.length < 14) {
+    return { accuracy: null, avgError: null, predictions: [], rating: "insufficient" };
+  }
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const predictions = [];
+  for (let i = 7; i < sorted.length; i++) {
+    const window2 = sorted.slice(i - 7, i);
+    const n = window2.length;
+    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+    for (let j = 0; j < n; j++) {
+      sumX += j;
+      sumY += window2[j].wt;
+      sumXY += j * window2[j].wt;
+      sumX2 += j * j;
+    }
+    const denom = n * sumX2 - sumX * sumX;
+    if (denom === 0) continue;
+    const slope = (n * sumXY - sumX * sumY) / denom;
+    const intercept = (sumY - slope * sumX) / n;
+    const predicted = +(intercept + slope * n).toFixed(2);
+    const actual = sorted[i].wt;
+    const error = +Math.abs(predicted - actual).toFixed(2);
+    predictions.push({ date: sorted[i].dt, predicted, actual, error });
+  }
+  if (!predictions.length) {
+    return { accuracy: null, avgError: null, predictions: [], rating: "insufficient" };
+  }
+  const avgError = +(predictions.reduce((s, p) => s + p.error, 0) / predictions.length).toFixed(2);
+  const withinThreshold = predictions.filter((p) => p.error <= 0.5).length;
+  const accuracy = +(withinThreshold / predictions.length * 100).toFixed(1);
+  const rating = accuracy >= 80 ? "excellent" : accuracy >= 60 ? "good" : accuracy >= 40 ? "fair" : "poor";
+  return {
+    accuracy,
+    avgError,
+    predictions: predictions.slice(-10),
+    rating
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -4130,7 +4169,18 @@ var translations = {
     "cross.golden": "\u30B4\u30FC\u30EB\u30C7\u30F3\u30AF\u30ED\u30B9\uFF08\u4E0B\u964D\u8EE2\u63DB\uFF09",
     "cross.death": "\u30C7\u30C3\u30C9\u30AF\u30ED\u30B9\uFF08\u4E0A\u6607\u8EE2\u63DB\uFF09",
     "cross.nodata": "30\u4EF6\u4EE5\u4E0A\u306E\u8A18\u9332\u304C\u5FC5\u8981\u3067\u3059",
-    "cross.none": "\u8EE2\u63DB\u30B7\u30B0\u30CA\u30EB\u306A\u3057"
+    "cross.none": "\u8EE2\u63DB\u30B7\u30B0\u30CA\u30EB\u306A\u3057",
+    "pred.title": "\u4E88\u6E2C\u7CBE\u5EA6",
+    "pred.accuracy": "\u7684\u4E2D\u7387\uFF08\xB10.5kg\u4EE5\u5185\uFF09",
+    "pred.avgError": "\u5E73\u5747\u8AA4\u5DEE",
+    "pred.excellent": "\u512A\u79C0",
+    "pred.good": "\u826F\u597D",
+    "pred.fair": "\u666E\u901A",
+    "pred.poor": "\u8981\u6539\u5584",
+    "pred.nodata": "14\u4EF6\u4EE5\u4E0A\u306E\u8A18\u9332\u304C\u5FC5\u8981\u3067\u3059",
+    "pred.recent": "\u6700\u8FD1\u306E\u4E88\u6E2C",
+    "pred.predicted": "\u4E88\u6E2C",
+    "pred.actual": "\u5B9F\u6E2C"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4931,7 +4981,18 @@ var translations = {
     "cross.golden": "Golden Cross (downtrend shift)",
     "cross.death": "Death Cross (uptrend shift)",
     "cross.nodata": "Need 30+ records",
-    "cross.none": "No crossover signals"
+    "cross.none": "No crossover signals",
+    "pred.title": "Prediction Accuracy",
+    "pred.accuracy": "Hit Rate (within \xB10.5kg)",
+    "pred.avgError": "Avg Error",
+    "pred.excellent": "Excellent",
+    "pred.good": "Good",
+    "pred.fair": "Fair",
+    "pred.poor": "Needs Improvement",
+    "pred.nodata": "Need 14+ records",
+    "pred.recent": "Recent Predictions",
+    "pred.predicted": "Predicted",
+    "pred.actual": "Actual"
   }
 };
 function createTranslator(language) {
@@ -26104,6 +26165,7 @@ function render() {
                 ${renderMilestoneHistory()}
                 ${renderWeightJourney()}
                 ${renderMovingAvgCrossover()}
+                ${renderPredictionAccuracy()}
               </div>
               ` : ""}
             </div>
@@ -27622,6 +27684,38 @@ function renderMovingAvgCrossover() {
     </div>
   `;
 }
+function renderPredictionAccuracy() {
+  const data = calcPredictionAccuracy(state.records);
+  if (data.accuracy === null) return "";
+  const ratingLabels = { excellent: t("pred.excellent"), good: t("pred.good"), fair: t("pred.fair"), poor: t("pred.poor") };
+  const ratingColors = { excellent: "pa-excellent", good: "pa-good", fair: "pa-fair", poor: "pa-poor" };
+  const ratingLabel = ratingLabels[data.rating] || data.rating;
+  const ratingCls = ratingColors[data.rating] || "";
+  const recentRows = data.predictions.slice(-5).reverse().map(
+    (p) => `<div class="pa-row"><span class="pa-date">${p.date.slice(5).replace("-", "/")}</span><span class="pa-pred">${p.predicted.toFixed(1)}</span><span class="pa-arrow">\u2192</span><span class="pa-actual">${p.actual.toFixed(1)}</span><span class="pa-err ${p.error <= 0.5 ? "pa-hit" : "pa-miss"}">\xB1${p.error.toFixed(1)}</span></div>`
+  ).join("");
+  return `
+    <div class="pa-section">
+      <div class="helper">${t("pred.title")}</div>
+      <div class="pa-summary">
+        <div class="pa-stat">
+          <span class="pa-big ${ratingCls}">${data.accuracy}%</span>
+          <span class="pa-label">${t("pred.accuracy")}</span>
+        </div>
+        <div class="pa-stat">
+          <span class="pa-big">${data.avgError.toFixed(1)}kg</span>
+          <span class="pa-label">${t("pred.avgError")}</span>
+        </div>
+        <div class="pa-badge ${ratingCls}">${ratingLabel}</div>
+      </div>
+      <div class="pa-recent">
+        <div class="helper hint-small">${t("pred.recent")}</div>
+        <div class="pa-header"><span>${""}</span><span>${t("pred.predicted")}</span><span></span><span>${t("pred.actual")}</span><span></span></div>
+        ${recentRows}
+      </div>
+    </div>
+  `;
+}
 function renderRecentEntries() {
   const entries = getRecentEntries(state.records, 5);
   if (entries.length === 0) return "";
@@ -28387,7 +28481,7 @@ function saveRecordWithWeight(weight, source) {
           if (w.type === "outsideRange") return escHtml(t("validate.outsideRange").replace("{min}", w.min).replace("{max}", w.max));
           return "";
         }).filter(Boolean);
-        container.innerHTML = `<div class="validate-warning-box"><p class="validate-warning-title">${escHtml(t("validate.title"))}</p>${msgs.map((m) => `<p class="validate-warning-msg">${escHtml(m)}</p>`).join("")}<button type="button" class="btn ghost validate-confirm" data-action="confirm-save">${escHtml(t("entry.save"))}</button></div>`;
+        container.innerHTML = `<div class="validate-warning-box"><p class="validate-warning-title">${escHtml(t("validate.title"))}</p>${msgs.map((m) => `<p class="validate-warning-msg">${m}</p>`).join("")}<button type="button" class="btn ghost validate-confirm" data-action="confirm-save">${escHtml(t("entry.save"))}</button></div>`;
         container.style.display = "block";
         validationBypass = true;
         return;

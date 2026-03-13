@@ -105,6 +105,7 @@ import {
   calcGoalScenarios,
   calcStreakCalendar,
   calcMovingAvgCrossover,
+  calcPredictionAccuracy,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
