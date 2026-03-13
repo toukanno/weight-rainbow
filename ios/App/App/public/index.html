@@ -518,6 +518,10 @@
         transform: scale(1.02);
       }
 
+      .tab:active {
+        transform: scale(0.96);
+      }
+
       .btn {
         background: linear-gradient(135deg, var(--accent), var(--accent-2));
         color: white;
@@ -986,6 +990,12 @@
           border-color: var(--accent);
           transform: translateY(-1px);
         }
+      }
+
+      .chip:active,
+      .note-tag:active,
+      .date-shortcut:active {
+        transform: scale(0.95);
       }
 
       .hidden {
@@ -1862,6 +1872,10 @@
         background: linear-gradient(135deg, var(--accent), var(--accent-2));
         color: white;
         border-color: transparent;
+      }
+
+      .summary-tab:active {
+        transform: scale(0.95);
       }
 
       /* Calendar */
