@@ -1130,6 +1130,36 @@
         color: var(--ok, #10b981);
       }
 
+      .freq-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .freq-chart {
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        height: 60px;
+        margin-top: 8px;
+      }
+      .freq-bar-col {
+        flex: 1;
+        display: flex;
+        align-items: flex-end;
+        height: 100%;
+      }
+      .freq-bar {
+        width: 100%;
+        background: color-mix(in srgb, var(--primary) 60%, transparent);
+        border-radius: 3px 3px 0 0;
+        text-align: center;
+        font-size: 0.65rem;
+        font-weight: 700;
+        color: var(--text);
+        min-height: 4px;
+        transition: height 0.3s ease;
+      }
+
       .consistency-section {
         margin-top: 14px;
         padding-top: 12px;

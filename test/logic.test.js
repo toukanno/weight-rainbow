@@ -56,6 +56,7 @@ import {
   calcWeightRangePosition,
   calcTagImpact,
   calcBestPeriod,
+  calcWeeklyFrequency,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -2444,5 +2445,49 @@ describe("calcBestPeriod", () => {
     expect(result).not.toBeNull();
     expect(result[30]).toBeDefined();
     expect(result[30].change).toBeLessThan(0);
+  });
+});
+
+describe("calcWeeklyFrequency", () => {
+  it("returns null for empty records", () => {
+    expect(calcWeeklyFrequency([])).toBeNull();
+  });
+
+  it("returns 8 buckets by default", () => {
+    const records = [{ dt: "2025-01-06", wt: 70 }];
+    const result = calcWeeklyFrequency(records);
+    expect(result).not.toBeNull();
+    expect(result.buckets.length).toBe(8);
+    expect(result.weeks).toBe(8);
+  });
+
+  it("counts records in correct week buckets", () => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const records = [{ dt: todayStr, wt: 70 }];
+    const result = calcWeeklyFrequency(records);
+    // The last bucket (current week) should have count >= 1
+    expect(result.buckets[result.buckets.length - 1].count).toBeGreaterThanOrEqual(1);
+  });
+
+  it("calculates average per week", () => {
+    const today = new Date();
+    const records = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      records.push({ dt, wt: 70 });
+    }
+    const result = calcWeeklyFrequency(records);
+    expect(result.avgPerWeek).toBeGreaterThan(0);
+    expect(result.maxCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("supports custom week count", () => {
+    const records = [{ dt: "2025-01-06", wt: 70 }];
+    const result = calcWeeklyFrequency(records, 4);
+    expect(result.buckets.length).toBe(4);
+    expect(result.weeks).toBe(4);
   });
 });

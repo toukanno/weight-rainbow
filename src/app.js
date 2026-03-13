@@ -1224,6 +1224,24 @@ function renderBestPeriod() {
   `;
 }
 
+function renderWeeklyFrequency() {
+  const freq = calcWeeklyFrequency(state.records);
+  if (!freq) return "";
+  const hasPerfect = freq.buckets.some((b) => b.count >= 7);
+  const bars = freq.buckets.map((b) => {
+    const pct = Math.round((b.count / freq.maxCount) * 100);
+    return `<div class="freq-bar-col"><div class="freq-bar" style="height:${Math.max(pct, 4)}%">${b.count}</div></div>`;
+  }).join("");
+  return `
+    <div class="freq-section">
+      <div class="helper">${t("freq.title")}</div>
+      <div class="freq-chart">${bars}</div>
+      <div class="helper hint-small">${t("freq.avg").replace("{avg}", freq.avgPerWeek)} · ${t("freq.hint").replace("{weeks}", freq.weeks)}</div>
+      ${hasPerfect ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;margin-top:2px;">${t("freq.perfect")}</div>` : ""}
+    </div>
+  `;
+}
+
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";

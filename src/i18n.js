@@ -428,6 +428,10 @@ export const translations = {
     "bestPeriod.change": "{change}kg",
     "bestPeriod.range": "{from} 〜 {to}",
     "bestPeriod.weight": "{start}kg → {end}kg",
+    "freq.title": "週別 記録頻度",
+    "freq.avg": "平均: 週{avg}回",
+    "freq.perfect": "毎日記録達成の週あり！",
+    "freq.hint": "過去{weeks}週間の記録数",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -858,6 +862,10 @@ export const translations = {
     "bestPeriod.change": "{change}kg",
     "bestPeriod.range": "{from} to {to}",
     "bestPeriod.weight": "{start}kg → {end}kg",
+    "freq.title": "Weekly Recording Frequency",
+    "freq.avg": "Average: {avg}/week",
+    "freq.perfect": "Perfect week achieved!",
+    "freq.hint": "Last {weeks} weeks",
   },
 };
 

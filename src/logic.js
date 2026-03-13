@@ -1063,3 +1063,28 @@ export function calcBestPeriod(records) {
   }
   return Object.keys(result).length ? result : null;
 }
+
+export function calcWeeklyFrequency(records, weeks = 8) {
+  if (!records.length) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dayOfWeek = today.getDay();
+  const currentWeekStart = new Date(today);
+  currentWeekStart.setDate(today.getDate() - dayOfWeek);
+
+  const buckets = [];
+  for (let w = weeks - 1; w >= 0; w--) {
+    const weekStart = new Date(currentWeekStart);
+    weekStart.setDate(currentWeekStart.getDate() - w * 7);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    const startStr = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, "0")}-${String(weekStart.getDate()).padStart(2, "0")}`;
+    const endStr = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth() + 1).padStart(2, "0")}-${String(weekEnd.getDate()).padStart(2, "0")}`;
+    const count = records.filter((r) => r.dt >= startStr && r.dt <= endStr).length;
+    buckets.push({ startStr, count });
+  }
+  const maxCount = Math.max(...buckets.map((b) => b.count), 1);
+  const totalRecords = buckets.reduce((s, b) => s + b.count, 0);
+  const avgPerWeek = Math.round((totalRecords / weeks) * 10) / 10;
+  return { buckets, maxCount, avgPerWeek, weeks };
+}

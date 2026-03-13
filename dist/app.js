@@ -1669,6 +1669,29 @@ function calcBestPeriod(records) {
   }
   return Object.keys(result).length ? result : null;
 }
+function calcWeeklyFrequency(records, weeks = 8) {
+  if (!records.length) return null;
+  const today = /* @__PURE__ */ new Date();
+  today.setHours(0, 0, 0, 0);
+  const dayOfWeek = today.getDay();
+  const currentWeekStart = new Date(today);
+  currentWeekStart.setDate(today.getDate() - dayOfWeek);
+  const buckets = [];
+  for (let w = weeks - 1; w >= 0; w--) {
+    const weekStart = new Date(currentWeekStart);
+    weekStart.setDate(currentWeekStart.getDate() - w * 7);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    const startStr = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, "0")}-${String(weekStart.getDate()).padStart(2, "0")}`;
+    const endStr = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth() + 1).padStart(2, "0")}-${String(weekEnd.getDate()).padStart(2, "0")}`;
+    const count = records.filter((r) => r.dt >= startStr && r.dt <= endStr).length;
+    buckets.push({ startStr, count });
+  }
+  const maxCount = Math.max(...buckets.map((b) => b.count), 1);
+  const totalRecords = buckets.reduce((s, b) => s + b.count, 0);
+  const avgPerWeek = Math.round(totalRecords / weeks * 10) / 10;
+  return { buckets, maxCount, avgPerWeek, weeks };
+}
 
 // src/i18n.js
 var translations = {
@@ -24151,6 +24174,23 @@ function renderBestPeriod() {
     <div class="best-period-section">
       <div class="helper">${t("bestPeriod.title")}</div>
       ${weekRow}${monthRow}
+    </div>
+  `;
+}
+function renderWeeklyFrequency() {
+  const freq = calcWeeklyFrequency(state.records);
+  if (!freq) return "";
+  const hasPerfect = freq.buckets.some((b) => b.count >= 7);
+  const bars = freq.buckets.map((b) => {
+    const pct = Math.round(b.count / freq.maxCount * 100);
+    return `<div class="freq-bar-col"><div class="freq-bar" style="height:${Math.max(pct, 4)}%">${b.count}</div></div>`;
+  }).join("");
+  return `
+    <div class="freq-section">
+      <div class="helper">${t("freq.title")}</div>
+      <div class="freq-chart">${bars}</div>
+      <div class="helper hint-small">${t("freq.avg").replace("{avg}", freq.avgPerWeek)} \xB7 ${t("freq.hint").replace("{weeks}", freq.weeks)}</div>
+      ${hasPerfect ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;margin-top:2px;">${t("freq.perfect")}</div>` : ""}
     </div>
   `;
 }
