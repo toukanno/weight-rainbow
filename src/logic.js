@@ -797,6 +797,46 @@ export function calcCalendarChangeMap(records) {
   return map;
 }
 
+export function calcBMIDistribution(records) {
+  const withBMI = records.filter((r) => r.bmi != null && Number.isFinite(r.bmi));
+  if (!withBMI.length) return null;
+  const zones = { under: 0, normal: 0, over: 0, obese: 0 };
+  for (const r of withBMI) {
+    if (r.bmi < 18.5) zones.under++;
+    else if (r.bmi < 25) zones.normal++;
+    else if (r.bmi < 30) zones.over++;
+    else zones.obese++;
+  }
+  const total = withBMI.length;
+  return {
+    under: { count: zones.under, pct: Math.round((zones.under / total) * 100) },
+    normal: { count: zones.normal, pct: Math.round((zones.normal / total) * 100) },
+    over: { count: zones.over, pct: Math.round((zones.over / total) * 100) },
+    obese: { count: zones.obese, pct: Math.round((zones.obese / total) * 100) },
+    total,
+  };
+}
+
+export function calcWeightPercentile(records) {
+  if (records.length < 3) return null;
+  const latest = records[records.length - 1].wt;
+  const sorted = records.map((r) => r.wt).sort((a, b) => a - b);
+  let below = 0;
+  for (const w of sorted) {
+    if (w < latest) below++;
+    else break;
+  }
+  const percentile = Math.round((below / sorted.length) * 100);
+  return {
+    percentile,
+    latest,
+    min: sorted[0],
+    max: sorted[sorted.length - 1],
+    rank: below + 1,
+    total: sorted.length,
+  };
+}
+
 export function exportRecordsToCSV(records) {
   if (!records.length) return "";
   const header = "date,weight,bmi,bodyFat,source,note";

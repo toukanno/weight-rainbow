@@ -44,6 +44,8 @@ import {
   calcTrendForecast,
   calcSmoothedWeight,
   calcCalendarChangeMap,
+  calcBMIDistribution,
+  calcWeightPercentile,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -1501,5 +1503,92 @@ describe("parseCSVImport edge cases", () => {
     const result = parseCSVImport(csv);
     expect(result.records.length).toBe(0);
     expect(result.errors.length).toBe(1);
+  });
+});
+
+describe("calcBMIDistribution", () => {
+  it("returns null for empty records", () => {
+    expect(calcBMIDistribution([])).toBeNull();
+  });
+
+  it("returns null when no records have BMI", () => {
+    expect(calcBMIDistribution([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("categorizes records into correct BMI zones", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 50, bmi: 17.0 },  // under
+      { dt: "2025-01-02", wt: 60, bmi: 22.0 },  // normal
+      { dt: "2025-01-03", wt: 65, bmi: 23.5 },  // normal
+      { dt: "2025-01-04", wt: 75, bmi: 27.0 },  // over
+      { dt: "2025-01-05", wt: 95, bmi: 32.0 },  // obese
+    ];
+    const dist = calcBMIDistribution(records);
+    expect(dist.under.count).toBe(1);
+    expect(dist.normal.count).toBe(2);
+    expect(dist.over.count).toBe(1);
+    expect(dist.obese.count).toBe(1);
+    expect(dist.total).toBe(5);
+    expect(dist.under.pct).toBe(20);
+    expect(dist.normal.pct).toBe(40);
+  });
+
+  it("ignores records without BMI", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 60, bmi: 22.0 },
+      { dt: "2025-01-02", wt: 70, bmi: null },
+      { dt: "2025-01-03", wt: 65 },
+    ];
+    const dist = calcBMIDistribution(records);
+    expect(dist.total).toBe(1);
+    expect(dist.normal.count).toBe(1);
+    expect(dist.normal.pct).toBe(100);
+  });
+});
+
+describe("calcWeightPercentile", () => {
+  it("returns null for fewer than 3 records", () => {
+    expect(calcWeightPercentile([])).toBeNull();
+    expect(calcWeightPercentile([{ dt: "2025-01-01", wt: 70 }, { dt: "2025-01-02", wt: 65 }])).toBeNull();
+  });
+
+  it("calculates percentile for latest weight", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 80 },
+      { dt: "2025-01-02", wt: 75 },
+      { dt: "2025-01-03", wt: 70 },
+      { dt: "2025-01-04", wt: 65 },
+      { dt: "2025-01-05", wt: 60 },
+    ];
+    const result = calcWeightPercentile(records);
+    expect(result.percentile).toBe(0);
+    expect(result.latest).toBe(60);
+    expect(result.min).toBe(60);
+    expect(result.max).toBe(80);
+    expect(result.rank).toBe(1);
+    expect(result.total).toBe(5);
+  });
+
+  it("returns 100% when latest is the heaviest", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 60 },
+      { dt: "2025-01-02", wt: 65 },
+      { dt: "2025-01-03", wt: 70 },
+      { dt: "2025-01-04", wt: 80 },
+    ];
+    const result = calcWeightPercentile(records);
+    expect(result.percentile).toBe(75);
+    expect(result.rank).toBe(4);
+  });
+
+  it("handles equal weights", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70 },
+      { dt: "2025-01-03", wt: 70 },
+    ];
+    const result = calcWeightPercentile(records);
+    expect(result.percentile).toBe(0);
+    expect(result.rank).toBe(1);
   });
 });
