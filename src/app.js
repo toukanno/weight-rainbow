@@ -1781,6 +1781,40 @@ function exportCSV() {
   }
 }
 
+function handleCSVImport(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const text = ev.target.result;
+    const { records, errors } = parseCSVImport(text);
+    if (!records.length) {
+      setStatus(t("import.csv.empty"), "error");
+      e.target.value = "";
+      return;
+    }
+    if (!confirm(t("import.csv.confirm").replace("{count}", records.length))) {
+      e.target.value = "";
+      return;
+    }
+    let merged = [...state.records];
+    for (const rec of records) {
+      merged = upsertRecord(merged, rec);
+    }
+    merged = trimRecords(merged);
+    state.records = merged;
+    localStorage.setItem(STORAGE_KEYS.records, JSON.stringify(merged));
+    let msg = t("import.csv.success").replace("{count}", records.length);
+    if (errors.length) {
+      msg += " " + t("import.csv.errors").replace("{count}", errors.length);
+    }
+    setStatus(msg);
+    e.target.value = "";
+    render();
+  };
+  reader.readAsText(file);
+}
+
 function exportText() {
   if (!state.records.length) {
     setStatus(t("records.empty"), "error");
@@ -2250,6 +2284,26 @@ function drawChart() {
   canvas.addEventListener("click", canvas._chartClickHandler);
   canvas.addEventListener("mousemove", canvas._chartMoveHandler);
   canvas.addEventListener("mouseleave", canvas._chartLeaveHandler);
+  // Touch drag support for mobile chart interaction
+  if (canvas._chartTouchHandler) {
+    canvas.removeEventListener("touchmove", canvas._chartTouchHandler);
+  }
+  if (canvas._chartTouchEndHandler) {
+    canvas.removeEventListener("touchend", canvas._chartTouchEndHandler);
+  }
+  canvas._chartTouchHandler = (e) => {
+    e.preventDefault();
+    showTooltipForEvent(e);
+  };
+  canvas._chartTouchEndHandler = () => {
+    clearTimeout(canvas._tooltipTimer);
+    canvas._tooltipTimer = setTimeout(() => {
+      const tip = document.getElementById("chartTooltip");
+      if (tip) tip.style.display = "none";
+    }, 2000);
+  };
+  canvas.addEventListener("touchmove", canvas._chartTouchHandler, { passive: false });
+  canvas.addEventListener("touchend", canvas._chartTouchEndHandler);
 }
 
 function signedWeight(weight) {
