@@ -3716,3 +3716,37 @@ export function calcStreakFreezeInfo(records) {
     longestStreak,
   };
 }
+
+/**
+ * Prepare data for a recent weight bar chart visualization.
+ * Returns the last N entries with percentage positions relative to a min-max range.
+ * Each bar shows date, weight, change from previous, and percentage height.
+ * Returns { bars: [{ dt, wt, change, pct, isGoal }], min, max, goalPct }
+ */
+export function calcRecentWeightBars(records, goalWeight = 0, count = 7) {
+  if (!records || records.length < 2) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-count);
+
+  const weights = recent.map((r) => r.wt);
+  if (goalWeight > 0) weights.push(goalWeight);
+  const min = Math.min(...weights) - 0.5;
+  const max = Math.max(...weights) + 0.5;
+  const range = max - min || 1;
+
+  const bars = recent.map((r, i) => {
+    const prev = i > 0 ? recent[i - 1].wt : (sorted.length > count ? sorted[sorted.length - count - 1]?.wt : null);
+    const change = prev !== null ? +(r.wt - prev).toFixed(1) : null;
+    return {
+      dt: r.dt,
+      wt: r.wt,
+      change,
+      pct: +((r.wt - min) / range * 100).toFixed(1),
+    };
+  });
+
+  const goalPct = goalWeight > 0 ? +((goalWeight - min) / range * 100).toFixed(1) : null;
+
+  return { bars, min, max, goalPct };
+}

@@ -4641,7 +4641,9 @@ var translations = {
     "sfreeze.current": "\u73FE\u5728\u306E\u9023\u7D9A\u8A18\u9332",
     "sfreeze.longest": "\u6700\u9577\u9023\u7D9A\u8A18\u9332",
     "sfreeze.days": "\u65E5",
-    "sfreeze.info": "7\u65E5\u9023\u7D9A\u8A18\u9332\u30671\u56DE\u5206\u306E\u30D5\u30EA\u30FC\u30BA\u3092\u7372\u5F97"
+    "sfreeze.info": "7\u65E5\u9023\u7D9A\u8A18\u9332\u30671\u56DE\u5206\u306E\u30D5\u30EA\u30FC\u30BA\u3092\u7372\u5F97",
+    "rbars.title": "\u6700\u8FD1\u306E\u4F53\u91CD\u63A8\u79FB",
+    "rbars.goal": "\u76EE\u6A19"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5538,7 +5540,9 @@ var translations = {
     "sfreeze.current": "Current streak",
     "sfreeze.longest": "Longest streak",
     "sfreeze.days": "days",
-    "sfreeze.info": "Earn 1 freeze for every 7 consecutive days"
+    "sfreeze.info": "Earn 1 freeze for every 7 consecutive days",
+    "rbars.title": "Recent Weight Trend",
+    "rbars.goal": "Goal"
   }
 };
 function createTranslator(language) {

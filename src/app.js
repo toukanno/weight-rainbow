@@ -119,6 +119,7 @@ import {
   calcDailyTarget,
   calcMonthPhaseAvg,
   calcStreakFreezeInfo,
+  calcRecentWeightBars,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -816,6 +817,7 @@ function render() {
             ${renderDailyTarget()}
             ${renderMonthPhaseAvg()}
             ${renderStreakFreeze()}
+            ${renderRecentWeightBars()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -2847,6 +2849,41 @@ function renderStreakFreeze() {
         <span>${t("sfreeze.used")}: ${data.freezesUsed}</span>
       </div>
       <div class="sf-info">${t("sfreeze.info")}</div>
+    </div>
+  `;
+}
+
+function renderRecentWeightBars() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const data = calcRecentWeightBars(state.records, goalWeight, 7);
+  if (!data) return "";
+
+  const barsHtml = data.bars.map((b) => {
+    const changeCls = b.change !== null ? (b.change < 0 ? "rb-down" : b.change > 0 ? "rb-up" : "") : "";
+    const changeStr = b.change !== null ? `<span class="rb-change ${changeCls}">${b.change > 0 ? "+" : ""}${b.change.toFixed(1)}</span>` : "";
+    return `
+      <div class="rb-col">
+        <div class="rb-val">${b.wt.toFixed(1)}</div>
+        ${changeStr}
+        <div class="rb-bar-wrap">
+          <div class="rb-bar" style="height:${Math.max(b.pct, 3)}%"></div>
+        </div>
+        <div class="rb-date">${b.dt.slice(5).replace("-", "/")}</div>
+      </div>
+    `;
+  }).join("");
+
+  const goalLine = data.goalPct !== null
+    ? `<div class="rb-goal-line" style="bottom:${data.goalPct}%"><span class="rb-goal-label">${t("rbars.goal")}</span></div>`
+    : "";
+
+  return `
+    <div class="rb-section">
+      <div class="helper">${t("rbars.title")}</div>
+      <div class="rb-chart">
+        ${goalLine}
+        ${barsHtml}
+      </div>
     </div>
   `;
 }

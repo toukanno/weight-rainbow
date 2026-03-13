@@ -882,6 +882,8 @@ export const translations = {
     "sfreeze.longest": "最長連続記録",
     "sfreeze.days": "日",
     "sfreeze.info": "7日連続記録で1回分のフリーズを獲得",
+    "rbars.title": "最近の体重推移",
+    "rbars.goal": "目標",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1766,6 +1768,8 @@ export const translations = {
     "sfreeze.longest": "Longest streak",
     "sfreeze.days": "days",
     "sfreeze.info": "Earn 1 freeze for every 7 consecutive days",
+    "rbars.title": "Recent Weight Trend",
+    "rbars.goal": "Goal",
   },
 };
 

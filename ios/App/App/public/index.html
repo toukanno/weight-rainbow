@@ -488,7 +488,7 @@
       .input-grid,
       .settings-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
+        gap: 16px;
       }
 
       .field {
@@ -4210,6 +4210,8 @@
         border-radius: 16px;
         background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, transparent), color-mix(in srgb, var(--accent-2) 8%, transparent));
         border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+        border-left: 3px solid var(--accent);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
         color: var(--text);
         font-size: 14px;
         font-weight: 600;
@@ -4604,6 +4606,7 @@
         height: 100%;
         border-radius: 6px;
         background: linear-gradient(90deg, var(--accent), var(--ok));
+        box-shadow: inset 0 1px 2px rgba(255,255,255,0.35);
         transition: width 0.5s ease;
       }
 
@@ -5086,17 +5089,17 @@
 
       .achievement-badge.bronze {
         background: linear-gradient(135deg, #cd7f32, #b87333);
-        box-shadow: 0 2px 8px rgba(205, 127, 50, 0.3);
+        box-shadow: 0 2px 8px rgba(205, 127, 50, 0.3), inset 0 1px 2px rgba(255,255,255,0.35);
       }
 
       .achievement-badge.silver {
         background: linear-gradient(135deg, #c0c0c0, #a8a8a8);
-        box-shadow: 0 2px 8px rgba(192, 192, 192, 0.3);
+        box-shadow: 0 2px 8px rgba(192, 192, 192, 0.3), inset 0 1px 2px rgba(255,255,255,0.45);
       }
 
       .achievement-badge.gold {
         background: linear-gradient(135deg, #ffd700, #ffb300);
-        box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+        box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3), inset 0 1px 2px rgba(255,255,255,0.4);
       }
 
       /* Midnight theme overrides for new elements */
