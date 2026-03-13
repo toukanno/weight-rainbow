@@ -50,6 +50,7 @@ import {
   calcWeightPercentile,
   calcMovingAverages,
   calcGoalMilestones,
+  calcRecordingTimeStats,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -691,6 +692,7 @@ function render() {
               </div>`}
             </div>
             ${renderSourceBreakdown()}
+            ${renderRecordingTime()}
             <div class="export-grid">
               <button type="button" class="btn secondary" data-action="export-excel">📊 ${t("export.excel")}</button>
               <button type="button" class="btn secondary" data-action="export-csv">📄 ${t("export.csv")}</button>
@@ -1069,6 +1071,25 @@ function renderSourceBreakdown() {
           return `<span class="source-chip"><span class="source-icon">${icon}</span> ${t("entry.source." + src)} <strong>${count}</strong> (${pct}%)</span>`;
         }).join("")}
       </div>
+    </div>
+  `;
+}
+
+function renderRecordingTime() {
+  const timeStats = calcRecordingTimeStats(state.records);
+  if (!timeStats) return "";
+  const periods = ["morning", "afternoon", "evening", "night"];
+  const icons = { morning: "🌅", afternoon: "☀️", evening: "🌆", night: "🌙" };
+  return `
+    <div class="time-stats-section">
+      <div class="helper">${t("timeStats.title")}</div>
+      <div class="time-stats-bar">
+        ${periods.filter((p) => timeStats[p].pct > 0).map((p) => `<div class="time-stats-segment time-${p}" style="width:${timeStats[p].pct}%" title="${t("timeStats." + p)}: ${timeStats[p].count} (${timeStats[p].pct}%)"></div>`).join("")}
+      </div>
+      <div class="time-stats-legend">
+        ${periods.map((p) => `<span class="time-stats-item">${icons[p]} ${t("timeStats." + p)} ${timeStats[p].pct}%</span>`).join("")}
+      </div>
+      <div class="helper hint-small" style="margin-top:4px;">${t("timeStats.most").replace("{period}", t("timeStats." + timeStats.mostCommon))}</div>
     </div>
   `;
 }

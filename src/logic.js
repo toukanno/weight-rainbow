@@ -644,49 +644,61 @@ export function filterRecordsByDateRange(records, fromDate, toDate) {
 
 export function parseCSVImport(csvText) {
   if (!csvText || !csvText.trim()) return { records: [], errors: [] };
-  const lines = csvText.trim().split(/\r?\n/);
-  if (lines.length < 2) return { records: [], errors: ["No data rows found"] };
+
+  // Single-pass CSV parser handling quoted fields with newlines, commas, and escaped quotes
+  const text = csvText.trim();
+  const allRows = [];
+  let fields = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') { inQuotes = false; }
+      else { field += ch; }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      fields.push(field); field = "";
+    } else if (ch === "\r" && text[i + 1] === "\n") {
+      fields.push(field); field = "";
+      allRows.push(fields); fields = [];
+      i++; // skip \n
+    } else if (ch === "\n") {
+      fields.push(field); field = "";
+      allRows.push(fields); fields = [];
+    } else {
+      field += ch;
+    }
+  }
+  fields.push(field);
+  allRows.push(fields);
+
+  if (allRows.length < 2) return { records: [], errors: ["No data rows found"] };
 
   // Skip header row
   const records = [];
   const errors = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
+  for (let i = 1; i < allRows.length; i++) {
+    const row = allRows[i];
+    if (row.length === 1 && !row[0].trim()) continue;
 
-    // Simple CSV parse (handles quoted fields)
-    const fields = [];
-    let current = "";
-    let inQuotes = false;
-    for (let j = 0; j < line.length; j++) {
-      const ch = line[j];
-      if (inQuotes) {
-        if (ch === '"' && line[j + 1] === '"') { current += '"'; j++; }
-        else if (ch === '"') { inQuotes = false; }
-        else { current += ch; }
-      } else {
-        if (ch === '"') { inQuotes = true; }
-        else if (ch === ",") { fields.push(current); current = ""; }
-        else { current += ch; }
-      }
-    }
-    fields.push(current);
-
-    const dt = fields[0]?.trim();
-    const wt = Number(fields[1]?.trim());
+    const dt = row[0]?.trim();
+    const wt = Number(row[1]?.trim());
 
     if (!dt || !/^\d{4}-\d{2}-\d{2}$/.test(dt)) {
-      errors.push(`Row ${i + 1}: invalid date "${fields[0]}"`);
+      errors.push(`Row ${i + 1}: invalid date "${row[0]}"`);
       continue;
     }
     if (!Number.isFinite(wt) || wt < WEIGHT_RANGE.min || wt > WEIGHT_RANGE.max) {
-      errors.push(`Row ${i + 1}: invalid weight "${fields[1]}"`);
+      errors.push(`Row ${i + 1}: invalid weight "${row[1]}"`);
       continue;
     }
 
-    const bmi = fields[2]?.trim() ? Number(fields[2]) : null;
-    const bf = fields[3]?.trim() ? Number(fields[3]) : null;
-    const note = fields[5]?.trim() || "";
+    const bmi = row[2]?.trim() ? Number(row[2]) : null;
+    const bf = row[3]?.trim() ? Number(row[3]) : null;
+    const note = row[5]?.trim() || "";
 
     records.push({ dt, wt, bmi: Number.isFinite(bmi) ? bmi : null, bf: Number.isFinite(bf) ? bf : null, source: "import", note: note.slice(0, 100), createdAt: new Date().toISOString() });
   }
@@ -848,6 +860,31 @@ export function calcWeightPercentile(records) {
     max: sorted[sorted.length - 1],
     rank: below + 1,
     total: sorted.length,
+  };
+}
+
+export function calcRecordingTimeStats(records) {
+  const withTime = records.filter((r) => r.createdAt);
+  if (withTime.length < 3) return null;
+  const hours = withTime.map((r) => new Date(r.createdAt).getHours());
+  const buckets = { morning: 0, afternoon: 0, evening: 0, night: 0 };
+  for (const h of hours) {
+    if (h >= 5 && h < 12) buckets.morning++;
+    else if (h >= 12 && h < 17) buckets.afternoon++;
+    else if (h >= 17 && h < 22) buckets.evening++;
+    else buckets.night++;
+  }
+  const total = withTime.length;
+  const avgHour = Math.round(hours.reduce((s, h) => s + h, 0) / total);
+  const most = Object.entries(buckets).sort((a, b) => b[1] - a[1])[0];
+  return {
+    morning: { count: buckets.morning, pct: Math.round((buckets.morning / total) * 100) },
+    afternoon: { count: buckets.afternoon, pct: Math.round((buckets.afternoon / total) * 100) },
+    evening: { count: buckets.evening, pct: Math.round((buckets.evening / total) * 100) },
+    night: { count: buckets.night, pct: Math.round((buckets.night / total) * 100) },
+    avgHour,
+    mostCommon: most[0],
+    total,
   };
 }
 

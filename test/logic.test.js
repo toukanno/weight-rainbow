@@ -48,6 +48,7 @@ import {
   calcWeightPercentile,
   calcMovingAverages,
   calcGoalMilestones,
+  calcRecordingTimeStats,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -1904,6 +1905,96 @@ describe("calcBodyFatStats edge cases", () => {
   });
 });
 
+describe("parseCSVImport multiline fields", () => {
+  it("handles quoted fields with embedded newlines", () => {
+    const csv = `date,weight,bmi,bodyFat,source,note\r\n2025-01-01,70,,,,\"line1\nline2\"`;
+    const { records, errors } = parseCSVImport(csv);
+    expect(errors).toHaveLength(0);
+    expect(records).toHaveLength(1);
+    expect(records[0].note).toBe("line1\nline2");
+  });
+
+  it("handles quoted fields with commas", () => {
+    const csv = `date,weight,bmi,bodyFat,source,note\r\n2025-01-02,65,,,,\"ate pizza, cake\"`;
+    const { records } = parseCSVImport(csv);
+    expect(records).toHaveLength(1);
+    expect(records[0].note).toBe("ate pizza, cake");
+  });
+
+  it("handles escaped double quotes in fields", () => {
+    const csv = `date,weight,bmi,bodyFat,source,note\r\n2025-01-03,68,,,,\"said \"\"hello\"\"\"`;
+    const { records } = parseCSVImport(csv);
+    expect(records).toHaveLength(1);
+    expect(records[0].note).toBe('said "hello"');
+  });
+});
+
+describe("trimRecords edge cases", () => {
+  it("returns same array if under max", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    expect(trimRecords(records, 5)).toBe(records);
+  });
+
+  it("trims oldest records when over max", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 71 },
+      { dt: "2025-01-03", wt: 72 },
+      { dt: "2025-01-04", wt: 73 },
+    ];
+    const result = trimRecords(records, 2);
+    expect(result).toHaveLength(2);
+    expect(result[0].dt).toBe("2025-01-03");
+    expect(result[1].dt).toBe("2025-01-04");
+  });
+});
+
+describe("calcCalendarChangeMap edge cases", () => {
+  it("returns empty map for single record", () => {
+    expect(calcCalendarChangeMap([{ dt: "2025-01-01", wt: 70 }])).toEqual({});
+  });
+
+  it("calculates daily changes correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69.5 },
+      { dt: "2025-01-03", wt: 70.2 },
+    ];
+    const map = calcCalendarChangeMap(records);
+    expect(map["2025-01-02"]).toBe(-0.5);
+    expect(map["2025-01-03"]).toBe(0.7);
+    expect(map["2025-01-01"]).toBeUndefined();
+  });
+});
+
+describe("calcWeightPercentile edge cases", () => {
+  it("returns null for fewer than 3 records", () => {
+    expect(calcWeightPercentile([{ dt: "2025-01-01", wt: 70 }, { dt: "2025-01-02", wt: 71 }])).toBeNull();
+  });
+
+  it("returns 0 percentile when latest is the minimum", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72 },
+      { dt: "2025-01-02", wt: 71 },
+      { dt: "2025-01-03", wt: 69 },
+    ];
+    const result = calcWeightPercentile(records);
+    expect(result.percentile).toBe(0);
+    expect(result.rank).toBe(1);
+  });
+
+  it("returns high percentile when latest is near max", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 65 },
+      { dt: "2025-01-02", wt: 66 },
+      { dt: "2025-01-03", wt: 70 },
+      { dt: "2025-01-04", wt: 75 },
+    ];
+    const result = calcWeightPercentile(records);
+    expect(result.percentile).toBe(75);
+  });
+});
+
 describe("calcGoalMilestones", () => {
   it("returns null for empty records", () => {
     expect(calcGoalMilestones([], 60)).toBeNull();
@@ -1941,5 +2032,52 @@ describe("calcGoalMilestones", () => {
     ];
     const milestones = calcGoalMilestones(records, 60);
     expect(milestones.every((m) => m.reached)).toBe(true);
+  });
+});
+
+describe("calcRecordingTimeStats", () => {
+  it("returns null for fewer than 3 records with createdAt", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, createdAt: "2025-01-01T08:00:00Z" },
+      { dt: "2025-01-02", wt: 71, createdAt: "2025-01-02T09:00:00Z" },
+    ];
+    expect(calcRecordingTimeStats(records)).toBeNull();
+  });
+
+  it("returns null when no records have createdAt", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 71 },
+      { dt: "2025-01-03", wt: 72 },
+    ];
+    expect(calcRecordingTimeStats(records)).toBeNull();
+  });
+
+  it("categorizes morning recordings correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, createdAt: "2025-01-01T07:00:00" },
+      { dt: "2025-01-02", wt: 71, createdAt: "2025-01-02T08:30:00" },
+      { dt: "2025-01-03", wt: 72, createdAt: "2025-01-03T06:00:00" },
+    ];
+    const stats = calcRecordingTimeStats(records);
+    expect(stats).not.toBeNull();
+    expect(stats.morning.count).toBe(3);
+    expect(stats.morning.pct).toBe(100);
+    expect(stats.mostCommon).toBe("morning");
+    expect(stats.total).toBe(3);
+  });
+
+  it("distributes across time buckets", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, createdAt: "2025-01-01T07:00:00" },
+      { dt: "2025-01-02", wt: 71, createdAt: "2025-01-02T14:00:00" },
+      { dt: "2025-01-03", wt: 72, createdAt: "2025-01-03T20:00:00" },
+      { dt: "2025-01-04", wt: 73, createdAt: "2025-01-04T02:00:00" },
+    ];
+    const stats = calcRecordingTimeStats(records);
+    expect(stats.morning.count).toBe(1);
+    expect(stats.afternoon.count).toBe(1);
+    expect(stats.evening.count).toBe(1);
+    expect(stats.night.count).toBe(1);
   });
 });

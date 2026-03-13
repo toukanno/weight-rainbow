@@ -1297,52 +1297,63 @@ function filterRecordsByDateRange(records, fromDate, toDate) {
 }
 function parseCSVImport(csvText) {
   if (!csvText || !csvText.trim()) return { records: [], errors: [] };
-  const lines = csvText.trim().split(/\r?\n/);
-  if (lines.length < 2) return { records: [], errors: ["No data rows found"] };
+  const text = csvText.trim();
+  const allRows = [];
+  let fields = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') {
+        field += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      fields.push(field);
+      field = "";
+    } else if (ch === "\r" && text[i + 1] === "\n") {
+      fields.push(field);
+      field = "";
+      allRows.push(fields);
+      fields = [];
+      i++;
+    } else if (ch === "\n") {
+      fields.push(field);
+      field = "";
+      allRows.push(fields);
+      fields = [];
+    } else {
+      field += ch;
+    }
+  }
+  fields.push(field);
+  allRows.push(fields);
+  if (allRows.length < 2) return { records: [], errors: ["No data rows found"] };
   const records = [];
   const errors = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    const fields = [];
-    let current = "";
-    let inQuotes = false;
-    for (let j = 0; j < line.length; j++) {
-      const ch = line[j];
-      if (inQuotes) {
-        if (ch === '"' && line[j + 1] === '"') {
-          current += '"';
-          j++;
-        } else if (ch === '"') {
-          inQuotes = false;
-        } else {
-          current += ch;
-        }
-      } else {
-        if (ch === '"') {
-          inQuotes = true;
-        } else if (ch === ",") {
-          fields.push(current);
-          current = "";
-        } else {
-          current += ch;
-        }
-      }
-    }
-    fields.push(current);
-    const dt = fields[0]?.trim();
-    const wt = Number(fields[1]?.trim());
+  for (let i = 1; i < allRows.length; i++) {
+    const row = allRows[i];
+    if (row.length === 1 && !row[0].trim()) continue;
+    const dt = row[0]?.trim();
+    const wt = Number(row[1]?.trim());
     if (!dt || !/^\d{4}-\d{2}-\d{2}$/.test(dt)) {
-      errors.push(`Row ${i + 1}: invalid date "${fields[0]}"`);
+      errors.push(`Row ${i + 1}: invalid date "${row[0]}"`);
       continue;
     }
     if (!Number.isFinite(wt) || wt < WEIGHT_RANGE.min || wt > WEIGHT_RANGE.max) {
-      errors.push(`Row ${i + 1}: invalid weight "${fields[1]}"`);
+      errors.push(`Row ${i + 1}: invalid weight "${row[1]}"`);
       continue;
     }
-    const bmi = fields[2]?.trim() ? Number(fields[2]) : null;
-    const bf = fields[3]?.trim() ? Number(fields[3]) : null;
-    const note = fields[5]?.trim() || "";
+    const bmi = row[2]?.trim() ? Number(row[2]) : null;
+    const bf = row[3]?.trim() ? Number(row[3]) : null;
+    const note = row[5]?.trim() || "";
     records.push({ dt, wt, bmi: Number.isFinite(bmi) ? bmi : null, bf: Number.isFinite(bf) ? bf : null, source: "import", note: note.slice(0, 100), createdAt: (/* @__PURE__ */ new Date()).toISOString() });
   }
   return { records, errors };
@@ -1478,6 +1489,30 @@ function calcWeightPercentile(records) {
     max: sorted[sorted.length - 1],
     rank: below + 1,
     total: sorted.length
+  };
+}
+function calcRecordingTimeStats(records) {
+  const withTime = records.filter((r) => r.createdAt);
+  if (withTime.length < 3) return null;
+  const hours = withTime.map((r) => new Date(r.createdAt).getHours());
+  const buckets = { morning: 0, afternoon: 0, evening: 0, night: 0 };
+  for (const h of hours) {
+    if (h >= 5 && h < 12) buckets.morning++;
+    else if (h >= 12 && h < 17) buckets.afternoon++;
+    else if (h >= 17 && h < 22) buckets.evening++;
+    else buckets.night++;
+  }
+  const total = withTime.length;
+  const avgHour = Math.round(hours.reduce((s, h) => s + h, 0) / total);
+  const most = Object.entries(buckets).sort((a, b) => b[1] - a[1])[0];
+  return {
+    morning: { count: buckets.morning, pct: Math.round(buckets.morning / total * 100) },
+    afternoon: { count: buckets.afternoon, pct: Math.round(buckets.afternoon / total * 100) },
+    evening: { count: buckets.evening, pct: Math.round(buckets.evening / total * 100) },
+    night: { count: buckets.night, pct: Math.round(buckets.night / total * 100) },
+    avgHour,
+    mostCommon: most[0],
+    total
   };
 }
 function calcMovingAverages(records, shortWindow = 7, longWindow = 30) {
@@ -1700,6 +1735,13 @@ var translations = {
     "ma.crossUp": "\u{1F4C8} \u5897\u52A0\u30B7\u30B0\u30CA\u30EB: \u77ED\u671F\u5E73\u5747\u304C\u9577\u671F\u5E73\u5747\u3092\u4E0A\u56DE\u308A\u307E\u3057\u305F",
     "goal.milestone": "{pct}% \u9054\u6210",
     "goal.milestoneTarget": "\u76EE\u6A19: {weight}kg",
+    "timeStats.title": "\u8A18\u9332\u6642\u9593\u5E2F",
+    "timeStats.morning": "\u671D (5-12\u6642)",
+    "timeStats.afternoon": "\u663C (12-17\u6642)",
+    "timeStats.evening": "\u591C (17-22\u6642)",
+    "timeStats.night": "\u6DF1\u591C (22-5\u6642)",
+    "timeStats.avg": "\u5E73\u5747\u8A18\u9332\u6642\u523B: {hour}\u6642",
+    "timeStats.most": "\u6700\u3082\u591A\u3044\u6642\u9593\u5E2F: {period}",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
     "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01\uFF08-{diff}kg\uFF09",
     "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
@@ -2086,6 +2128,13 @@ var translations = {
     "ma.crossUp": "\u{1F4C8} Increase signal: short-term crossed above long-term",
     "goal.milestone": "{pct}% reached",
     "goal.milestoneTarget": "Target: {weight}kg",
+    "timeStats.title": "Recording Time",
+    "timeStats.morning": "Morning (5-12)",
+    "timeStats.afternoon": "Afternoon (12-17)",
+    "timeStats.evening": "Evening (17-22)",
+    "timeStats.night": "Night (22-5)",
+    "timeStats.avg": "Average recording time: {hour}:00",
+    "timeStats.most": "Most common: {period}",
     "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
@@ -23372,6 +23421,7 @@ function render() {
               </div>`}
             </div>
             ${renderSourceBreakdown()}
+            ${renderRecordingTime()}
             <div class="export-grid">
               <button type="button" class="btn secondary" data-action="export-excel">\u{1F4CA} ${t("export.excel")}</button>
               <button type="button" class="btn secondary" data-action="export-csv">\u{1F4C4} ${t("export.csv")}</button>
@@ -23739,6 +23789,24 @@ function renderSourceBreakdown() {
     return `<span class="source-chip"><span class="source-icon">${icon}</span> ${t("entry.source." + src)} <strong>${count}</strong> (${pct}%)</span>`;
   }).join("")}
       </div>
+    </div>
+  `;
+}
+function renderRecordingTime() {
+  const timeStats = calcRecordingTimeStats(state.records);
+  if (!timeStats) return "";
+  const periods = ["morning", "afternoon", "evening", "night"];
+  const icons = { morning: "\u{1F305}", afternoon: "\u2600\uFE0F", evening: "\u{1F306}", night: "\u{1F319}" };
+  return `
+    <div class="time-stats-section">
+      <div class="helper">${t("timeStats.title")}</div>
+      <div class="time-stats-bar">
+        ${periods.filter((p) => timeStats[p].pct > 0).map((p) => `<div class="time-stats-segment time-${p}" style="width:${timeStats[p].pct}%" title="${t("timeStats." + p)}: ${timeStats[p].count} (${timeStats[p].pct}%)"></div>`).join("")}
+      </div>
+      <div class="time-stats-legend">
+        ${periods.map((p) => `<span class="time-stats-item">${icons[p]} ${t("timeStats." + p)} ${timeStats[p].pct}%</span>`).join("")}
+      </div>
+      <div class="helper hint-small" style="margin-top:4px;">${t("timeStats.most").replace("{period}", t("timeStats." + timeStats.mostCommon))}</div>
     </div>
   `;
 }
