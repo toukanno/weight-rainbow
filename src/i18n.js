@@ -477,6 +477,13 @@ export const translations = {
     "calorie.hint": "体重変化から推定（1kg ≈ 7,700kcal）",
     "analytics.showMore": "▼ 詳細分析を表示",
     "analytics.showLess": "▲ 詳細分析を非表示",
+    "momentum.title": "モメンタムスコア",
+    "momentum.score": "{score}/100",
+    "momentum.great": "絶好調！",
+    "momentum.good": "順調",
+    "momentum.fair": "もう少し",
+    "momentum.low": "立て直しが必要",
+    "momentum.hint": "トレンド・記録頻度・安定性から算出",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -956,6 +963,13 @@ export const translations = {
     "calorie.hint": "Estimated from weight change (1kg ≈ 7,700kcal)",
     "analytics.showMore": "▼ Show detailed analytics",
     "analytics.showLess": "▲ Hide detailed analytics",
+    "momentum.title": "Momentum Score",
+    "momentum.score": "{score}/100",
+    "momentum.great": "Excellent!",
+    "momentum.good": "On track",
+    "momentum.fair": "Needs improvement",
+    "momentum.low": "Time to refocus",
+    "momentum.hint": "Based on trend, consistency, and stability",
   },
 };
 

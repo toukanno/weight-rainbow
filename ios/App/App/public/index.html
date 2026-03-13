@@ -1315,6 +1315,36 @@
         margin-top: 2px;
       }
 
+      .momentum-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .momentum-bar-track {
+        height: 8px;
+        border-radius: 4px;
+        background: color-mix(in srgb, var(--text) 15%, transparent);
+        margin-top: 8px;
+        overflow: hidden;
+      }
+      .momentum-bar-fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.3s ease;
+      }
+      .momentum-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 6px;
+      }
+      .momentum-score {
+        font-size: 1.1rem;
+      }
+      .momentum-label {
+        font-size: 0.85rem;
+      }
+
       .analytics-toggle-section {
         margin-top: 14px;
         padding-top: 12px;
@@ -2926,12 +2956,16 @@
       body[data-theme="midnight"] .plateau-section,
       body[data-theme="midnight"] .gaps-section,
       body[data-theme="midnight"] .calorie-section,
+      body[data-theme="midnight"] .momentum-section,
       body[data-theme="midnight"] .analytics-toggle-section {
         border-color: rgba(139, 146, 176, 0.14);
       }
       body[data-theme="midnight"] .calorie-card {
         background: rgba(139, 146, 176, 0.08);
         border-color: rgba(139, 146, 176, 0.14);
+      }
+      body[data-theme="midnight"] .momentum-bar-track {
+        background: rgba(139, 146, 176, 0.15);
       }
 
       body[data-theme="midnight"] .best-period-row,

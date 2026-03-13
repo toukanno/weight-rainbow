@@ -62,6 +62,7 @@ import {
   calcWeightPlateau,
   calcRecordGaps,
   calcCalorieEstimate,
+  calcMomentumScore,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -3237,5 +3238,85 @@ describe("calcCalorieEstimate", () => {
     expect(result).not.toBeNull();
     expect(result.week.totalKcal).toBeGreaterThan(0);
     expect(result.week.dailyKcal).toBeGreaterThan(0);
+  });
+});
+
+describe("calcMomentumScore", () => {
+  it("returns null with fewer than 7 records", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({ dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 70 }));
+    expect(calcMomentumScore(records)).toBeNull();
+  });
+
+  it("returns score between 0 and 100", () => {
+    const today = new Date();
+    const records = Array.from({ length: 10 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (9 - i));
+      return { dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, wt: 70 - i * 0.1 };
+    });
+    const result = calcMomentumScore(records);
+    expect(result).not.toBeNull();
+    expect(result.score).toBeGreaterThanOrEqual(0);
+    expect(result.score).toBeLessThanOrEqual(100);
+    expect(["great", "good", "fair", "low"]).toContain(result.level);
+  });
+
+  it("gives higher score for consistent weight loss", () => {
+    const today = new Date();
+    const records = Array.from({ length: 10 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (9 - i));
+      return { dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, wt: 75 - i * 0.5 };
+    });
+    const result = calcMomentumScore(records);
+    expect(result.score).toBeGreaterThanOrEqual(60);
+  });
+
+  it("includes factors array", () => {
+    const today = new Date();
+    const records = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (6 - i));
+      return { dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, wt: 70 };
+    });
+    const result = calcMomentumScore(records);
+    expect(result).not.toBeNull();
+    expect(Array.isArray(result.factors)).toBe(true);
+  });
+
+  it("awards near goal bonus", () => {
+    const today = new Date();
+    const records = Array.from({ length: 10 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (9 - i));
+      return { dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, wt: 65.5 - i * 0.05 };
+    });
+    const result = calcMomentumScore(records, 65);
+    expect(result.factors).toContain("nearGoal");
+  });
+
+  it("handles weight gain goal correctly", () => {
+    const today = new Date();
+    const records = Array.from({ length: 10 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (9 - i));
+      return { dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, wt: 55 + i * 0.5 };
+    });
+    // Goal is higher than starting weight = gain goal
+    const result = calcMomentumScore(records, 65);
+    expect(result).not.toBeNull();
+    expect(result.score).toBeGreaterThanOrEqual(50);
+    expect(result.factors).toContain("trendGood");
+  });
+
+  it("penalizes volatile weight", () => {
+    const today = new Date();
+    const records = Array.from({ length: 10 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (9 - i));
+      return { dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, wt: 70 + (i % 2 === 0 ? 3 : -3) };
+    });
+    const result = calcMomentumScore(records);
+    expect(result.factors).toContain("volatile");
   });
 });

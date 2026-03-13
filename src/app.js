@@ -64,6 +64,7 @@ import {
   calcWeightPlateau,
   calcRecordGaps,
   calcCalorieEstimate,
+  calcMomentumScore,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -659,6 +660,7 @@ function render() {
                 : t("insight.weekSame")
               }</div>` : ""}
             </div>` : ""}
+            ${renderMomentumScore()}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
             ${renderBMIDistribution()}
@@ -1373,6 +1375,26 @@ function renderCalorieEstimate() {
         ${renderPeriod(c.month, "month")}
       </div>
       <div class="helper hint-small">${t("calorie.hint")}</div>
+    </div>
+  `;
+}
+
+function renderMomentumScore() {
+  const m = calcMomentumScore(state.records, state.settings.goalWeight);
+  if (!m) return "";
+  const color = m.level === "great" ? "var(--ok, #10b981)" : m.level === "good" ? "var(--accent)" : m.level === "fair" ? "var(--warn, #f59e0b)" : "var(--error, #ef4444)";
+  const pct = m.score;
+  return `
+    <div class="momentum-section">
+      <div class="helper">${t("momentum.title")}</div>
+      <div class="momentum-bar-track">
+        <div class="momentum-bar-fill" style="width:${pct}%;background:${color};"></div>
+      </div>
+      <div class="momentum-info">
+        <span class="momentum-score" style="color:${color};font-weight:700;">${t("momentum.score").replace("{score}", m.score)}</span>
+        <span class="momentum-label" style="color:${color};">${t("momentum." + m.level)}</span>
+      </div>
+      <div class="helper hint-small">${t("momentum.hint")}</div>
     </div>
   `;
 }

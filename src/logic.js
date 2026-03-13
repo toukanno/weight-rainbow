@@ -1225,3 +1225,55 @@ export function calcCalorieEstimate(records) {
   if (!week && !month) return null;
   return { week, month };
 }
+
+export function calcMomentumScore(records, goalWeight = null) {
+  if (records.length < 7) return null;
+  let score = 50;
+  const factors = [];
+
+  // Factor 1: 7-day trend direction (±20 points)
+  const recent7 = records.slice(-7);
+  const change7 = recent7[recent7.length - 1].wt - recent7[0].wt;
+  const isLossGoal = !Number.isFinite(goalWeight) || goalWeight < records[0].wt;
+  if (isLossGoal) {
+    if (change7 < -0.3) { score += 20; factors.push("trendGood"); }
+    else if (change7 < 0) { score += 10; factors.push("trendOk"); }
+    else if (change7 > 0.3) { score -= 15; factors.push("trendBad"); }
+  } else {
+    if (change7 > 0.3) { score += 20; factors.push("trendGood"); }
+    else if (change7 > 0) { score += 10; factors.push("trendOk"); }
+    else if (change7 < -0.3) { score -= 15; factors.push("trendBad"); }
+  }
+
+  // Factor 2: Recording consistency (±15 points)
+  const now = new Date();
+  let freq = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (records.some((r) => r.dt === ds)) freq++;
+  }
+  if (freq >= 6) { score += 15; factors.push("consistencyHigh"); }
+  else if (freq >= 4) { score += 5; factors.push("consistencyMed"); }
+  else { score -= 10; factors.push("consistencyLow"); }
+
+  // Factor 3: Stability (±10 points)
+  if (records.length >= 5) {
+    const last5 = records.slice(-5).map((r) => r.wt);
+    const avg5 = last5.reduce((s, w) => s + w, 0) / last5.length;
+    const maxDev = Math.max(...last5.map((w) => Math.abs(w - avg5)));
+    if (maxDev < 0.5) { score += 10; factors.push("stable"); }
+    else if (maxDev > 2) { score -= 10; factors.push("volatile"); }
+  }
+
+  // Factor 4: Near goal bonus (+5 points)
+  if (Number.isFinite(goalWeight)) {
+    const latest = records[records.length - 1].wt;
+    if (Math.abs(latest - goalWeight) < 1) { score += 5; factors.push("nearGoal"); }
+  }
+
+  score = Math.max(0, Math.min(100, score));
+  const level = score >= 75 ? "great" : score >= 50 ? "good" : score >= 25 ? "fair" : "low";
+  return { score, level, factors };
+}

@@ -1819,6 +1819,77 @@ function calcCalorieEstimate(records) {
   if (!week && !month) return null;
   return { week, month };
 }
+function calcMomentumScore(records, goalWeight = null) {
+  if (records.length < 7) return null;
+  let score = 50;
+  const factors = [];
+  const recent7 = records.slice(-7);
+  const change7 = recent7[recent7.length - 1].wt - recent7[0].wt;
+  const isLossGoal = !Number.isFinite(goalWeight) || goalWeight < records[0].wt;
+  if (isLossGoal) {
+    if (change7 < -0.3) {
+      score += 20;
+      factors.push("trendGood");
+    } else if (change7 < 0) {
+      score += 10;
+      factors.push("trendOk");
+    } else if (change7 > 0.3) {
+      score -= 15;
+      factors.push("trendBad");
+    }
+  } else {
+    if (change7 > 0.3) {
+      score += 20;
+      factors.push("trendGood");
+    } else if (change7 > 0) {
+      score += 10;
+      factors.push("trendOk");
+    } else if (change7 < -0.3) {
+      score -= 15;
+      factors.push("trendBad");
+    }
+  }
+  const now = /* @__PURE__ */ new Date();
+  let freq = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (records.some((r) => r.dt === ds)) freq++;
+  }
+  if (freq >= 6) {
+    score += 15;
+    factors.push("consistencyHigh");
+  } else if (freq >= 4) {
+    score += 5;
+    factors.push("consistencyMed");
+  } else {
+    score -= 10;
+    factors.push("consistencyLow");
+  }
+  if (records.length >= 5) {
+    const last5 = records.slice(-5).map((r) => r.wt);
+    const avg5 = last5.reduce((s, w) => s + w, 0) / last5.length;
+    const maxDev = Math.max(...last5.map((w) => Math.abs(w - avg5)));
+    if (maxDev < 0.5) {
+      score += 10;
+      factors.push("stable");
+    } else if (maxDev > 2) {
+      score -= 10;
+      factors.push("volatile");
+    }
+  }
+  if (Number.isFinite(goalWeight)) {
+    const latest = records[records.length - 1].wt;
+    if (Math.abs(latest - goalWeight) < 1) {
+      score += 5;
+      factors.push("nearGoal");
+    }
+  }
+  score = Math.max(0, Math.min(100, score));
+  const level = score >= 75 ? "great" : score >= 50 ? "good" : score >= 25 ? "fair" : "low";
+  return { score, level, factors };
+}
 
 // src/i18n.js
 var translations = {
@@ -2304,7 +2375,14 @@ var translations = {
     "calorie.balanced": "\u5747\u8861",
     "calorie.hint": "\u4F53\u91CD\u5909\u5316\u304B\u3089\u63A8\u5B9A\uFF081kg \u2248 7,700kcal\uFF09",
     "analytics.showMore": "\u25BC \u8A73\u7D30\u5206\u6790\u3092\u8868\u793A",
-    "analytics.showLess": "\u25B2 \u8A73\u7D30\u5206\u6790\u3092\u975E\u8868\u793A"
+    "analytics.showLess": "\u25B2 \u8A73\u7D30\u5206\u6790\u3092\u975E\u8868\u793A",
+    "momentum.title": "\u30E2\u30E1\u30F3\u30BF\u30E0\u30B9\u30B3\u30A2",
+    "momentum.score": "{score}/100",
+    "momentum.great": "\u7D76\u597D\u8ABF\uFF01",
+    "momentum.good": "\u9806\u8ABF",
+    "momentum.fair": "\u3082\u3046\u5C11\u3057",
+    "momentum.low": "\u7ACB\u3066\u76F4\u3057\u304C\u5FC5\u8981",
+    "momentum.hint": "\u30C8\u30EC\u30F3\u30C9\u30FB\u8A18\u9332\u983B\u5EA6\u30FB\u5B89\u5B9A\u6027\u304B\u3089\u7B97\u51FA"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2788,7 +2866,14 @@ var translations = {
     "calorie.balanced": "Balanced",
     "calorie.hint": "Estimated from weight change (1kg \u2248 7,700kcal)",
     "analytics.showMore": "\u25BC Show detailed analytics",
-    "analytics.showLess": "\u25B2 Hide detailed analytics"
+    "analytics.showLess": "\u25B2 Hide detailed analytics",
+    "momentum.title": "Momentum Score",
+    "momentum.score": "{score}/100",
+    "momentum.great": "Excellent!",
+    "momentum.good": "On track",
+    "momentum.fair": "Needs improvement",
+    "momentum.low": "Time to refocus",
+    "momentum.hint": "Based on trend, consistency, and stability"
   }
 };
 function createTranslator(language) {
@@ -23843,6 +23928,7 @@ function render() {
               <div class="helper">${t("insight.bestDay").replace("{day}", t("day." + insight.bestDay))}</div>
               ${insight.weekComparison !== null ? `<div class="helper">${insight.weekComparison > 0.05 ? t("insight.weekUp").replace("{diff}", insight.weekComparison.toFixed(1)) : insight.weekComparison < -0.05 ? t("insight.weekDown").replace("{diff}", insight.weekComparison.toFixed(1)) : t("insight.weekSame")}</div>` : ""}
             </div>` : ""}
+            ${renderMomentumScore()}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
             ${renderBMIDistribution()}
@@ -24531,6 +24617,25 @@ function renderCalorieEstimate() {
         ${renderPeriod(c.month, "month")}
       </div>
       <div class="helper hint-small">${t("calorie.hint")}</div>
+    </div>
+  `;
+}
+function renderMomentumScore() {
+  const m = calcMomentumScore(state.records, state.settings.goalWeight);
+  if (!m) return "";
+  const color = m.level === "great" ? "var(--ok, #10b981)" : m.level === "good" ? "var(--accent)" : m.level === "fair" ? "var(--warn, #f59e0b)" : "var(--error, #ef4444)";
+  const pct = m.score;
+  return `
+    <div class="momentum-section">
+      <div class="helper">${t("momentum.title")}</div>
+      <div class="momentum-bar-track">
+        <div class="momentum-bar-fill" style="width:${pct}%;background:${color};"></div>
+      </div>
+      <div class="momentum-info">
+        <span class="momentum-score" style="color:${color};font-weight:700;">${t("momentum.score").replace("{score}", m.score)}</span>
+        <span class="momentum-label" style="color:${color};">${t("momentum." + m.level)}</span>
+      </div>
+      <div class="helper hint-small">${t("momentum.hint")}</div>
     </div>
   `;
 }
