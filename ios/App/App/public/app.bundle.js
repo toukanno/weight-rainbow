@@ -23978,7 +23978,7 @@ function drawChart() {
     context.restore();
   }
   context.strokeStyle = gradient;
-  context.lineWidth = 3;
+  context.lineWidth = chartRecords.length > 60 ? 1.5 : chartRecords.length > 30 ? 2 : 3;
   context.lineJoin = "round";
   context.lineCap = "round";
   context.beginPath();
@@ -24004,16 +24004,18 @@ function drawChart() {
   context.lineTo(toX(0), height - padY);
   context.closePath();
   context.fill();
+  const dotOuter = chartRecords.length > 60 ? 3 : chartRecords.length > 30 ? 4.5 : 6;
+  const dotInner = chartRecords.length > 60 ? 2 : chartRecords.length > 30 ? 3 : 4;
   context.fillStyle = gradient;
   chartRecords.forEach((record, index) => {
     const x = toX(index);
     const y = toY(record.wt);
     context.beginPath();
-    context.arc(x, y, 6, 0, Math.PI * 2);
+    context.arc(x, y, dotOuter, 0, Math.PI * 2);
     context.fillStyle = cs.getPropertyValue("--surface-strong").trim() || "white";
     context.fill();
     context.beginPath();
-    context.arc(x, y, 4, 0, Math.PI * 2);
+    context.arc(x, y, dotInner, 0, Math.PI * 2);
     context.fillStyle = gradient;
     context.fill();
   });

@@ -1874,7 +1874,7 @@ function drawChart() {
 
   // Line chart with smooth curves
   context.strokeStyle = gradient;
-  context.lineWidth = 3;
+  context.lineWidth = chartRecords.length > 60 ? 1.5 : chartRecords.length > 30 ? 2 : 3;
   context.lineJoin = "round";
   context.lineCap = "round";
   context.beginPath();
@@ -1903,19 +1903,21 @@ function drawChart() {
   context.closePath();
   context.fill();
 
-  // Data points
+  // Data points - scale size based on record count
+  const dotOuter = chartRecords.length > 60 ? 3 : chartRecords.length > 30 ? 4.5 : 6;
+  const dotInner = chartRecords.length > 60 ? 2 : chartRecords.length > 30 ? 3 : 4;
   context.fillStyle = gradient;
   chartRecords.forEach((record, index) => {
     const x = toX(index);
     const y = toY(record.wt);
     // Outline (theme-aware)
     context.beginPath();
-    context.arc(x, y, 6, 0, Math.PI * 2);
+    context.arc(x, y, dotOuter, 0, Math.PI * 2);
     context.fillStyle = cs.getPropertyValue("--surface-strong").trim() || "white";
     context.fill();
     // Colored dot
     context.beginPath();
-    context.arc(x, y, 4, 0, Math.PI * 2);
+    context.arc(x, y, dotInner, 0, Math.PI * 2);
     context.fillStyle = gradient;
     context.fill();
   });
