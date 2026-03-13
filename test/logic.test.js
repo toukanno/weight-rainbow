@@ -7898,3 +7898,38 @@ describe("calcWeightJourney", () => {
     expect(result.totalChange).toBe(-2);
   });
 });
+
+describe("calcGoalScenarios", () => {
+  it("returns null with no records", () => {
+    expect(calcGoalScenarios([], 65)).toBeNull();
+  });
+
+  it("returns null with invalid goal", () => {
+    expect(calcGoalScenarios([{ dt: "2026-01-01", wt: 70 }], 0)).toBeNull();
+    expect(calcGoalScenarios([{ dt: "2026-01-01", wt: 70 }], NaN)).toBeNull();
+  });
+
+  it("returns null when already at goal", () => {
+    expect(calcGoalScenarios([{ dt: "2026-01-01", wt: 65.0 }], 65.0)).toBeNull();
+  });
+
+  it("returns 3 scenarios for weight loss goal", () => {
+    const records = [{ dt: "2026-03-14", wt: 75.0 }];
+    const result = calcGoalScenarios(records, 65.0);
+    expect(result.current).toBe(75.0);
+    expect(result.goal).toBe(65.0);
+    expect(result.remaining).toBe(10.0);
+    expect(result.scenarios).toHaveLength(3);
+    expect(result.scenarios[0].label).toBe("gentle");
+    expect(result.scenarios[0].weeks).toBe(40); // 10kg / 0.25kg per week
+    expect(result.scenarios[1].weeks).toBe(20); // 10kg / 0.5kg per week
+    expect(result.scenarios[2].weeks).toBe(10); // 10kg / 1.0kg per week
+  });
+
+  it("works for weight gain goal", () => {
+    const records = [{ dt: "2026-03-14", wt: 55.0 }];
+    const result = calcGoalScenarios(records, 60.0);
+    expect(result.remaining).toBe(5.0);
+    expect(result.scenarios[2].weeks).toBe(5); // 5kg / 1.0kg per week
+  });
+});
