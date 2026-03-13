@@ -118,7 +118,7 @@ var Ct;(function(e){e.Unimplemented="UNIMPLEMENTED",e.Unavailable="UNAVAILABLE"}
               <span class="pill">${p("badge.free")}</span>
               <span class="pill">${p("badge.safe")}</span>
               ${T.records.length?`<span class="pill">${p("summary.count")}: ${T.records.length}</span>`:""}
-              ${l>0?`<span class="streak-badge${l>=7?" rainbow":""}">\u{1F525} ${l}${p("streak.days")}</span>`:""}
+              ${l>0?`<span class="streak-badge${l>=7?" rainbow":""}" title="${p("streak.title")}">${l>=7?"\u{1F308}":"\u{1F525}"} ${l}${p("streak.days")} ${l>=7?p("streak.fire"):""}</span>`:""}
               ${d?`<span class="trend-indicator ${d}">${d==="down"?"\u{1F4C9}":d==="up"?"\u{1F4C8}":"\u27A1\uFE0F"} ${p("trend."+d)}</span>`:""}
             </div>
             ${_?`<p class="motivation-msg">${_}</p>`:""}
@@ -226,11 +226,11 @@ var Ct;(function(e){e.Unimplemented="UNIMPLEMENTED",e.Unavailable="UNAVAILABLE"}
                 <div class="field">
                   <label>${p("entry.weight")}</label>
                   <div class="weight-picker">
-                    <select id="pickerInt" name="pickerInt">
+                    <select id="pickerInt" name="pickerInt" aria-label="${p("picker.integer")}">
                       ${wm(T.form.pickerInt)}
                     </select>
-                    <span class="picker-dot">.</span>
-                    <select id="pickerDec" name="pickerDec">
+                    <span class="picker-dot" aria-hidden="true">.</span>
+                    <select id="pickerDec" name="pickerDec" aria-label="${p("picker.decimal")}">
                       ${_m(T.form.pickerDec)}
                     </select>
                     <span class="picker-unit">${p("picker.kg")}</span>
@@ -253,7 +253,7 @@ var Ct;(function(e){e.Unimplemented="UNIMPLEMENTED",e.Unavailable="UNAVAILABLE"}
                 <label for="entryNote">${p("entry.note")}</label>
                 <input id="entryNote" name="note" type="text" maxlength="100" placeholder="${Be(p("entry.noteHint"))}" value="${Be(T.form.note)}" />
                 ${(T.form.note||"").length>50?`<div class="hint-small" style="text-align:right;">${(T.form.note||"").length}/100</div>`:""}
-                <div class="note-tags-row">
+                <div class="note-tags-row" role="group" aria-label="${p("note.tags")}">
                   ${ds.map(F=>`<button type="button" class="note-tag${(T.form.note||"").includes(`#${F}`)?" active":""}" data-note-tag="${F}">${p("note.tag."+F)}</button>`).join("")}
                 </div>
               </div>
@@ -403,6 +403,7 @@ var Ct;(function(e){e.Unimplemented="UNIMPLEMENTED",e.Unavailable="UNAVAILABLE"}
               ${Yt?`<span class="helper">${p("records.searchResult").replace("{count}",Mn(T.records,Yt).length)}</span>`:""}
             </div>
             <div class="record-date-range">
+              <div class="helper hint-small">${p("records.dateRange")}</div>
               <div class="date-range-fields">
                 <label>${p("records.from")}<input id="dateRangeFrom" type="date" value="${Be(qt)}" /></label>
                 <label>${p("records.to")}<input id="dateRangeTo" type="date" value="${Be(Jt)}" /></label>

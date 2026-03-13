@@ -266,7 +266,7 @@ function render() {
               <span class="pill">${t("badge.free")}</span>
               <span class="pill">${t("badge.safe")}</span>
               ${state.records.length ? `<span class="pill">${t("summary.count")}: ${state.records.length}</span>` : ""}
-              ${streak > 0 ? `<span class="streak-badge${streak >= 7 ? " rainbow" : ""}">🔥 ${streak}${t("streak.days")}</span>` : ""}
+              ${streak > 0 ? `<span class="streak-badge${streak >= 7 ? " rainbow" : ""}" title="${t("streak.title")}">${streak >= 7 ? "🌈" : "🔥"} ${streak}${t("streak.days")} ${streak >= 7 ? t("streak.fire") : ""}</span>` : ""}
               ${trend ? `<span class="trend-indicator ${trend}">${trend === "down" ? "📉" : trend === "up" ? "📈" : "➡️"} ${t("trend." + trend)}</span>` : ""}
             </div>
             ${motivation ? `<p class="motivation-msg">${motivation}</p>` : ""}
@@ -388,11 +388,11 @@ function render() {
                 <div class="field">
                   <label>${t("entry.weight")}</label>
                   <div class="weight-picker">
-                    <select id="pickerInt" name="pickerInt">
+                    <select id="pickerInt" name="pickerInt" aria-label="${t("picker.integer")}">
                       ${renderPickerIntOptions(state.form.pickerInt)}
                     </select>
-                    <span class="picker-dot">.</span>
-                    <select id="pickerDec" name="pickerDec">
+                    <span class="picker-dot" aria-hidden="true">.</span>
+                    <select id="pickerDec" name="pickerDec" aria-label="${t("picker.decimal")}">
                       ${renderPickerDecOptions(state.form.pickerDec)}
                     </select>
                     <span class="picker-unit">${t("picker.kg")}</span>
@@ -415,7 +415,7 @@ function render() {
                 <label for="entryNote">${t("entry.note")}</label>
                 <input id="entryNote" name="note" type="text" maxlength="100" placeholder="${escapeAttr(t("entry.noteHint"))}" value="${escapeAttr(state.form.note)}" />
                 ${(state.form.note || "").length > 50 ? `<div class="hint-small" style="text-align:right;">${(state.form.note || "").length}/100</div>` : ""}
-                <div class="note-tags-row">
+                <div class="note-tags-row" role="group" aria-label="${t("note.tags")}">
                   ${NOTE_TAGS.map((tag) => {
                     const active = (state.form.note || "").includes(`#${tag}`);
                     return `<button type="button" class="note-tag${active ? " active" : ""}" data-note-tag="${tag}">${t("note.tag." + tag)}</button>`;
@@ -578,6 +578,7 @@ function render() {
               ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : ""}
             </div>
             <div class="record-date-range">
+              <div class="helper hint-small">${t("records.dateRange")}</div>
               <div class="date-range-fields">
                 <label>${t("records.from")}<input id="dateRangeFrom" type="date" value="${escapeAttr(recordDateFrom)}" /></label>
                 <label>${t("records.to")}<input id="dateRangeTo" type="date" value="${escapeAttr(recordDateTo)}" /></label>
