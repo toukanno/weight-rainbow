@@ -184,7 +184,7 @@ try {
     <h2 style="color:#dc2626;">${t("error.init")}</h2>
     <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
     <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
-    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">${t("error.resetData")}</button>
+    <button onclick="if(confirm('${escHtml(t("error.resetConfirm"))}')){localStorage.clear();location.reload()}" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">${t("error.resetData")}</button>
   </div>`;
 }
 
@@ -4509,6 +4509,8 @@ window.addEventListener("keydown", (event) => {
     if (searchInput) {
       searchInput.focus();
       searchInput.select();
+    } else if (state.records.length <= 3) {
+      setStatus(t("records.searchMinRecords"), "warn");
     }
   }
 });

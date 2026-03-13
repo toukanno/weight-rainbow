@@ -3380,6 +3380,7 @@ var translations = {
     "records.showAll": "\u3059\u3079\u3066\u8868\u793A",
     "records.showLess": "\u9589\u3058\u308B",
     "records.search": "\u65E5\u4ED8\u30FB\u30E1\u30E2\u30FB\u4F53\u91CD\u3067\u691C\u7D22",
+    "records.searchMinRecords": "\u691C\u7D22\u306F4\u4EF6\u4EE5\u4E0A\u306E\u8A18\u9332\u304C\u3042\u308B\u5834\u5408\u306B\u5229\u7528\u3067\u304D\u307E\u3059",
     "records.searchResult": "{count}\u4EF6\u304C\u30D2\u30C3\u30C8",
     "records.best": "\u6700\u4F4E\u4F53\u91CD\u8A18\u9332",
     "records.highest": "\u6700\u9AD8\u4F53\u91CD\u8A18\u9332",
@@ -3471,6 +3472,7 @@ var translations = {
     "error.render": "\u63CF\u753B\u30A8\u30E9\u30FC",
     "error.reload": "\u518D\u8AAD\u307F\u8FBC\u307F",
     "error.resetData": "\u30C7\u30FC\u30BF\u30EA\u30BB\u30C3\u30C8",
+    "error.resetConfirm": "\u3059\u3079\u3066\u306E\u30C7\u30FC\u30BF\u3092\u524A\u9664\u3057\u307E\u3059\u304B\uFF1F\u3053\u306E\u64CD\u4F5C\u306F\u53D6\u308A\u6D88\u305B\u307E\u305B\u3093\u3002",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
     "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01\uFF08-{diff}kg\uFF09",
     "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
@@ -4161,6 +4163,7 @@ var translations = {
     "records.showAll": "Show all",
     "records.showLess": "Show less",
     "records.search": "Search by date, note, or weight",
+    "records.searchMinRecords": "Search requires at least 4 records",
     "records.searchResult": "{count} results",
     "records.best": "Lowest weight",
     "records.highest": "Highest weight",
@@ -4253,6 +4256,7 @@ var translations = {
     "error.render": "Render Error",
     "error.reload": "Reload",
     "error.resetData": "Reset Data",
+    "error.resetConfirm": "Delete all data? This cannot be undone.",
     "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
@@ -25379,7 +25383,7 @@ try {
     <h2 style="color:#dc2626;">${t("error.init")}</h2>
     <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
     <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
-    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">${t("error.resetData")}</button>
+    <button onclick="if(confirm('${escHtml(t("error.resetConfirm"))}')){localStorage.clear();location.reload()}" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">${t("error.resetData")}</button>
   </div>`;
 }
 initReminder();
@@ -29435,6 +29439,8 @@ window.addEventListener("keydown", (event) => {
     if (searchInput) {
       searchInput.focus();
       searchInput.select();
+    } else if (state.records.length <= 3) {
+      setStatus(t("records.searchMinRecords"), "warn");
     }
   }
 });
