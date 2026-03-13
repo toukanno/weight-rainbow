@@ -873,6 +873,29 @@
         color: var(--text);
       }
 
+      .entry-preview {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        padding: 6px 10px;
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--surface-strong) 60%, transparent);
+        font-size: 0.8rem;
+        margin-bottom: 8px;
+      }
+      .entry-preview-diff {
+        font-weight: 700;
+      }
+      .entry-preview-diff.negative { color: var(--ok, #10b981); }
+      .entry-preview-diff.positive { color: var(--warn, #f59e0b); }
+      .entry-preview-diff.zero { color: var(--muted); }
+      .entry-preview-warn {
+        color: var(--danger, #ef4444);
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+
       .bodyfat-stats-section {
         margin-top: 14px;
         padding-top: 12px;

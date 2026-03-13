@@ -1653,8 +1653,6 @@ var translations = {
     "percentile.value": "\u5168\u8A18\u9332\u306E{pct}%\u3088\u308A\u8EFD\u3044",
     "percentile.rank": "{rank}\u4F4D / {total}\u4EF6\u4E2D\uFF08\u8EFD\u3044\u9806\uFF09",
     "percentile.best": "\u904E\u53BB\u6700\u8EFD\u91CF\u306B\u8FD1\u3044\uFF01",
-    "entry.preview.vsLast": "\u524D\u56DE\u6BD4",
-    "entry.preview.large": "\u26A0\uFE0F \u5909\u52D5\u304C\u5927\u304D\u3044\u3067\u3059\u3002\u5165\u529B\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
     "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01\uFF08-{diff}kg\uFF09",
     "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
@@ -2029,8 +2027,6 @@ var translations = {
     "percentile.value": "Lighter than {pct}% of all records",
     "percentile.rank": "Rank {rank} of {total} (lightest first)",
     "percentile.best": "Near your all-time lightest!",
-    "entry.preview.vsLast": "vs last",
-    "entry.preview.large": "\u26A0\uFE0F Large change \u2014 please double-check",
     "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
@@ -23289,7 +23285,7 @@ function render() {
             </div>
             ${state.records.length > 3 ? `
             <div class="record-search">
-              <input id="recordSearch" type="search" placeholder="${escapeAttr(t("records.search"))}" value="${escapeAttr(recordSearchQuery)}" autocomplete="off" />
+              <input id="recordSearch" type="search" placeholder="${escapeAttr(t("records.search"))}" value="${escapeAttr(recordSearchQuery)}" autocomplete="off" aria-label="${t("records.search")}" />
               ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : ""}
             </div>
             <div class="record-date-range">
@@ -23306,9 +23302,9 @@ function render() {
                 <div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">\u{1F4CA}</div>
                 <div class="helper">${t("records.empty")}</div>
                 <div class="empty-state-actions">
-                  <button type="button" class="btn secondary" data-mode="manual">\u270F\uFE0F ${t("entry.manual")}</button>
-                  <button type="button" class="btn secondary" data-mode="voice">\u{1F3A4} ${t("entry.voice")}</button>
-                  <button type="button" class="btn secondary" data-mode="photo">\u{1F4F7} ${t("entry.photo")}</button>
+                  <button type="button" class="btn secondary" data-mode="manual" aria-label="${t("entry.manual")}">\u270F\uFE0F ${t("entry.manual")}</button>
+                  <button type="button" class="btn secondary" data-mode="voice" aria-label="${t("entry.voice")}">\u{1F3A4} ${t("entry.voice")}</button>
+                  <button type="button" class="btn secondary" data-mode="photo" aria-label="${t("entry.photo")}">\u{1F4F7} ${t("entry.photo")}</button>
                 </div>
               </div>`}
             </div>

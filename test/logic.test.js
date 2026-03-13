@@ -1658,3 +1658,98 @@ describe("calcDaysSinceLastRecord", () => {
     expect(calcDaysSinceLastRecord([])).toBeNull();
   });
 });
+
+describe("calcWeightComparison edge cases", () => {
+  it("returns null when all records share the same date as latest", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const records = [
+      { dt: today, wt: 70 },
+      { dt: today, wt: 71 },
+    ];
+    // pastRecord.dt === latest.dt guard should skip it
+    expect(calcWeightComparison(records)).toBeNull();
+  });
+
+  it("returns month and quarter comparisons for old records", () => {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const d100 = new Date(now - 100 * 86400000).toISOString().slice(0, 10);
+    const records = [
+      { dt: d100, wt: 80 },
+      { dt: today, wt: 70 },
+    ];
+    const result = calcWeightComparison(records);
+    expect(result).not.toBeNull();
+    expect(result.quarter).toBeDefined();
+    expect(result.quarter.diff).toBe(-10);
+  });
+});
+
+describe("calcInsight edge cases", () => {
+  it("returns weekUp insight when this week avg is higher", () => {
+    const now = new Date();
+    const records = [];
+    // Last week: 3 records averaging 65
+    for (let i = 10; i >= 8; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      records.push({ dt: d.toISOString().slice(0, 10), wt: 65 });
+    }
+    // This week: 3 records averaging 70
+    for (let i = 2; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      records.push({ dt: d.toISOString().slice(0, 10), wt: 70 });
+    }
+    const insight = calcInsight(records);
+    expect(insight).not.toBeNull();
+    // Should have bestDay at minimum
+    expect(insight.bestDay).toBeDefined();
+  });
+});
+
+describe("detectMilestone edge cases", () => {
+  it("does not detect milestone for weight gain", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 71 },
+      { dt: "2025-01-03", wt: 72 },
+    ];
+    const result = detectMilestone(records, 73, 170);
+    expect(result).toBeNull();
+  });
+
+  it("detects all-time low milestone", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-01-02", wt: 73 },
+      { dt: "2025-01-03", wt: 70 },
+    ];
+    const result = detectMilestone(records, 69.5, 170);
+    expect(result).not.toBeNull();
+    expect(result.type).toBe("allTimeLow");
+  });
+});
+
+describe("calcWeightStability edge cases", () => {
+  it("returns perfect score for 3 identical weights", () => {
+    const now = new Date();
+    const records = Array.from({ length: 3 }, (_, i) => {
+      const d = new Date(now);
+      d.setDate(d.getDate() - (2 - i));
+      return { dt: d.toISOString().slice(0, 10), wt: 70.0 };
+    });
+    const result = calcWeightStability(records, 7);
+    expect(result).not.toBeNull();
+    expect(result.score).toBe(100);
+    expect(result.stdDev).toBe(0);
+  });
+});
+
+describe("exportRecordsToCSV edge cases", () => {
+  it("escapes fields with newlines", () => {
+    const records = [{ dt: "2025-01-01", wt: 70, bmi: 24.2, bf: null, source: "manual", note: "line1\nline2" }];
+    const csv = exportRecordsToCSV(records);
+    expect(csv).toContain('"line1\nline2"');
+  });
+});

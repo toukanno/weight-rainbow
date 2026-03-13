@@ -311,6 +311,13 @@ function render() {
       }).bmi
     : null;
 
+  // Weight change preview
+  const lastRecord = state.records[state.records.length - 1];
+  const previewDiff = previewWeightResult.valid && lastRecord
+    ? Math.round((previewWeightResult.weight - lastRecord.wt) * 10) / 10
+    : null;
+  const previewLarge = previewDiff !== null && Math.abs(previewDiff) >= 2;
+
   app.innerHTML = `
     <main class="app-shell">
       <section class="hero">
@@ -536,6 +543,10 @@ function render() {
                 ${!supportsTextDetection && !imagePreviewUrl ? `<span class="helper">${t("entry.photoFallback")}</span>` : ""}
               </div>
 
+              ${previewDiff !== null ? `<div class="entry-preview">
+                <span class="entry-preview-diff ${previewDiff < 0 ? "negative" : previewDiff > 0 ? "positive" : "zero"}">${previewDiff > 0 ? "+" : ""}${previewDiff.toFixed(1)}kg ${t("entry.preview.vsLast")}</span>
+                ${previewLarge ? `<span class="entry-preview-warn">${t("entry.preview.large")}</span>` : ""}
+              </div>` : ""}
               <div class="row">
                 <button type="button" class="btn" data-action="save-record">${t("entry.save")}</button>
                 <div>
@@ -650,7 +661,7 @@ function render() {
             </div>
             ${state.records.length > 3 ? `
             <div class="record-search">
-              <input id="recordSearch" type="search" placeholder="${escapeAttr(t("records.search"))}" value="${escapeAttr(recordSearchQuery)}" autocomplete="off" />
+              <input id="recordSearch" type="search" placeholder="${escapeAttr(t("records.search"))}" value="${escapeAttr(recordSearchQuery)}" autocomplete="off" aria-label="${t("records.search")}" />
               ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : ""}
             </div>
             <div class="record-date-range">
@@ -667,9 +678,9 @@ function render() {
                 <div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">📊</div>
                 <div class="helper">${t("records.empty")}</div>
                 <div class="empty-state-actions">
-                  <button type="button" class="btn secondary" data-mode="manual">✏️ ${t("entry.manual")}</button>
-                  <button type="button" class="btn secondary" data-mode="voice">🎤 ${t("entry.voice")}</button>
-                  <button type="button" class="btn secondary" data-mode="photo">📷 ${t("entry.photo")}</button>
+                  <button type="button" class="btn secondary" data-mode="manual" aria-label="${t("entry.manual")}">✏️ ${t("entry.manual")}</button>
+                  <button type="button" class="btn secondary" data-mode="voice" aria-label="${t("entry.voice")}">🎤 ${t("entry.voice")}</button>
+                  <button type="button" class="btn secondary" data-mode="photo" aria-label="${t("entry.photo")}">📷 ${t("entry.photo")}</button>
                 </div>
               </div>`}
             </div>
