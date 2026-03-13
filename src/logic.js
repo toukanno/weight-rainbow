@@ -1791,10 +1791,10 @@ export function calcMilestoneTimeline(records) {
 
     // 5kg mark crossed
     if (prev) {
-      const prevMark = Math.ceil(prev.wt / 5) * 5;
-      const curMark = Math.ceil(r.wt / 5) * 5;
+      const prevMark = Math.floor(prev.wt / 5) * 5;
+      const curMark = Math.floor(r.wt / 5) * 5;
       if (curMark < prevMark) {
-        // Crossed below a 5kg boundary (e.g. dropped below 70)
+        // Crossed below a 5kg boundary (e.g. dropped below 75)
         events.push({ type: "mark", date: r.dt, weight: r.wt, mark: prevMark });
       }
     }

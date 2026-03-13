@@ -572,6 +572,12 @@ export const translations = {
     "progress.stable": "安定しています",
     "progress.moreStable": "安定度が向上しています",
     "progress.lessStable": "変動が大きくなっています",
+    "timeline.title": "マイルストーン",
+    "timeline.low": "最低体重更新: {wt}kg",
+    "timeline.mark": "{mark}kgを突破",
+    "timeline.bmi.normal": "BMI標準ゾーンに到達",
+    "timeline.bmi.change": "BMIゾーン変更: {from} → {to}",
+    "timeline.hint": "直近{count}件のマイルストーン",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1146,6 +1152,12 @@ export const translations = {
     "progress.stable": "Stable",
     "progress.moreStable": "Stability improved",
     "progress.lessStable": "More variable recently",
+    "timeline.title": "Milestones",
+    "timeline.low": "New all-time low: {wt}kg",
+    "timeline.mark": "Broke through {mark}kg",
+    "timeline.bmi.normal": "Reached normal BMI zone",
+    "timeline.bmi.change": "BMI zone: {from} → {to}",
+    "timeline.hint": "Last {count} milestones",
   },
 };
 

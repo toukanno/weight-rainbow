@@ -713,6 +713,7 @@ function render() {
                 ${renderBMIHistory()}
                 ${renderWeightHeatmap()}
                 ${renderProgressSummary()}
+                ${renderMilestoneTimeline()}
               </div>
               ` : ""}
             </div>
@@ -1718,6 +1719,30 @@ function renderProgressSummary() {
       </div>
       <div class="progress-trend" style="color:${trendColor}">${t("progress." + ps.trend)}</div>
       <div class="progress-stability">${ps.moreStable ? t("progress.moreStable") : t("progress.lessStable")}</div>
+    </div>
+  `;
+}
+
+function renderMilestoneTimeline() {
+  const tl = calcMilestoneTimeline(state.records);
+  if (!tl || tl.events.length === 0) return "";
+  const icons = { low: "⬇️", mark: "🎯", bmi: "📊" };
+  const items = tl.events.map((e) => {
+    let label = "";
+    if (e.type === "low") label = t("timeline.low").replace("{wt}", e.weight);
+    else if (e.type === "mark") label = t("timeline.mark").replace("{mark}", e.mark);
+    else if (e.type === "bmi") {
+      label = e.to === "normal"
+        ? t("timeline.bmi.normal")
+        : t("timeline.bmi.change").replace("{from}", e.from).replace("{to}", e.to);
+    }
+    return `<div class="timeline-item"><span class="timeline-icon">${icons[e.type]}</span><div class="timeline-content"><span class="timeline-date">${e.date}</span><span class="timeline-label">${label}</span></div></div>`;
+  }).join("");
+  return `
+    <div class="timeline-section">
+      <div class="helper">${t("timeline.title")}</div>
+      <div class="timeline-list">${items}</div>
+      <div class="helper hint-small">${t("timeline.hint").replace("{count}", tl.events.length)}</div>
     </div>
   `;
 }

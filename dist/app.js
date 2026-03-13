@@ -2284,6 +2284,48 @@ function calcProgressSummary(records) {
     recordCount: sorted.length
   };
 }
+function calcMilestoneTimeline(records) {
+  if (records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const events = [];
+  let allTimeLow = sorted[0].wt;
+  let prevBmiZone = null;
+  for (let i = 0; i < sorted.length; i++) {
+    const r = sorted[i];
+    const prev = i > 0 ? sorted[i - 1] : null;
+    if (r.wt < allTimeLow) {
+      allTimeLow = r.wt;
+      events.push({ type: "low", date: r.dt, weight: r.wt });
+    }
+    if (prev) {
+      const prevMark = Math.floor(prev.wt / 5) * 5;
+      const curMark = Math.floor(r.wt / 5) * 5;
+      if (curMark < prevMark) {
+        events.push({ type: "mark", date: r.dt, weight: r.wt, mark: prevMark });
+      }
+    }
+    if (r.bmi != null) {
+      const zone = r.bmi < 18.5 ? "under" : r.bmi < 25 ? "normal" : r.bmi < 30 ? "over" : "obese";
+      if (prevBmiZone && zone !== prevBmiZone) {
+        events.push({ type: "bmi", date: r.dt, weight: r.wt, from: prevBmiZone, to: zone });
+      }
+      prevBmiZone = zone;
+    }
+  }
+  const dedupLows = /* @__PURE__ */ new Map();
+  const filtered = [];
+  for (const e of events) {
+    if (e.type === "low") {
+      const month = e.date.slice(0, 7);
+      dedupLows.set(month, e);
+    } else {
+      filtered.push(e);
+    }
+  }
+  filtered.push(...dedupLows.values());
+  filtered.sort((a, b) => a.date.localeCompare(b.date));
+  return { events: filtered.slice(-10), total: filtered.length };
+}
 
 // src/i18n.js
 var translations = {
@@ -24564,6 +24606,7 @@ function render() {
                 ${renderBMIHistory()}
                 ${renderWeightHeatmap()}
                 ${renderProgressSummary()}
+                ${renderMilestoneTimeline()}
               </div>
               ` : ""}
             </div>
@@ -25526,6 +25569,27 @@ function renderProgressSummary() {
       </div>
       <div class="progress-trend" style="color:${trendColor}">${t("progress." + ps.trend)}</div>
       <div class="progress-stability">${ps.moreStable ? t("progress.moreStable") : t("progress.lessStable")}</div>
+    </div>
+  `;
+}
+function renderMilestoneTimeline() {
+  const tl = calcMilestoneTimeline(state.records);
+  if (!tl || tl.events.length === 0) return "";
+  const icons = { low: "\u2B07\uFE0F", mark: "\u{1F3AF}", bmi: "\u{1F4CA}" };
+  const items = tl.events.map((e) => {
+    let label = "";
+    if (e.type === "low") label = t("timeline.low").replace("{wt}", e.weight);
+    else if (e.type === "mark") label = t("timeline.mark").replace("{mark}", e.mark);
+    else if (e.type === "bmi") {
+      label = e.to === "normal" ? t("timeline.bmi.normal") : t("timeline.bmi.change").replace("{from}", e.from).replace("{to}", e.to);
+    }
+    return `<div class="timeline-item"><span class="timeline-icon">${icons[e.type]}</span><div class="timeline-content"><span class="timeline-date">${e.date}</span><span class="timeline-label">${label}</span></div></div>`;
+  }).join("");
+  return `
+    <div class="timeline-section">
+      <div class="helper">${t("timeline.title")}</div>
+      <div class="timeline-list">${items}</div>
+      <div class="helper hint-small">${t("timeline.hint").replace("{count}", tl.events.length)}</div>
     </div>
   `;
 }

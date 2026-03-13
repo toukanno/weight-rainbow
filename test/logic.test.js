@@ -74,6 +74,7 @@ import {
   calcStreakRewards,
   calcWeightConfidence,
   calcProgressSummary,
+  calcMilestoneTimeline,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -4767,6 +4768,49 @@ describe("calcProgressSummary", () => {
     const result = calcProgressSummary(records);
     expect(result.trend).toBe("stable");
     expect(result.recordCount).toBe(4);
+  });
+});
+
+describe("calcMilestoneTimeline", () => {
+  it("returns null for fewer than 3 records", () => {
+    expect(calcMilestoneTimeline([{ dt: "2025-01-01", wt: 70 }, { dt: "2025-01-02", wt: 69 }])).toBeNull();
+  });
+
+  it("detects all-time lows", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72 },
+      { dt: "2025-01-02", wt: 71 },
+      { dt: "2025-01-03", wt: 70 },
+    ];
+    const result = calcMilestoneTimeline(records);
+    expect(result).not.toBeNull();
+    const lows = result.events.filter((e) => e.type === "low");
+    expect(lows.length).toBeGreaterThan(0);
+  });
+
+  it("detects 5kg mark crossings", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 76 },
+      { dt: "2025-01-02", wt: 75.5 },
+      { dt: "2025-01-03", wt: 74.5 },
+    ];
+    const result = calcMilestoneTimeline(records);
+    const marks = result.events.filter((e) => e.type === "mark");
+    expect(marks.length).toBeGreaterThan(0);
+    // floor(75.5/5)*5=75, floor(74.5/5)*5=70 → crossed below 75
+    expect(marks[0].mark).toBe(75);
+  });
+
+  it("detects BMI zone transitions", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 80, bmi: 27.7 },
+      { dt: "2025-01-02", wt: 75, bmi: 26.0 },
+      { dt: "2025-01-03", wt: 70, bmi: 24.2 },
+    ];
+    const result = calcMilestoneTimeline(records);
+    const bmiEvents = result.events.filter((e) => e.type === "bmi");
+    expect(bmiEvents.length).toBe(1);
+    expect(bmiEvents[0].to).toBe("normal");
   });
 });
 
