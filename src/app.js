@@ -352,10 +352,10 @@ function render() {
               <div class="eyebrow">${t(`entry.source.${activeEntryMode}`)}</div>
             </div>
 
-            <div class="tab-row">
-              ${renderTab("manual", t("entry.manual"))}
-              ${renderTab("voice", t("entry.voice"))}
-              ${renderTab("photo", t("entry.photo"))}
+            <div class="tab-row" role="tablist" aria-label="${t("section.entry")}">
+              ${renderTab("manual", "✏️ " + t("entry.manual"))}
+              ${renderTab("voice", "🎤 " + t("entry.voice"))}
+              ${renderTab("photo", "📷 " + t("entry.photo"))}
             </div>
 
             <div class="entry-layout">
@@ -379,7 +379,7 @@ function render() {
                 </div>
                 <div class="field">
                   <label for="bodyFat">${t("bodyFat.label")}</label>
-                  <input id="bodyFat" name="bodyFat" inputmode="decimal" placeholder="${t("bodyFat.hint")}" value="${escapeAttr(state.form.bodyFat)}" />
+                  <input id="bodyFat" name="bodyFat" inputmode="decimal" autocomplete="off" placeholder="${t("bodyFat.hint")}" value="${escapeAttr(state.form.bodyFat)}" />
                 </div>
               </div>
               <div class="field">
@@ -392,13 +392,13 @@ function render() {
                 <h3>${t("quick.title")}</h3>
                 <p class="helper">${t("quick.hint")}</p>
                 <div class="quick-display" id="quickDisplay">${quickWeight.toFixed(1)} kg</div>
-                <div class="quick-buttons">
-                  <button type="button" data-quick-adj="-1.0">-1.0</button>
-                  <button type="button" data-quick-adj="-0.5">-0.5</button>
-                  <button type="button" data-quick-adj="-0.1">-0.1</button>
-                  <button type="button" data-quick-adj="+0.1">+0.1</button>
-                  <button type="button" data-quick-adj="+0.5">+0.5</button>
-                  <button type="button" data-quick-adj="+1.0">+1.0</button>
+                <div class="quick-buttons" role="group" aria-label="${t("quick.title")}">
+                  <button type="button" data-quick-adj="-1.0" aria-label="-1.0 kg">-1.0</button>
+                  <button type="button" data-quick-adj="-0.5" aria-label="-0.5 kg">-0.5</button>
+                  <button type="button" data-quick-adj="-0.1" aria-label="-0.1 kg">-0.1</button>
+                  <button type="button" data-quick-adj="+0.1" aria-label="+0.1 kg">+0.1</button>
+                  <button type="button" data-quick-adj="+0.5" aria-label="+0.5 kg">+0.5</button>
+                  <button type="button" data-quick-adj="+1.0" aria-label="+1.0 kg">+1.0</button>
                 </div>
                 <div class="quick-buttons" style="margin-top:10px;">
                   <button type="button" class="quick-save" data-action="quick-save">${t("quick.save")}</button>
@@ -438,7 +438,7 @@ function render() {
               <div class="row">
                 <button type="button" class="btn" data-action="save-record">${t("entry.save")}</button>
                 <div class="helper">${state.profile.heightCm ? `${t("entry.bmiReady")}: ${formatBMI(currentBMI)}` : t("bmi.unknown")}</div>
-                <div class="helper" style="font-size:0.75rem;opacity:0.7;">${t("record.dailyLimit")}</div>
+                <div class="helper" style="font-size:0.72rem;opacity:0.7;">${t("record.dailyLimit")}</div>
               </div>
             </div>
 
@@ -456,13 +456,13 @@ function render() {
               </div>
               ${state.records.length ? `<button type="button" class="btn secondary" data-action="share-chart">${t("share.chart")}</button>` : ""}
             </div>
-            <div class="summary-tabs" style="margin-bottom:10px;">
-              <button type="button" class="summary-tab ${chartPeriod === "7" ? "active" : ""}" data-chart-period="7">${t("chart.period.7")}</button>
-              <button type="button" class="summary-tab ${chartPeriod === "30" ? "active" : ""}" data-chart-period="30">${t("chart.period.30")}</button>
-              <button type="button" class="summary-tab ${chartPeriod === "90" ? "active" : ""}" data-chart-period="90">${t("chart.period.90")}</button>
-              <button type="button" class="summary-tab ${chartPeriod === "all" ? "active" : ""}" data-chart-period="all">${t("chart.period.all")}</button>
+            <div class="summary-tabs" style="margin-bottom:10px;" role="tablist" aria-label="${t("section.chart")}">
+              <button type="button" class="summary-tab ${chartPeriod === "7" ? "active" : ""}" data-chart-period="7" role="tab" aria-selected="${chartPeriod === "7"}">${t("chart.period.7")}</button>
+              <button type="button" class="summary-tab ${chartPeriod === "30" ? "active" : ""}" data-chart-period="30" role="tab" aria-selected="${chartPeriod === "30"}">${t("chart.period.30")}</button>
+              <button type="button" class="summary-tab ${chartPeriod === "90" ? "active" : ""}" data-chart-period="90" role="tab" aria-selected="${chartPeriod === "90"}">${t("chart.period.90")}</button>
+              <button type="button" class="summary-tab ${chartPeriod === "all" ? "active" : ""}" data-chart-period="all" role="tab" aria-selected="${chartPeriod === "all"}">${t("chart.period.all")}</button>
             </div>
-            <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}"></canvas>
+            <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}"></canvas>
             <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
             <div class="stat-grid">
               ${renderStat(t("chart.latest"), stats ? formatWeight(stats.latestWeight) : "--")}
@@ -479,9 +479,9 @@ function render() {
                 <h2>${t("summary.title")}</h2>
               </div>
             </div>
-            <div class="summary-tabs">
-              <button type="button" class="summary-tab ${summaryPeriod === "week" ? "active" : ""}" data-summary="week">${t("summary.week")}</button>
-              <button type="button" class="summary-tab ${summaryPeriod === "month" ? "active" : ""}" data-summary="month">${t("summary.month")}</button>
+            <div class="summary-tabs" role="tablist" aria-label="${t("summary.title")}">
+              <button type="button" class="summary-tab ${summaryPeriod === "week" ? "active" : ""}" data-summary="week" role="tab" aria-selected="${summaryPeriod === "week"}">${t("summary.week")}</button>
+              <button type="button" class="summary-tab ${summaryPeriod === "month" ? "active" : ""}" data-summary="month" role="tab" aria-selected="${summaryPeriod === "month"}">${t("summary.month")}</button>
             </div>
             ${periodSummary
               ? `<div class="stat-grid">
@@ -492,7 +492,7 @@ function render() {
                 </div>
                 <div class="helper" style="margin-top: 10px;">${t("summary.count")}: ${periodSummary.count}</div>`
               : `<div class="helper">${t("summary.noData")}</div>`}
-            <div class="rate-box" style="margin-top:14px;padding:10px 14px;border-radius:12px;background:var(--surface);">
+            <div class="rate-box">
               <div class="label">${t("rate.title")}</div>
               ${weeklyRate
                 ? `<div class="value" style="font-size:1.1rem;font-weight:700;color:${weeklyRate.weeklyRate < 0 ? "var(--ok, #10b981)" : weeklyRate.weeklyRate > 0 ? "var(--warn, #f59e0b)" : "var(--muted)"}">${weeklyRate.weeklyRate > 0 ? "+" : ""}${t("rate.value").replace("{rate}", weeklyRate.weeklyRate.toFixed(2))}</div>
@@ -525,9 +525,9 @@ function render() {
               ${state.records.length ? renderRecordList() : `<div class="empty-state"><div style="font-size:2.4rem;margin-bottom:8px;">📊</div><div class="helper">${t("records.empty")}</div></div>`}
             </div>
             <div class="export-grid">
-              <button type="button" class="btn secondary" data-action="export-excel">${t("export.excel")}</button>
-              <button type="button" class="btn secondary" data-action="export-csv">${t("export.csv")}</button>
-              <button type="button" class="btn secondary" data-action="export-text">${t("export.text")}</button>
+              <button type="button" class="btn secondary" data-action="export-excel">📊 ${t("export.excel")}</button>
+              <button type="button" class="btn secondary" data-action="export-csv">📄 ${t("export.csv")}</button>
+              <button type="button" class="btn secondary" data-action="export-text">📝 ${t("export.text")}</button>
             </div>
           </section>
         </div>
@@ -537,9 +537,9 @@ function render() {
             <div class="section-header">
               <div>
                 <h2>${t("section.settings")}</h2>
-                <p>${t("settings.saved")}</p>
+                <p>v${APP_VERSION}</p>
               </div>
-              <button type="button" class="btn secondary" data-action="save-settings">${t("section.settings")}</button>
+              <button type="button" class="btn secondary" data-action="save-settings">${t("settings.save")}</button>
             </div>
             <div class="settings-grid">
               <div class="field">
@@ -551,9 +551,9 @@ function render() {
               </div>
               <div class="field span-2">
                 <label>${t("settings.theme")}</label>
-                <div class="theme-grid">
+                <div class="theme-grid" role="radiogroup" aria-label="${t("settings.theme")}">
                   ${THEME_LIST.map((theme) => `
-                    <button type="button" class="theme-swatch ${state.settings.theme === theme.id ? "active" : ""}" data-theme-pick="${theme.id}">
+                    <button type="button" class="theme-swatch ${state.settings.theme === theme.id ? "active" : ""}" data-theme-pick="${theme.id}" role="radio" aria-checked="${state.settings.theme === theme.id}" aria-label="${t("settings.theme." + theme.id)}">
                       <span class="swatch-color" style="background: ${theme.color};"></span>
                       <span class="swatch-label">${t("settings.theme." + theme.id)}</span>
                     </button>
@@ -633,7 +633,7 @@ function render() {
             </div>
             <div class="field">
               <label for="goalWeight">${t("goal.set")}</label>
-              <input id="goalWeight" name="goalWeight" inputmode="decimal" value="${escapeAttr(state.settings.goalWeight ?? "")}" />
+              <input id="goalWeight" name="goalWeight" inputmode="decimal" autocomplete="off" value="${escapeAttr(state.settings.goalWeight ?? "")}" />
             </div>
           </section>
 
@@ -713,10 +713,10 @@ function render() {
       </div>
     </div>
     ${rainbowVisible ? `
-    <div class="rainbow-overlay" id="rainbowOverlay">
+    <div class="rainbow-overlay" id="rainbowOverlay" role="alert" aria-live="assertive">
       <div class="confetti-container" id="confettiContainer"></div>
       <div class="rainbow-card">
-        <div class="rainbow-emoji">🌈✨</div>
+        <div class="rainbow-emoji" aria-hidden="true">🌈✨</div>
         <div class="rainbow-text">${t("rainbow.congrats")}</div>
         <div class="rainbow-detail">${rainbowDetail}</div>
       </div>
@@ -763,11 +763,15 @@ function renderCalendar() {
   for (let i = 0; i < data.startDow; i++) {
     html += `<div class="calendar-cell empty"></div>`;
   }
+  const todayDate = new Date();
+  const isCurrentMonth = calendarYear === todayDate.getFullYear() && calendarMonth === todayDate.getMonth();
+  const todayDay = todayDate.getDate();
   for (const d of data.days) {
     const hasRecord = d.wt !== null;
+    const isToday = isCurrentMonth && d.day === todayDay;
     const intensity = d.intensity !== null ? d.intensity : 0;
     const bg = hasRecord ? `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)` : "";
-    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}" style="${bg}" title="${hasRecord ? `${d.wt} kg` : ""}">
+    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${d.wt} kg` : ""}">
       <span class="calendar-day">${d.day}</span>
       ${hasRecord ? `<span class="calendar-wt">${d.wt}</span>` : ""}
     </div>`;
@@ -786,7 +790,8 @@ function renderOption(value, selectedValue, label) {
 }
 
 function renderTab(mode, label) {
-  return `<button type="button" class="tab ${activeEntryMode === mode ? "active" : ""}" data-mode="${mode}">${label}</button>`;
+  const isActive = activeEntryMode === mode;
+  return `<button type="button" class="tab ${isActive ? "active" : ""}" data-mode="${mode}" role="tab" aria-selected="${isActive}" tabindex="${isActive ? "0" : "-1"}">${label}</button>`;
 }
 
 function renderRecord(record, prevRecord) {
@@ -1251,7 +1256,7 @@ async function handlePhotoSelection(event) {
   if (candidates.length > 0) {
     setStatus(t("status.photoReady"));
   } else if (supportsTextDetection) {
-    setStatus(t("entry.photoFallback"));
+    setStatus(t("status.photoNoDetection"));
   } else {
     setStatus(t("entry.photoFallback"));
   }
@@ -1844,7 +1849,7 @@ function drawChart() {
     const tip = document.getElementById("chartTooltip");
     if (cd < 30 && tip) {
       const r = snapRecords[ci];
-      tip.textContent = `${r.dt}: ${r.wt.toFixed(1)}kg${r.bmi ? ` (BMI ${r.bmi.toFixed(1)})` : ""}${r.bf ? ` BF ${r.bf}%` : ""}`;
+      tip.textContent = `${r.dt}: ${r.wt.toFixed(1)}kg${r.bmi ? ` (BMI ${r.bmi.toFixed(1)})` : ""}${r.bf ? ` BF ${r.bf}%` : ""}${r.note ? ` — ${r.note}` : ""}`;
       tip.style.display = "block";
       // Auto-hide after 3 seconds
       clearTimeout(canvas._tooltipTimer);
