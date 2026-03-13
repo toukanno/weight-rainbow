@@ -5805,3 +5805,57 @@ describe("pickWeightCandidate edge cases", () => {
     expect(pickWeightCandidate([65, 70, 75], 74)).toBe(75);
   });
 });
+
+// ── calcRecordingTimeStats edge cases ──
+describe("calcRecordingTimeStats edge cases", () => {
+  it("returns null for fewer than 3 records with createdAt", () => {
+    const records = [
+      { dt: "2024-01-01", wt: 70, createdAt: "2024-01-01T08:00:00Z" },
+      { dt: "2024-01-02", wt: 71, createdAt: "2024-01-02T09:00:00Z" },
+    ];
+    expect(calcRecordingTimeStats(records)).toBeNull();
+  });
+  it("returns null when records lack createdAt", () => {
+    const records = [
+      { dt: "2024-01-01", wt: 70 },
+      { dt: "2024-01-02", wt: 71 },
+      { dt: "2024-01-03", wt: 72 },
+    ];
+    expect(calcRecordingTimeStats(records)).toBeNull();
+  });
+  it("categorizes morning/afternoon/evening/night correctly", () => {
+    const records = [
+      { dt: "2024-01-01", wt: 70, createdAt: "2024-01-01T07:00:00" },
+      { dt: "2024-01-02", wt: 71, createdAt: "2024-01-02T14:00:00" },
+      { dt: "2024-01-03", wt: 72, createdAt: "2024-01-03T20:00:00" },
+      { dt: "2024-01-04", wt: 73, createdAt: "2024-01-04T02:00:00" },
+    ];
+    const result = calcRecordingTimeStats(records);
+    expect(result).not.toBeNull();
+    expect(result.morning.count).toBe(1);
+    expect(result.afternoon.count).toBe(1);
+    expect(result.evening.count).toBe(1);
+    expect(result.night.count).toBe(1);
+  });
+});
+
+// ── calcMovingAverages edge cases ──
+describe("calcMovingAverages edge cases", () => {
+  it("returns null for fewer than longWindow records", () => {
+    const records = Array.from({ length: 29 }, (_, i) => ({
+      dt: `2024-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    expect(calcMovingAverages(records)).toBeNull();
+  });
+  it("returns aligned signal when averages are close", () => {
+    const records = Array.from({ length: 30 }, (_, i) => ({
+      dt: `2024-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcMovingAverages(records);
+    expect(result).not.toBeNull();
+    expect(result.signal).toBe("aligned");
+    expect(result.diff).toBe(0);
+  });
+});
