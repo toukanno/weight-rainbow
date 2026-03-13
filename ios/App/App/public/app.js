@@ -22669,12 +22669,15 @@ var version = XLSX.version;
 // src/app.js
 var app = document.getElementById("app");
 var APP_VERSION = "1.0.0";
+function escHtml(s) {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 window.onerror = function(msg, src, line, col, err) {
   console.error("[WeightRainbow] Uncaught error:", msg, "at", src, line, col, err);
   if (app && !app.innerHTML.trim()) {
     app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
       <h2 style="color:#dc2626;">\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F / An error occurred</h2>
-      <p style="color:#666;margin:12px 0;">${String(msg)}</p>
+      <p style="color:#666;margin:12px 0;">${escHtml(msg)}</p>
       <p style="color:#999;font-size:0.8rem;">Line ${line}:${col}</p>
       <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
     </div>`;
@@ -22725,7 +22728,7 @@ try {
   console.error("[WeightRainbow] Init error:", e);
   app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
     <h2 style="color:#dc2626;">\u521D\u671F\u5316\u30A8\u30E9\u30FC / Init Error</h2>
-    <p style="color:#666;margin:12px 0;">${e.message}</p>
+    <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
     <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
     <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">\u30C7\u30FC\u30BF\u30EA\u30BB\u30C3\u30C8 / Reset Data</button>
   </div>`;
@@ -23458,8 +23461,8 @@ function render() {
     console.error("[WeightRainbow] Render error:", e);
     app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
       <h2 style="color:#dc2626;">\u63CF\u753B\u30A8\u30E9\u30FC / Render Error</h2>
-      <p style="color:#666;margin:12px 0;">${e.message}</p>
-      <p style="color:#999;font-size:0.8rem;">${e.stack ? e.stack.split("\n").slice(0, 3).join("<br>") : ""}</p>
+      <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
+      <p style="color:#999;font-size:0.8rem;">${e.stack ? e.stack.split("\n").slice(0, 3).map((l) => escHtml(l)).join("<br>") : ""}</p>
       <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
     </div>`;
   }

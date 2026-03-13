@@ -54,13 +54,16 @@ import * as XLSX from "xlsx";
 const app = document.getElementById("app");
 const APP_VERSION = "1.0.0";
 
+// Inline HTML escape for error handlers (escapeAttr may not be available yet)
+function escHtml(s) { return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
 // Global error handler to prevent white screen
 window.onerror = function(msg, src, line, col, err) {
   console.error("[WeightRainbow] Uncaught error:", msg, "at", src, line, col, err);
   if (app && !app.innerHTML.trim()) {
     app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
       <h2 style="color:#dc2626;">エラーが発生しました / An error occurred</h2>
-      <p style="color:#666;margin:12px 0;">${String(msg)}</p>
+      <p style="color:#666;margin:12px 0;">${escHtml(msg)}</p>
       <p style="color:#999;font-size:0.8rem;">Line ${line}:${col}</p>
       <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">再読み込み / Reload</button>
     </div>`;
@@ -117,7 +120,7 @@ try {
   console.error("[WeightRainbow] Init error:", e);
   app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
     <h2 style="color:#dc2626;">初期化エラー / Init Error</h2>
-    <p style="color:#666;margin:12px 0;">${e.message}</p>
+    <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
     <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">再読み込み / Reload</button>
     <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">データリセット / Reset Data</button>
   </div>`;
@@ -889,8 +892,8 @@ function render() {
     console.error("[WeightRainbow] Render error:", e);
     app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
       <h2 style="color:#dc2626;">描画エラー / Render Error</h2>
-      <p style="color:#666;margin:12px 0;">${e.message}</p>
-      <p style="color:#999;font-size:0.8rem;">${e.stack ? e.stack.split('\n').slice(0, 3).join('<br>') : ''}</p>
+      <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
+      <p style="color:#999;font-size:0.8rem;">${e.stack ? e.stack.split('\n').slice(0, 3).map(l => escHtml(l)).join('<br>') : ''}</p>
       <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">再読み込み / Reload</button>
     </div>`;
   }
