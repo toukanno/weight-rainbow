@@ -2514,6 +2514,47 @@ function getFrequentNotes(records, maxResults = 5) {
   const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, maxResults);
   return sorted.map(([text, count]) => ({ text, count }));
 }
+function detectDuplicates(records) {
+  if (records.length < 2) return { duplicates: [], suspicious: [] };
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const dateGroups = /* @__PURE__ */ new Map();
+  for (const r of sorted) {
+    if (!dateGroups.has(r.dt)) dateGroups.set(r.dt, []);
+    dateGroups.get(r.dt).push(r);
+  }
+  const duplicates = [];
+  for (const [date, recs] of dateGroups) {
+    if (recs.length > 1) {
+      duplicates.push({ date, count: recs.length, weights: recs.map((r) => r.wt) });
+    }
+  }
+  const suspicious = [];
+  let run = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].wt === sorted[i - 1].wt) {
+      run++;
+    } else {
+      if (run >= 3) {
+        suspicious.push({
+          weight: sorted[i - 1].wt,
+          from: sorted[i - run].dt,
+          to: sorted[i - 1].dt,
+          count: run
+        });
+      }
+      run = 1;
+    }
+  }
+  if (run >= 3) {
+    suspicious.push({
+      weight: sorted[sorted.length - 1].wt,
+      from: sorted[sorted.length - run].dt,
+      to: sorted[sorted.length - 1].dt,
+      count: run
+    });
+  }
+  return { duplicates, suspicious };
+}
 
 // src/i18n.js
 var translations = {
@@ -3159,7 +3200,11 @@ var translations = {
     "share.records": "\u8A18\u9332\u6570: {n}\u4EF6",
     "share.footer": "\u2014 Rainbow\u4F53\u91CD\u7BA1\u7406\u3067\u8A18\u9332",
     "quickNote.label": "\u3088\u304F\u4F7F\u3046\u30E1\u30E2",
-    "quickNote.none": "\u30E1\u30E2\u5C65\u6B74\u306A\u3057"
+    "quickNote.none": "\u30E1\u30E2\u5C65\u6B74\u306A\u3057",
+    "dupes.title": "\u30C7\u30FC\u30BF\u54C1\u8CEA\u30C1\u30A7\u30C3\u30AF",
+    "dupes.duplicate": "{date}: {count}\u4EF6\u306E\u91CD\u8907\u8A18\u9332",
+    "dupes.suspicious": "{weight}kg\u304C{count}\u65E5\u9593\u9023\u7D9A\uFF08{from}\u301C{to}\uFF09",
+    "dupes.clean": "\u554F\u984C\u306A\u3057"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3803,7 +3848,11 @@ var translations = {
     "share.records": "Records: {n}",
     "share.footer": "\u2014 Tracked with Rainbow Weight Log",
     "quickNote.label": "Frequent notes",
-    "quickNote.none": "No note history"
+    "quickNote.none": "No note history",
+    "dupes.title": "Data Quality Check",
+    "dupes.duplicate": "{date}: {count} duplicate entries",
+    "dupes.suspicious": "{weight}kg repeated {count} days ({from} \u2013 {to})",
+    "dupes.clean": "No issues found"
   }
 };
 function createTranslator(language) {
@@ -24917,6 +24966,7 @@ function render() {
                 ${renderPeriodComparison()}
                 ${renderBodyComposition()}
                 ${renderShareSummary()}
+                ${renderDuplicateCheck()}
               </div>
               ` : ""}
             </div>
@@ -26030,6 +26080,23 @@ function renderShareSummary() {
       <div class="helper">${t("share.title")}</div>
       <pre class="share-summary-text">${text}</pre>
       <button type="button" class="btn ghost share-summary-btn" data-action="copy-summary" data-text="${text.replace(/"/g, "&quot;")}">${t("share.btn")}</button>
+    </div>
+  `;
+}
+function renderDuplicateCheck() {
+  const dd = detectDuplicates(state.records);
+  if (dd.duplicates.length === 0 && dd.suspicious.length === 0) return "";
+  const items = [];
+  for (const d of dd.duplicates) {
+    items.push(`<div class="dupes-item dupes-warn">${t("dupes.duplicate").replace("{date}", d.date).replace("{count}", d.count)}</div>`);
+  }
+  for (const s of dd.suspicious) {
+    items.push(`<div class="dupes-item dupes-info">${t("dupes.suspicious").replace("{weight}", s.weight).replace("{count}", s.count).replace("{from}", s.from).replace("{to}", s.to)}</div>`);
+  }
+  return `
+    <div class="dupes-section">
+      <div class="helper">${t("dupes.title")}</div>
+      ${items.join("")}
     </div>
   `;
 }

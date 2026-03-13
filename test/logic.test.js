@@ -80,6 +80,8 @@ import {
   calcGoalCountdown,
   calcBodyComposition,
   generateWeightSummary,
+  getFrequentNotes,
+  detectDuplicates,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -5041,6 +5043,96 @@ describe("generateWeightSummary", () => {
   });
 });
 
+describe("getFrequentNotes", () => {
+  it("returns empty array for records without notes", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69 },
+    ];
+    expect(getFrequentNotes(records)).toEqual([]);
+  });
+
+  it("returns notes sorted by frequency", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, note: "gym day" },
+      { dt: "2025-01-02", wt: 69, note: "ate well" },
+      { dt: "2025-01-03", wt: 68, note: "gym day" },
+      { dt: "2025-01-04", wt: 67, note: "gym day" },
+      { dt: "2025-01-05", wt: 66, note: "ate well" },
+    ];
+    const result = getFrequentNotes(records);
+    expect(result.length).toBe(2);
+    expect(result[0].text).toBe("gym day");
+    expect(result[0].count).toBe(3);
+    expect(result[1].text).toBe("ate well");
+    expect(result[1].count).toBe(2);
+  });
+
+  it("respects maxResults limit", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+      note: `note ${i}`,
+    }));
+    const result = getFrequentNotes(records, 3);
+    expect(result.length).toBe(3);
+  });
+
+  it("ignores empty/whitespace notes", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, note: "" },
+      { dt: "2025-01-02", wt: 69, note: "   " },
+      { dt: "2025-01-03", wt: 68, note: "gym" },
+    ];
+    const result = getFrequentNotes(records);
+    expect(result.length).toBe(1);
+    expect(result[0].text).toBe("gym");
+  });
+});
+
+describe("detectDuplicates", () => {
+  it("returns empty for no duplicates", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69 },
+    ];
+    const result = detectDuplicates(records);
+    expect(result.duplicates).toEqual([]);
+    expect(result.suspicious).toEqual([]);
+  });
+
+  it("detects same-date entries", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-01", wt: 70.5 },
+      { dt: "2025-01-02", wt: 69 },
+    ];
+    const result = detectDuplicates(records);
+    expect(result.duplicates.length).toBe(1);
+    expect(result.duplicates[0].date).toBe("2025-01-01");
+    expect(result.duplicates[0].count).toBe(2);
+  });
+
+  it("detects suspicious identical consecutive weights", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70 },
+      { dt: "2025-01-03", wt: 70 },
+      { dt: "2025-01-04", wt: 69 },
+    ];
+    const result = detectDuplicates(records);
+    expect(result.suspicious.length).toBe(1);
+    expect(result.suspicious[0].weight).toBe(70);
+    expect(result.suspicious[0].count).toBe(3);
+  });
+
+  it("handles fewer than 2 records", () => {
+    const result = detectDuplicates([{ dt: "2025-01-01", wt: 70 }]);
+    expect(result.duplicates).toEqual([]);
+    expect(result.suspicious).toEqual([]);
+  });
+});
+
 describe("buildRecord edge cases", () => {
   it("truncates note to 100 characters", () => {
     const longNote = "x".repeat(150);
@@ -6189,5 +6281,83 @@ describe("calcBodyComposition edge cases", () => {
     const result = calcBodyComposition(records);
     expect(result).not.toBeNull();
     expect(result.dataPoints).toBe(3);
+  });
+});
+
+// ── detectDuplicates ──
+describe("detectDuplicates", () => {
+  it("returns empty arrays for empty input", () => {
+    const result = detectDuplicates([]);
+    expect(result).toEqual({ duplicates: [], suspicious: [] });
+  });
+
+  it("returns empty arrays for single record", () => {
+    const result = detectDuplicates([{ dt: "2025-01-01", wt: 70 }]);
+    expect(result).toEqual({ duplicates: [], suspicious: [] });
+  });
+
+  it("detects same-date duplicates", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-01", wt: 71 },
+      { dt: "2025-01-02", wt: 69 },
+    ];
+    const result = detectDuplicates(records);
+    expect(result.duplicates).toHaveLength(1);
+    expect(result.duplicates[0].date).toBe("2025-01-01");
+    expect(result.duplicates[0].count).toBe(2);
+    expect(result.duplicates[0].weights).toEqual([70, 71]);
+  });
+
+  it("detects suspicious consecutive identical weights (3+)", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70 },
+      { dt: "2025-01-03", wt: 70 },
+      { dt: "2025-01-04", wt: 69 },
+    ];
+    const result = detectDuplicates(records);
+    expect(result.suspicious).toHaveLength(1);
+    expect(result.suspicious[0].weight).toBe(70);
+    expect(result.suspicious[0].count).toBe(3);
+    expect(result.suspicious[0].from).toBe("2025-01-01");
+    expect(result.suspicious[0].to).toBe("2025-01-03");
+  });
+
+  it("does not flag 2 consecutive identical weights as suspicious", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70 },
+      { dt: "2025-01-03", wt: 69 },
+    ];
+    const result = detectDuplicates(records);
+    expect(result.suspicious).toHaveLength(0);
+  });
+
+  it("detects suspicious run at end of array", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 69 },
+      { dt: "2025-01-02", wt: 70 },
+      { dt: "2025-01-03", wt: 70 },
+      { dt: "2025-01-04", wt: 70 },
+    ];
+    const result = detectDuplicates(records);
+    expect(result.suspicious).toHaveLength(1);
+    expect(result.suspicious[0].weight).toBe(70);
+    expect(result.suspicious[0].from).toBe("2025-01-02");
+    expect(result.suspicious[0].to).toBe("2025-01-04");
+  });
+
+  it("detects both duplicates and suspicious in same dataset", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-01", wt: 71 },
+      { dt: "2025-01-02", wt: 65 },
+      { dt: "2025-01-03", wt: 65 },
+      { dt: "2025-01-04", wt: 65 },
+    ];
+    const result = detectDuplicates(records);
+    expect(result.duplicates).toHaveLength(1);
+    expect(result.suspicious).toHaveLength(1);
   });
 });
