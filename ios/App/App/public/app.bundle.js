@@ -3923,7 +3923,11 @@ var translations = {
     "success.up": "\u5897\u52A0",
     "recRate.title": "\u8A18\u9332\u7387",
     "recRate.summary": "{recorded}\u65E5 / {total}\u65E5",
-    "recRate.weeks": "\u76F4\u8FD14\u9031\u9593"
+    "recRate.weeks": "\u76F4\u8FD14\u9031\u9593",
+    "msHist.title": "\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3\u5C65\u6B74",
+    "msHist.reached": "{kg}kg\u9054\u6210 \u2014 {date}\uFF08{days}\u65E5\u76EE\uFF09",
+    "msHist.down": "\u6E1B\u91CF\u306E\u8ECC\u8DE1",
+    "msHist.up": "\u5897\u91CF\u306E\u8ECC\u8DE1"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4692,7 +4696,11 @@ var translations = {
     "success.up": "Up",
     "recRate.title": "Recording Rate",
     "recRate.summary": "{recorded} / {total} days",
-    "recRate.weeks": "Last 4 weeks"
+    "recRate.weeks": "Last 4 weeks",
+    "msHist.title": "Milestone History",
+    "msHist.reached": "{kg}kg reached \u2014 {date} (day {days})",
+    "msHist.down": "Weight loss journey",
+    "msHist.up": "Weight gain journey"
   }
 };
 function createTranslator(language) {
@@ -27888,6 +27896,7 @@ function handleFieldInput(event) {
   const { name, value } = event.target;
   if (["name", "heightCm", "age", "gender"].includes(name)) {
     state.profile = { ...state.profile, [name]: value };
+    persist();
     if (name === "heightCm") render();
     return;
   }
@@ -27910,29 +27919,35 @@ function handleFieldInput(event) {
   if (name === "language") {
     state.settings.language = value;
     t = createTranslator(value);
+    persist();
     render();
     return;
   }
   if (name === "theme" || name === "chartStyle") {
     state.settings[name] = value;
+    persist();
     render();
     return;
   }
   if (name === "adPreviewEnabled") {
     state.settings.adPreviewEnabled = value === "true";
+    persist();
     render();
     return;
   }
   if (name === "goalWeight") {
     state.settings.goalWeight = value;
+    persist();
     return;
   }
   if (name === "reminderEnabled") {
     state.settings.reminderEnabled = value === "true";
+    persist();
     return;
   }
   if (name === "reminderTime") {
     state.settings.reminderTime = value;
+    persist();
     return;
   }
   if (name === "autoTheme") {

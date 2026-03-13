@@ -2921,3 +2921,50 @@ export function calcRecordingRate(records) {
 
   return { totalDays, recordedDays, rate, weeks };
 }
+
+/**
+ * Track weight milestone history — when each kg milestone was first reached.
+ * Direction: "down" tracks decreasing milestones, "up" tracks increasing.
+ * Returns { direction, milestones: [{ kg, date, daysFromStart }] }
+ */
+export function calcMilestoneHistory(records) {
+  if (records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const startWt = sorted[0].wt;
+  const latestWt = sorted[sorted.length - 1].wt;
+  const direction = latestWt <= startWt ? "down" : "up";
+  const startDate = new Date(sorted[0].dt + "T00:00:00");
+
+  const milestones = [];
+  const reached = new Set();
+
+  if (direction === "down") {
+    // Track each kg below start
+    const startFloor = Math.floor(startWt);
+    for (const r of sorted) {
+      const floorWt = Math.floor(r.wt);
+      for (let kg = startFloor; kg >= floorWt; kg--) {
+        if (kg < startWt && !reached.has(kg)) {
+          reached.add(kg);
+          const days = Math.round((new Date(r.dt + "T00:00:00") - startDate) / 86400000);
+          milestones.push({ kg, date: r.dt, daysFromStart: days });
+        }
+      }
+    }
+  } else {
+    // Track each kg above start
+    const startCeil = Math.ceil(startWt);
+    for (const r of sorted) {
+      const ceilWt = Math.ceil(r.wt);
+      for (let kg = startCeil; kg <= ceilWt; kg++) {
+        if (kg > startWt && !reached.has(kg)) {
+          reached.add(kg);
+          const days = Math.round((new Date(r.dt + "T00:00:00") - startDate) / 86400000);
+          milestones.push({ kg, date: r.dt, daysFromStart: days });
+        }
+      }
+    }
+  }
+
+  return { direction, startWt, latestWt, milestones };
+}

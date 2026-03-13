@@ -100,6 +100,7 @@ import {
   calcWeightAnomalies,
   calcSuccessRate,
   calcRecordingRate,
+  calcMilestoneHistory,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -7795,5 +7796,59 @@ describe("calcDayOfWeekChange edge cases", () => {
         if (a !== null) expect(a).toBeCloseTo(0, 1);
       });
     }
+  });
+});
+
+// ── calcMilestoneHistory ──
+describe("calcMilestoneHistory", () => {
+  it("returns null for fewer than 2 records", () => {
+    expect(calcMilestoneHistory([])).toBeNull();
+    expect(calcMilestoneHistory([{ dt: "2026-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("tracks downward milestones", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 72.5 },
+      { dt: "2026-01-10", wt: 71.3 },
+      { dt: "2026-01-20", wt: 70.8 },
+      { dt: "2026-01-30", wt: 69.9 },
+    ];
+    const result = calcMilestoneHistory(records);
+    expect(result).not.toBeNull();
+    expect(result.direction).toBe("down");
+    expect(result.milestones.length).toBeGreaterThan(0);
+    expect(result.milestones[0].kg).toBe(72);
+    expect(result.milestones.some((m) => m.kg === 70)).toBe(true);
+  });
+
+  it("tracks upward milestones", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 60.5 },
+      { dt: "2026-01-10", wt: 61.2 },
+      { dt: "2026-01-20", wt: 62.8 },
+    ];
+    const result = calcMilestoneHistory(records);
+    expect(result).not.toBeNull();
+    expect(result.direction).toBe("up");
+    expect(result.milestones.some((m) => m.kg === 61)).toBe(true);
+  });
+
+  it("handles no milestones (flat weight)", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 70.0 },
+      { dt: "2026-01-02", wt: 70.0 },
+    ];
+    const result = calcMilestoneHistory(records);
+    expect(result).not.toBeNull();
+    expect(result.milestones).toHaveLength(0);
+  });
+
+  it("includes daysFromStart in milestones", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 72 },
+      { dt: "2026-01-11", wt: 70.5 },
+    ];
+    const result = calcMilestoneHistory(records);
+    expect(result.milestones[0].daysFromStart).toBe(10);
   });
 });
