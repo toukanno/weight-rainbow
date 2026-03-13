@@ -4119,9 +4119,9 @@ async function googleRestore() {
     state.records = trimRecords(m, MAX_RECORDS);
     const newCount = state.records.length - beforeCount;
     if (bd.settings?.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;
-    // Import profile if present and current one is empty
+    // Import profile if present and current one is empty (sanitize)
     if (bd.profile && !state.profile.name && !state.profile.heightCm) {
-      state.profile = { ...createDefaultProfile(), ...bd.profile };
+      state.profile = sanitizeProfile({ ...createDefaultProfile(), ...bd.profile });
     }
     if (!persist()) { setStatus(t("status.storageError"), "error"); return; }
     setStatus(t("google.restoreDone") + ` (${validBackupRecords.length} ${t("chart.records")}${newCount > 0 ? `, +${newCount} ${t("import.new")}` : ""})`);

@@ -28729,7 +28729,7 @@ async function googleRestore() {
     const newCount = state.records.length - beforeCount;
     if (bd.settings?.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;
     if (bd.profile && !state.profile.name && !state.profile.heightCm) {
-      state.profile = { ...createDefaultProfile(), ...bd.profile };
+      state.profile = sanitizeProfile({ ...createDefaultProfile(), ...bd.profile });
     }
     if (!persist()) {
       setStatus(t("status.storageError"), "error");
