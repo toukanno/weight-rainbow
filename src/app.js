@@ -56,6 +56,7 @@ import {
   calcDataHealth,
   calcWeekdayVsWeekend,
   calcWeightRangePosition,
+  calcTagImpact,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -130,10 +131,10 @@ try {
 } catch (e) {
   console.error("[WeightRainbow] Init error:", e);
   app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
-    <h2 style="color:#dc2626;">初期化エラー / Init Error</h2>
+    <h2 style="color:#dc2626;">${t("error.init")}</h2>
     <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
-    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">再読み込み / Reload</button>
-    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">データリセット / Reset Data</button>
+    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
+    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">${t("error.resetData")}</button>
   </div>`;
 }
 
@@ -597,7 +598,7 @@ function render() {
               <button type="button" class="summary-tab ${chartPeriod === "90" ? "active" : ""}" data-chart-period="90" role="tab" aria-selected="${chartPeriod === "90"}">${t("chart.period.90")}</button>
               <button type="button" class="summary-tab ${chartPeriod === "all" ? "active" : ""}" data-chart-period="all" role="tab" aria-selected="${chartPeriod === "all"}">${t("chart.period.all")}</button>
             </div>
-            <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}"></canvas>
+            <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}${stats ? ` — ${stats.latestWeight.toFixed(1)}kg, ${t("chart.change")}: ${stats.change > 0 ? "+" : ""}${stats.change.toFixed(1)}kg, ${state.records.length} ${t("chart.records")}` : ""}"></canvas>
             <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
             ${state.records.length >= 3 ? `<div class="chart-legend">
               <span class="chart-legend-item"><span class="chart-legend-line gradient"></span>${t("chart.legend.weight")}</span>
@@ -657,6 +658,7 @@ function render() {
             ${renderWeightPercentile()}
             ${renderMovingAverages()}
             ${renderWeightRange()}
+            ${renderTagImpact()}
             ${renderBodyFatStats()}
           </section>
 
@@ -932,10 +934,10 @@ function render() {
   } catch (e) {
     console.error("[WeightRainbow] Render error:", e);
     app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
-      <h2 style="color:#dc2626;">描画エラー / Render Error</h2>
+      <h2 style="color:#dc2626;">${t("error.render")}</h2>
       <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
       <p style="color:#999;font-size:0.8rem;">${e.stack ? e.stack.split('\n').slice(0, 3).map(l => escHtml(l)).join('<br>') : ''}</p>
-      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">再読み込み / Reload</button>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
     </div>`;
   }
 }
@@ -1167,6 +1169,28 @@ function renderWeightRange() {
       </div>
       <div class="helper hint-small ${zoneCls}">${t("range.position").replace("{pct}", range.position)}</div>
       <div class="helper hint-small" style="margin-top:2px;">${t("range." + range.zone)}</div>
+    </div>
+  `;
+}
+
+function renderTagImpact() {
+  const impact = calcTagImpact(state.records);
+  if (!impact) return "";
+  const rows = impact.map((item) => {
+    const sign = item.avgChange > 0 ? "+" : "";
+    const cls = item.avgChange > 0.05 ? "tag-gain" : item.avgChange < -0.05 ? "tag-loss" : "tag-neutral";
+    return `
+      <div class="tag-impact-row ${cls}">
+        <span class="tag-impact-tag">#${t("note.tag." + item.tag)}</span>
+        <span class="tag-impact-change">${sign}${item.avgChange.toFixed(2)}kg</span>
+        <span class="hint-small">${t("tagImpact.count").replace("{count}", item.count)}</span>
+      </div>`;
+  }).join("");
+  return `
+    <div class="tag-impact-section">
+      <div class="helper">${t("tagImpact.title")}</div>
+      <div class="helper hint-small" style="margin-bottom:6px;">${t("tagImpact.hint")}</div>
+      ${rows}
     </div>
   `;
 }
@@ -2125,8 +2149,8 @@ function exportText() {
   }
   try {
     const lines = state.records.map((r) => {
-      const bmiStr = r.bmi ? ` / BMI: ${r.bmi.toFixed(1)}` : "";
-      const bfStr = r.bf ? ` / BF: ${Number(r.bf).toFixed(1)}%` : "";
+      const bmiStr = r.bmi ? ` / ${t("bmi.title")}: ${r.bmi.toFixed(1)}` : "";
+      const bfStr = r.bf ? ` / ${t("bodyFat.label")}: ${Number(r.bf).toFixed(1)}%` : "";
       const noteStr = r.note ? `  [${r.note}]` : "";
       const dow = t("day." + new Date(r.dt + "T00:00:00").getDay());
       return `${r.dt} (${dow})  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})${noteStr}`;

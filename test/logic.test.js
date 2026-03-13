@@ -54,6 +54,7 @@ import {
   calcDataHealth,
   calcWeekdayVsWeekend,
   calcWeightRangePosition,
+  calcTagImpact,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -2276,5 +2277,57 @@ describe("calcWeightRangePosition", () => {
     const result = calcWeightRangePosition(records);
     expect(result.position).toBe(50);
     expect(result.zone).toBe("middle");
+  });
+});
+
+describe("calcTagImpact", () => {
+  it("returns null for fewer than 5 records", () => {
+    const records = [{ wt: 70, note: "#exercise" }, { wt: 69, note: "" }];
+    expect(calcTagImpact(records)).toBeNull();
+  });
+
+  it("returns null when no tags are used", () => {
+    const records = [
+      { wt: 70, note: "" }, { wt: 71, note: "" }, { wt: 70.5, note: "" },
+      { wt: 69.8, note: "" }, { wt: 70.2, note: "" },
+    ];
+    expect(calcTagImpact(records)).toBeNull();
+  });
+
+  it("calculates average change for exercise tag", () => {
+    const records = [
+      { wt: 70, note: "" },
+      { wt: 69.5, note: "#exercise" },
+      { wt: 69.8, note: "" },
+      { wt: 69.0, note: "#exercise" },
+      { wt: 69.5, note: "" },
+      { wt: 68.8, note: "#exercise" },
+    ];
+    // exercise tags at i=1 (69.5-70=-0.5), i=3 (69.0-69.8=-0.8), i=5 (68.8-69.5=-0.7)
+    const result = calcTagImpact(records);
+    expect(result).not.toBeNull();
+    expect(result.length).toBe(1);
+    expect(result[0].tag).toBe("exercise");
+    expect(result[0].count).toBe(3);
+    expect(result[0].avgChange).toBeLessThan(0);
+  });
+
+  it("sorts tags by avgChange ascending", () => {
+    const records = [
+      { wt: 70, note: "#diet" },
+      { wt: 71, note: "#cheatday" },
+      { wt: 70.5, note: "#diet" },
+      { wt: 71.5, note: "#cheatday" },
+      { wt: 70, note: "#diet" },
+      { wt: 71, note: "" },
+    ];
+    const result = calcTagImpact(records);
+    expect(result).not.toBeNull();
+    // diet should come before cheatday (lower avgChange)
+    const dietIdx = result.findIndex((r) => r.tag === "diet");
+    const cheatIdx = result.findIndex((r) => r.tag === "cheatday");
+    if (dietIdx >= 0 && cheatIdx >= 0) {
+      expect(result[dietIdx].avgChange).toBeLessThanOrEqual(result[cheatIdx].avgChange);
+    }
   });
 });

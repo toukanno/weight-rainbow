@@ -1621,6 +1621,30 @@ function calcWeightRangePosition(records) {
   const zone = position <= 25 ? "low" : position >= 75 ? "high" : "middle";
   return { position, latest, min, max, zone };
 }
+function calcTagImpact(records) {
+  if (records.length < 5) return null;
+  const tagData = {};
+  for (let i = 1; i < records.length; i++) {
+    const note = records[i].note || "";
+    const diff = Math.round((records[i].wt - records[i - 1].wt) * 10) / 10;
+    for (const tag of NOTE_TAGS) {
+      if (note.includes(`#${tag}`)) {
+        if (!tagData[tag]) tagData[tag] = { diffs: [], count: 0 };
+        tagData[tag].diffs.push(diff);
+        tagData[tag].count++;
+      }
+    }
+  }
+  const results = [];
+  for (const [tag, data] of Object.entries(tagData)) {
+    if (data.count < 2) continue;
+    const avg = Math.round(data.diffs.reduce((s, d) => s + d, 0) / data.count * 100) / 100;
+    results.push({ tag, avgChange: avg, count: data.count });
+  }
+  if (!results.length) return null;
+  results.sort((a, b) => a.avgChange - b.avgChange);
+  return results;
+}
 
 // src/i18n.js
 var translations = {
@@ -1845,6 +1869,10 @@ var translations = {
     "wdwe.heavier.weekend": "\u9031\u672B\u304C\u3084\u3084\u91CD\u3044\u50BE\u5411",
     "wdwe.heavier.weekday": "\u5E73\u65E5\u304C\u3084\u3084\u91CD\u3044\u50BE\u5411",
     "wdwe.heavier.similar": "\u5E73\u65E5\u30FB\u9031\u672B\u3067\u307B\u307C\u540C\u3058",
+    "error.init": "\u521D\u671F\u5316\u30A8\u30E9\u30FC",
+    "error.render": "\u63CF\u753B\u30A8\u30E9\u30FC",
+    "error.reload": "\u518D\u8AAD\u307F\u8FBC\u307F",
+    "error.resetData": "\u30C7\u30FC\u30BF\u30EA\u30BB\u30C3\u30C8",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
     "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01\uFF08-{diff}kg\uFF09",
     "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
@@ -2040,7 +2068,14 @@ var translations = {
     "range.high": "\u904E\u53BB\u6700\u91CD\u91CF\u306B\u8FD1\u3044",
     "range.middle": "\u4E2D\u9593\u306E\u7BC4\u56F2",
     "range.min": "\u6700\u5C0F {weight}kg",
-    "range.max": "\u6700\u5927 {weight}kg"
+    "range.max": "\u6700\u5927 {weight}kg",
+    "tagImpact.title": "\u30BF\u30B0\u5225 \u4F53\u91CD\u5909\u5316",
+    "tagImpact.avg": "\u5E73\u5747\u5909\u5316",
+    "tagImpact.count": "{count}\u56DE",
+    "tagImpact.hint": "\u5404\u30BF\u30B0\u304C\u3042\u308B\u65E5\u306E\u7FCC\u65E5\u306E\u4F53\u91CD\u5909\u5316",
+    "tagImpact.positive": "\u5897\u52A0\u50BE\u5411",
+    "tagImpact.negative": "\u6E1B\u5C11\u50BE\u5411",
+    "tagImpact.neutral": "\u5909\u5316\u306A\u3057"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2266,6 +2301,10 @@ var translations = {
     "wdwe.heavier.weekend": "Slightly heavier on weekends",
     "wdwe.heavier.weekday": "Slightly heavier on weekdays",
     "wdwe.heavier.similar": "Similar on weekdays and weekends",
+    "error.init": "Initialization Error",
+    "error.render": "Render Error",
+    "error.reload": "Reload",
+    "error.resetData": "Reset Data",
     "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
@@ -2458,7 +2497,14 @@ var translations = {
     "range.high": "Near your all-time highest",
     "range.middle": "Mid-range",
     "range.min": "Min {weight}kg",
-    "range.max": "Max {weight}kg"
+    "range.max": "Max {weight}kg",
+    "tagImpact.title": "Tag Impact Analysis",
+    "tagImpact.avg": "Avg change",
+    "tagImpact.count": "{count} times",
+    "tagImpact.hint": "Weight change on days following each tag",
+    "tagImpact.positive": "Gain trend",
+    "tagImpact.negative": "Loss trend",
+    "tagImpact.neutral": "No change"
   }
 };
 function createTranslator(language) {
@@ -23034,10 +23080,10 @@ try {
 } catch (e) {
   console.error("[WeightRainbow] Init error:", e);
   app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
-    <h2 style="color:#dc2626;">\u521D\u671F\u5316\u30A8\u30E9\u30FC / Init Error</h2>
+    <h2 style="color:#dc2626;">${t("error.init")}</h2>
     <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
-    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
-    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">\u30C7\u30FC\u30BF\u30EA\u30BB\u30C3\u30C8 / Reset Data</button>
+    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
+    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">${t("error.resetData")}</button>
   </div>`;
 }
 initReminder();
@@ -23467,7 +23513,7 @@ function render() {
               <button type="button" class="summary-tab ${chartPeriod === "90" ? "active" : ""}" data-chart-period="90" role="tab" aria-selected="${chartPeriod === "90"}">${t("chart.period.90")}</button>
               <button type="button" class="summary-tab ${chartPeriod === "all" ? "active" : ""}" data-chart-period="all" role="tab" aria-selected="${chartPeriod === "all"}">${t("chart.period.all")}</button>
             </div>
-            <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}"></canvas>
+            <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}${stats ? ` \u2014 ${stats.latestWeight.toFixed(1)}kg, ${t("chart.change")}: ${stats.change > 0 ? "+" : ""}${stats.change.toFixed(1)}kg, ${state.records.length} ${t("chart.records")}` : ""}"></canvas>
             <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
             ${state.records.length >= 3 ? `<div class="chart-legend">
               <span class="chart-legend-item"><span class="chart-legend-line gradient"></span>${t("chart.legend.weight")}</span>
@@ -23519,6 +23565,7 @@ function render() {
             ${renderWeightPercentile()}
             ${renderMovingAverages()}
             ${renderWeightRange()}
+            ${renderTagImpact()}
             ${renderBodyFatStats()}
           </section>
 
@@ -23791,10 +23838,10 @@ function render() {
   } catch (e) {
     console.error("[WeightRainbow] Render error:", e);
     app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
-      <h2 style="color:#dc2626;">\u63CF\u753B\u30A8\u30E9\u30FC / Render Error</h2>
+      <h2 style="color:#dc2626;">${t("error.render")}</h2>
       <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
       <p style="color:#999;font-size:0.8rem;">${e.stack ? e.stack.split("\n").slice(0, 3).map((l) => escHtml(l)).join("<br>") : ""}</p>
-      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
     </div>`;
   }
 }
@@ -24013,6 +24060,27 @@ function renderWeightRange() {
       </div>
       <div class="helper hint-small ${zoneCls}">${t("range.position").replace("{pct}", range.position)}</div>
       <div class="helper hint-small" style="margin-top:2px;">${t("range." + range.zone)}</div>
+    </div>
+  `;
+}
+function renderTagImpact() {
+  const impact = calcTagImpact(state.records);
+  if (!impact) return "";
+  const rows = impact.map((item) => {
+    const sign = item.avgChange > 0 ? "+" : "";
+    const cls = item.avgChange > 0.05 ? "tag-gain" : item.avgChange < -0.05 ? "tag-loss" : "tag-neutral";
+    return `
+      <div class="tag-impact-row ${cls}">
+        <span class="tag-impact-tag">#${t("note.tag." + item.tag)}</span>
+        <span class="tag-impact-change">${sign}${item.avgChange.toFixed(2)}kg</span>
+        <span class="hint-small">${t("tagImpact.count").replace("{count}", item.count)}</span>
+      </div>`;
+  }).join("");
+  return `
+    <div class="tag-impact-section">
+      <div class="helper">${t("tagImpact.title")}</div>
+      <div class="helper hint-small" style="margin-bottom:6px;">${t("tagImpact.hint")}</div>
+      ${rows}
     </div>
   `;
 }
@@ -24874,8 +24942,8 @@ function exportText() {
   }
   try {
     const lines = state.records.map((r) => {
-      const bmiStr = r.bmi ? ` / BMI: ${r.bmi.toFixed(1)}` : "";
-      const bfStr = r.bf ? ` / BF: ${Number(r.bf).toFixed(1)}%` : "";
+      const bmiStr = r.bmi ? ` / ${t("bmi.title")}: ${r.bmi.toFixed(1)}` : "";
+      const bfStr = r.bf ? ` / ${t("bodyFat.label")}: ${Number(r.bf).toFixed(1)}%` : "";
       const noteStr = r.note ? `  [${r.note}]` : "";
       const dow = t("day." + (/* @__PURE__ */ new Date(r.dt + "T00:00:00")).getDay());
       return `${r.dt} (${dow})  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})${noteStr}`;

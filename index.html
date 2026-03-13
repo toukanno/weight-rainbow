@@ -1060,7 +1060,7 @@
       }
       .range-bar-fill {
         height: 100%;
-        background: linear-gradient(90deg, var(--ok, #10b981), var(--warn, #f59e0b), var(--danger, #ef4444));
+        background: linear-gradient(90deg, var(--ok, #10b981), var(--warn, #f59e0b), var(--error, #ef4444));
         border-radius: 6px 0 0 6px;
         transition: width 0.3s ease;
       }
@@ -1079,8 +1079,34 @@
         margin-top: 4px;
       }
       .range-low { color: var(--ok, #10b981); font-weight: 600; }
-      .range-high { color: var(--danger, #ef4444); font-weight: 600; }
+      .range-high { color: var(--error, #ef4444); font-weight: 600; }
       .range-mid { color: var(--muted); }
+
+      .tag-impact-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .tag-impact-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 4px 0;
+      }
+      .tag-impact-tag {
+        font-weight: 600;
+        font-size: 0.85rem;
+        min-width: 80px;
+      }
+      .tag-impact-change {
+        font-weight: 700;
+        font-size: 0.9rem;
+        min-width: 70px;
+        text-align: right;
+      }
+      .tag-gain .tag-impact-change { color: var(--warn, #f59e0b); }
+      .tag-loss .tag-impact-change { color: var(--ok, #10b981); }
+      .tag-neutral .tag-impact-change { color: var(--muted); }
 
       .consistency-section {
         margin-top: 14px;
