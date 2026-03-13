@@ -113,6 +113,7 @@ import {
   calcWeightRangeSummary,
   calcTrendStreak,
   calcBMITrend,
+  calcWeeklySummaryComparison,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -801,6 +802,7 @@ function render() {
             ${renderWeightRangeSummary()}
             ${renderTrendStreak()}
             ${renderBMITrend()}
+            ${renderWeeklySummaryComparison()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -2611,6 +2613,40 @@ function renderBMITrend() {
         <span>${t("bmiTrend.range")}: ${data.min.toFixed(1)} – ${data.max.toFixed(1)}</span>
         <span>${pts.length} ${t("chart.records")}</span>
       </div>
+    </div>
+  `;
+}
+
+function renderWeeklySummaryComparison() {
+  const data = calcWeeklySummaryComparison(state.records);
+  if (!data.diffs) return "";
+
+  const tw = data.thisWeek;
+  const lw = data.lastWeek;
+  const d = data.diffs;
+
+  function diffCell(val) {
+    if (val === 0) return `<span class="wc-zero">±0</span>`;
+    const cls = val < 0 ? "wc-neg" : "wc-pos";
+    return `<span class="${cls}">${val > 0 ? "+" : ""}${typeof val === "number" && !Number.isInteger(val) ? val.toFixed(1) : val}</span>`;
+  }
+
+  const metrics = [
+    { label: t("wcomp.avg"), tw: tw.avg.toFixed(1), lw: lw.avg.toFixed(1), diff: d.avg },
+    { label: t("wcomp.min"), tw: tw.min.toFixed(1), lw: lw.min.toFixed(1), diff: d.min },
+    { label: t("wcomp.max"), tw: tw.max.toFixed(1), lw: lw.max.toFixed(1), diff: d.max },
+    { label: t("wcomp.count"), tw: tw.count, lw: lw.count, diff: d.count },
+  ];
+
+  const rows = metrics.map((m) =>
+    `<div class="wc-row"><span class="wc-label">${m.label}</span><span class="wc-val">${m.lw}</span><span class="wc-val">${m.tw}</span><span class="wc-val">${diffCell(m.diff)}</span></div>`
+  ).join("");
+
+  return `
+    <div class="wc-section">
+      <div class="helper">${t("wcomp.title")}</div>
+      <div class="wc-header"><span></span><span>${t("wcomp.lastWeek")}</span><span>${t("wcomp.thisWeek")}</span><span>${t("wcomp.diff")}</span></div>
+      ${rows}
     </div>
   `;
 }
@@ -4762,7 +4798,7 @@ if (GOOGLE_CLIENT_ID) {
 function handlePhotoZoom() {
   if (!imagePreviewUrl) return;
   const ov = document.createElement("div");
-  ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
+  ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
   ov.setAttribute("role", "dialog");
   ov.setAttribute("aria-label", t("photo.zoomHint"));
   const im = document.createElement("img");

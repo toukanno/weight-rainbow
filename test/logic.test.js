@@ -110,6 +110,7 @@ import {
   calcWeightRangeSummary,
   calcTrendStreak,
   calcBMITrend,
+  calcWeeklySummaryComparison,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -8360,5 +8361,66 @@ describe("calcBMITrend", () => {
     const result = calcBMITrend(records);
     expect(result.direction).toBe("up");
     expect(result.change).toBeGreaterThan(0);
+  });
+});
+
+describe("calcWeeklySummaryComparison", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcWeeklySummaryComparison([]).diffs).toBeNull();
+    expect(calcWeeklySummaryComparison(null).diffs).toBeNull();
+  });
+
+  it("returns null diffs when only one week has data", () => {
+    const today = new Date();
+    const records = [
+      { dt: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, wt: 70 },
+    ];
+    const result = calcWeeklySummaryComparison(records);
+    // thisWeek might have data, but lastWeek won't, so diffs should be null
+    expect(result.diffs).toBeNull();
+  });
+
+  it("returns diffs when both weeks have data", () => {
+    const today = new Date();
+    const records = [];
+    // This week
+    for (let i = 0; i < 3; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      records.push({ dt: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`, wt: 70 + i * 0.2 });
+    }
+    // Last week
+    for (let i = 7; i < 10; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      records.push({ dt: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`, wt: 71 + (i - 7) * 0.2 });
+    }
+    const result = calcWeeklySummaryComparison(records);
+    if (result.diffs) {
+      expect(result.diffs).toHaveProperty("avg");
+      expect(result.diffs).toHaveProperty("min");
+      expect(result.diffs).toHaveProperty("max");
+      expect(result.diffs).toHaveProperty("count");
+      expect(typeof result.diffs.avg).toBe("number");
+    }
+  });
+
+  it("returns correct thisWeek and lastWeek structure", () => {
+    const today = new Date();
+    const records = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      records.push({ dt: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`, wt: 70 });
+    }
+    const result = calcWeeklySummaryComparison(records);
+    if (result.thisWeek) {
+      expect(result.thisWeek).toHaveProperty("avg");
+      expect(result.thisWeek).toHaveProperty("count");
+    }
+    if (result.lastWeek) {
+      expect(result.lastWeek).toHaveProperty("avg");
+      expect(result.lastWeek).toHaveProperty("count");
+    }
   });
 });

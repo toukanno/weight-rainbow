@@ -3391,3 +3391,59 @@ export function calcBMITrend(records) {
     max: +Math.max(...bmis).toFixed(1),
   };
 }
+
+/**
+ * Compare current week vs previous week statistics.
+ * Returns { thisWeek, lastWeek, diffs } where each has { avg, min, max, count, range }.
+ * diffs shows the change for each metric.
+ */
+export function calcWeeklySummaryComparison(records) {
+  if (!records || records.length < 2) {
+    return { thisWeek: null, lastWeek: null, diffs: null };
+  }
+
+  const today = new Date();
+  const dayOfWeek = today.getDay(); // 0=Sun
+  // Start of this week (Monday)
+  const thisWeekStart = new Date(today);
+  thisWeekStart.setDate(today.getDate() - ((dayOfWeek + 6) % 7));
+  thisWeekStart.setHours(0, 0, 0, 0);
+
+  const lastWeekStart = new Date(thisWeekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+
+  const thisWeekStr = localDateStr(thisWeekStart);
+  const lastWeekStr = localDateStr(lastWeekStart);
+  const thisWeekEndStr = localDateStr(today);
+
+  const thisWeekRecs = records.filter((r) => r.dt >= thisWeekStr && r.dt <= thisWeekEndStr);
+  const lastWeekRecs = records.filter((r) => r.dt >= lastWeekStr && r.dt < thisWeekStr);
+
+  function weekStats(recs) {
+    if (recs.length === 0) return null;
+    const weights = recs.map((r) => r.wt);
+    const min = +Math.min(...weights).toFixed(1);
+    const max = +Math.max(...weights).toFixed(1);
+    const avg = +(weights.reduce((s, w) => s + w, 0) / weights.length).toFixed(1);
+    return { avg, min, max, count: recs.length, range: +(max - min).toFixed(1) };
+  }
+
+  const tw = weekStats(thisWeekRecs);
+  const lw = weekStats(lastWeekRecs);
+
+  if (!tw || !lw) {
+    return { thisWeek: tw, lastWeek: lw, diffs: null };
+  }
+
+  return {
+    thisWeek: tw,
+    lastWeek: lw,
+    diffs: {
+      avg: +(tw.avg - lw.avg).toFixed(1),
+      min: +(tw.min - lw.min).toFixed(1),
+      max: +(tw.max - lw.max).toFixed(1),
+      count: tw.count - lw.count,
+      range: +(tw.range - lw.range).toFixed(1),
+    },
+  };
+}

@@ -3002,6 +3002,24 @@
         color: var(--muted);
       }
 
+      .wc-section { margin-top: 14px; }
+      .wc-header, .wc-row {
+        display: grid;
+        grid-template-columns: 60px 1fr 1fr 60px;
+        gap: 4px;
+        align-items: center;
+        font-size: 0.85rem;
+        padding: 4px 0;
+      }
+      .wc-header { color: var(--muted); font-size: 0.75rem; font-weight: 600; border-bottom: 1px solid var(--border); }
+      .wc-row { border-bottom: 1px solid var(--border); }
+      .wc-row:last-child { border-bottom: none; }
+      .wc-label { font-weight: 600; color: var(--sub); }
+      .wc-val { text-align: center; }
+      .wc-neg { color: var(--ok); font-weight: 600; }
+      .wc-pos { color: var(--danger); font-weight: 600; }
+      .wc-zero { color: var(--muted); }
+
       .success-section {
         margin-top: 14px;
         text-align: center;
@@ -3199,6 +3217,7 @@
         overflow: hidden;
         background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 6%, var(--surface)), color-mix(in srgb, var(--accent-2) 4%, var(--surface)));
         border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+        backdrop-filter: blur(12px);
       }
       .ai-coach-panel::before {
         content: "";
@@ -5053,6 +5072,9 @@
 
       body[data-theme="midnight"] .hero::after {
         opacity: 0.2;
+      }
+      body[data-theme="midnight"] .hero::before {
+        background: linear-gradient(90deg, transparent, rgba(129, 140, 248, 0.04), transparent);
       }
 
       body[data-theme="midnight"] canvas {

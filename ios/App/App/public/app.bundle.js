@@ -3503,6 +3503,47 @@ function calcBMITrend(records) {
     max: +Math.max(...bmis).toFixed(1)
   };
 }
+function calcWeeklySummaryComparison(records) {
+  if (!records || records.length < 2) {
+    return { thisWeek: null, lastWeek: null, diffs: null };
+  }
+  const today = /* @__PURE__ */ new Date();
+  const dayOfWeek = today.getDay();
+  const thisWeekStart = new Date(today);
+  thisWeekStart.setDate(today.getDate() - (dayOfWeek + 6) % 7);
+  thisWeekStart.setHours(0, 0, 0, 0);
+  const lastWeekStart = new Date(thisWeekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+  const thisWeekStr = localDateStr(thisWeekStart);
+  const lastWeekStr = localDateStr(lastWeekStart);
+  const thisWeekEndStr = localDateStr(today);
+  const thisWeekRecs = records.filter((r) => r.dt >= thisWeekStr && r.dt <= thisWeekEndStr);
+  const lastWeekRecs = records.filter((r) => r.dt >= lastWeekStr && r.dt < thisWeekStr);
+  function weekStats(recs) {
+    if (recs.length === 0) return null;
+    const weights = recs.map((r) => r.wt);
+    const min = +Math.min(...weights).toFixed(1);
+    const max = +Math.max(...weights).toFixed(1);
+    const avg = +(weights.reduce((s, w) => s + w, 0) / weights.length).toFixed(1);
+    return { avg, min, max, count: recs.length, range: +(max - min).toFixed(1) };
+  }
+  const tw = weekStats(thisWeekRecs);
+  const lw = weekStats(lastWeekRecs);
+  if (!tw || !lw) {
+    return { thisWeek: tw, lastWeek: lw, diffs: null };
+  }
+  return {
+    thisWeek: tw,
+    lastWeek: lw,
+    diffs: {
+      avg: +(tw.avg - lw.avg).toFixed(1),
+      min: +(tw.min - lw.min).toFixed(1),
+      max: +(tw.max - lw.max).toFixed(1),
+      count: tw.count - lw.count,
+      range: +(tw.range - lw.range).toFixed(1)
+    }
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -4349,7 +4390,16 @@ var translations = {
     "bmiTrend.down": "\u6539\u5584\u50BE\u5411",
     "bmiTrend.up": "\u4E0A\u6607\u50BE\u5411",
     "bmiTrend.neutral": "\u5B89\u5B9A",
-    "bmiTrend.nodata": "BMI\u30C7\u30FC\u30BF\u304C\u4E0D\u8DB3\u3057\u3066\u3044\u307E\u3059"
+    "bmiTrend.nodata": "BMI\u30C7\u30FC\u30BF\u304C\u4E0D\u8DB3\u3057\u3066\u3044\u307E\u3059",
+    "wcomp.title": "\u4ECA\u9031 vs \u5148\u9031",
+    "wcomp.thisWeek": "\u4ECA\u9031",
+    "wcomp.lastWeek": "\u5148\u9031",
+    "wcomp.diff": "\u5DEE\u5206",
+    "wcomp.avg": "\u5E73\u5747",
+    "wcomp.min": "\u6700\u5C0F",
+    "wcomp.max": "\u6700\u5927",
+    "wcomp.count": "\u8A18\u9332\u6570",
+    "wcomp.nodata": "\u4E21\u9031\u306E\u30C7\u30FC\u30BF\u304C\u5FC5\u8981\u3067\u3059"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5194,7 +5244,16 @@ var translations = {
     "bmiTrend.down": "Improving",
     "bmiTrend.up": "Rising",
     "bmiTrend.neutral": "Stable",
-    "bmiTrend.nodata": "Insufficient BMI data"
+    "bmiTrend.nodata": "Insufficient BMI data",
+    "wcomp.title": "This Week vs Last Week",
+    "wcomp.thisWeek": "This Week",
+    "wcomp.lastWeek": "Last Week",
+    "wcomp.diff": "Diff",
+    "wcomp.avg": "Avg",
+    "wcomp.min": "Min",
+    "wcomp.max": "Max",
+    "wcomp.count": "Records",
+    "wcomp.nodata": "Need data for both weeks"
   }
 };
 function createTranslator(language) {
@@ -26339,6 +26398,7 @@ function render() {
             ${renderWeightRangeSummary()}
             ${renderTrendStreak()}
             ${renderBMITrend()}
+            ${renderWeeklySummaryComparison()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -28032,6 +28092,34 @@ function renderBMITrend() {
         <span>${t("bmiTrend.range")}: ${data.min.toFixed(1)} \u2013 ${data.max.toFixed(1)}</span>
         <span>${pts.length} ${t("chart.records")}</span>
       </div>
+    </div>
+  `;
+}
+function renderWeeklySummaryComparison() {
+  const data = calcWeeklySummaryComparison(state.records);
+  if (!data.diffs) return "";
+  const tw = data.thisWeek;
+  const lw = data.lastWeek;
+  const d = data.diffs;
+  function diffCell(val) {
+    if (val === 0) return `<span class="wc-zero">\xB10</span>`;
+    const cls = val < 0 ? "wc-neg" : "wc-pos";
+    return `<span class="${cls}">${val > 0 ? "+" : ""}${typeof val === "number" && !Number.isInteger(val) ? val.toFixed(1) : val}</span>`;
+  }
+  const metrics = [
+    { label: t("wcomp.avg"), tw: tw.avg.toFixed(1), lw: lw.avg.toFixed(1), diff: d.avg },
+    { label: t("wcomp.min"), tw: tw.min.toFixed(1), lw: lw.min.toFixed(1), diff: d.min },
+    { label: t("wcomp.max"), tw: tw.max.toFixed(1), lw: lw.max.toFixed(1), diff: d.max },
+    { label: t("wcomp.count"), tw: tw.count, lw: lw.count, diff: d.count }
+  ];
+  const rows = metrics.map(
+    (m) => `<div class="wc-row"><span class="wc-label">${m.label}</span><span class="wc-val">${m.lw}</span><span class="wc-val">${m.tw}</span><span class="wc-val">${diffCell(m.diff)}</span></div>`
+  ).join("");
+  return `
+    <div class="wc-section">
+      <div class="helper">${t("wcomp.title")}</div>
+      <div class="wc-header"><span></span><span>${t("wcomp.lastWeek")}</span><span>${t("wcomp.thisWeek")}</span><span>${t("wcomp.diff")}</span></div>
+      ${rows}
     </div>
   `;
 }
@@ -30047,7 +30135,7 @@ if (GOOGLE_CLIENT_ID) {
 function handlePhotoZoom() {
   if (!imagePreviewUrl) return;
   const ov = document.createElement("div");
-  ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
+  ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
   ov.setAttribute("role", "dialog");
   ov.setAttribute("aria-label", t("photo.zoomHint"));
   const im = document.createElement("img");
