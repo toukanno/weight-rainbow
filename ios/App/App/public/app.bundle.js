@@ -3153,6 +3153,42 @@ function calcRecordingRate(records) {
   }
   return { totalDays, recordedDays, rate, weeks };
 }
+function calcMilestoneHistory(records) {
+  if (records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const startWt = sorted[0].wt;
+  const latestWt = sorted[sorted.length - 1].wt;
+  const direction = latestWt <= startWt ? "down" : "up";
+  const startDate = /* @__PURE__ */ new Date(sorted[0].dt + "T00:00:00");
+  const milestones = [];
+  const reached = /* @__PURE__ */ new Set();
+  if (direction === "down") {
+    const startFloor = Math.floor(startWt);
+    for (const r of sorted) {
+      const floorWt = Math.floor(r.wt);
+      for (let kg = startFloor; kg >= floorWt; kg--) {
+        if (kg < startWt && !reached.has(kg)) {
+          reached.add(kg);
+          const days2 = Math.round((/* @__PURE__ */ new Date(r.dt + "T00:00:00") - startDate) / 864e5);
+          milestones.push({ kg, date: r.dt, daysFromStart: days2 });
+        }
+      }
+    }
+  } else {
+    const startCeil = Math.ceil(startWt);
+    for (const r of sorted) {
+      const ceilWt = Math.ceil(r.wt);
+      for (let kg = startCeil; kg <= ceilWt; kg++) {
+        if (kg > startWt && !reached.has(kg)) {
+          reached.add(kg);
+          const days2 = Math.round((/* @__PURE__ */ new Date(r.dt + "T00:00:00") - startDate) / 864e5);
+          milestones.push({ kg, date: r.dt, daysFromStart: days2 });
+        }
+      }
+    }
+  }
+  return { direction, startWt, latestWt, milestones };
+}
 
 // src/i18n.js
 var translations = {
@@ -25864,6 +25900,7 @@ function render() {
                 ${renderDuplicateCheck()}
                 ${renderNoteTagStats()}
                 ${renderWeightAnomalies()}
+                ${renderMilestoneHistory()}
               </div>
               ` : ""}
             </div>
@@ -27268,6 +27305,23 @@ function renderRecordingRate() {
       <div class="helper hint-small">${summary}</div>
       <div class="helper hint-small" style="margin-top:6px;">${t("recRate.weeks")}</div>
       <div class="rr-weeks">${weekBars}</div>
+    </div>
+  `;
+}
+function renderMilestoneHistory() {
+  const mh = calcMilestoneHistory(state.records);
+  if (!mh || mh.milestones.length === 0) return "";
+  const dirLabel = mh.direction === "down" ? t("msHist.down") : t("msHist.up");
+  const recent = mh.milestones.slice(-8).reverse();
+  const rows = recent.map((m) => {
+    const text = t("msHist.reached").replace("{kg}", m.kg).replace("{date}", m.date.slice(5).replace("-", "/")).replace("{days}", m.daysFromStart);
+    return `<div class="msh-row">${mh.direction === "down" ? "\u{1F4C9}" : "\u{1F4C8}"} ${text}</div>`;
+  }).join("");
+  return `
+    <div class="msh-section">
+      <div class="helper">${t("msHist.title")}</div>
+      <div class="helper hint-small">${dirLabel}</div>
+      ${rows}
     </div>
   `;
 }
