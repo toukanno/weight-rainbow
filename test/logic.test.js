@@ -113,6 +113,7 @@ import {
   calcWeeklySummaryComparison,
   calcGoalProgressRing,
   calcBodyFatTrend,
+  calcDailyTarget,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -1163,8 +1164,8 @@ describe("detectMilestone", () => {
 });
 
 describe("exportRecordsToCSV", () => {
-  it("returns empty string for empty records", () => {
-    expect(exportRecordsToCSV([])).toBe("");
+  it("returns header-only CSV for empty records", () => {
+    expect(exportRecordsToCSV([])).toBe("\uFEFFdate,weight,bmi,bodyFat,source,note");
   });
 
   it("generates valid CSV with header", () => {
@@ -5915,8 +5916,8 @@ describe("csvEscape", () => {
 
 // ── exportRecordsToCSV ──
 describe("exportRecordsToCSV", () => {
-  it("returns empty string for empty records", () => {
-    expect(exportRecordsToCSV([])).toBe("");
+  it("returns header-only CSV for empty records", () => {
+    expect(exportRecordsToCSV([])).toBe("\uFEFFdate,weight,bmi,bodyFat,source,note");
   });
   it("includes header row", () => {
     const csv = exportRecordsToCSV([{ dt: "2024-01-01", wt: 70, bmi: 22.5, bf: 15, source: "manual", note: "" }]);
@@ -8543,5 +8544,54 @@ describe("calcBodyFatTrend", () => {
     }));
     const result = calcBodyFatTrend(records);
     expect(result.points.length).toBeLessThanOrEqual(30);
+  });
+});
+
+describe("calcDailyTarget", () => {
+  const makeRecords = (startWt, count, delta = -0.1) =>
+    Array.from({ length: count }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: +(startWt + delta * i).toFixed(1),
+    }));
+
+  it("returns null for fewer than 7 records", () => {
+    expect(calcDailyTarget([], 65)).toBeNull();
+    expect(calcDailyTarget([{ dt: "2025-01-01", wt: 70 }], 65)).toBeNull();
+    expect(calcDailyTarget(makeRecords(70, 6), 65)).toBeNull();
+  });
+
+  it("returns null when no goal weight", () => {
+    const records = makeRecords(70, 10);
+    expect(calcDailyTarget(records, 0)).toBeNull();
+    expect(calcDailyTarget(records, null)).toBeNull();
+  });
+
+  it("returns on-target when current equals goal", () => {
+    const records = makeRecords(65, 10, 0);
+    const result = calcDailyTarget(records, 65);
+    expect(result.onTarget).toBe(true);
+    expect(result.isAbove).toBe(false);
+    expect(result.isBelow).toBe(false);
+  });
+
+  it("returns correct structure for weight loss goal", () => {
+    const records = makeRecords(75, 10, -0.1);
+    const result = calcDailyTarget(records, 65);
+    expect(result).toHaveProperty("target");
+    expect(result).toHaveProperty("current");
+    expect(result).toHaveProperty("diff");
+    expect(result).toHaveProperty("pace");
+    expect(result.current).toBe(74.1);
+    expect(result.pace).toBeLessThan(0);
+  });
+
+  it("returns correct structure for weight gain goal", () => {
+    const records = makeRecords(55, 10, 0.1);
+    const result = calcDailyTarget(records, 65);
+    expect(result.pace).toBeGreaterThan(0);
+  });
+
+  it("handles null records", () => {
+    expect(calcDailyTarget(null, 65)).toBeNull();
   });
 });

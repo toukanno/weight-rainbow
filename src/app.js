@@ -116,6 +116,7 @@ import {
   calcWeeklySummaryComparison,
   calcGoalProgressRing,
   calcBodyFatTrend,
+  calcDailyTarget,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -809,6 +810,7 @@ function render() {
             ${renderBodyFatTrend()}
             ${renderWeeklySummaryComparison()}
             ${renderGoalProgressRing()}
+            ${renderDailyTarget()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -2733,6 +2735,45 @@ function renderBodyFatTrend() {
         <span>${t("bfTrend.avg")}: ${data.avg.toFixed(1)}%</span>
         <span>${t("bfTrend.range")}: ${data.min.toFixed(1)}–${data.max.toFixed(1)}%</span>
       </div>
+    </div>
+  `;
+}
+
+function renderDailyTarget() {
+  const goalWeight = Number(state.profile.goalWeight);
+  if (!goalWeight || state.records.length < 2) return "";
+  const data = calcDailyTarget(state.records, goalWeight);
+  if (!data) return "";
+
+  let statusMsg, statusCls;
+  if (data.onTarget) {
+    statusMsg = t("dtarget.onTarget");
+    statusCls = "dt-on";
+  } else if (data.isAbove) {
+    statusMsg = t("dtarget.above").replace("{diff}", Math.abs(data.diff).toFixed(1));
+    statusCls = "dt-above";
+  } else {
+    statusMsg = t("dtarget.below").replace("{diff}", Math.abs(data.diff).toFixed(1));
+    statusCls = "dt-below";
+  }
+
+  const paceStr = t("dtarget.pace").replace("{pace}", Math.abs(data.pace).toFixed(2));
+
+  return `
+    <div class="dt-section">
+      <div class="helper">${t("dtarget.title")}</div>
+      <div class="dt-grid">
+        <div class="dt-cell">
+          <span class="dt-label">${t("dtarget.target")}</span>
+          <span class="dt-val">${data.target}kg</span>
+        </div>
+        <div class="dt-cell">
+          <span class="dt-label">${t("dtarget.current")}</span>
+          <span class="dt-val">${data.current}kg</span>
+        </div>
+      </div>
+      <div class="dt-status ${statusCls}">${statusMsg}</div>
+      <div class="dt-pace">${paceStr}</div>
     </div>
   `;
 }

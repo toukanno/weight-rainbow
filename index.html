@@ -3033,6 +3033,40 @@
         color: var(--muted);
       }
 
+      .dt-section { margin-top: 14px; }
+      .dt-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin: 8px 0;
+      }
+      .dt-cell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 10px;
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--accent) 8%, transparent);
+      }
+      .dt-label { font-size: 0.78rem; color: var(--muted); }
+      .dt-val { font-size: 1.4rem; font-weight: 800; }
+      .dt-status {
+        text-align: center;
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+      .dt-on { color: var(--ok); background: color-mix(in srgb, var(--ok) 15%, transparent); }
+      .dt-above { color: var(--danger); background: color-mix(in srgb, var(--danger) 15%, transparent); }
+      .dt-below { color: var(--ok); background: color-mix(in srgb, var(--ok) 15%, transparent); }
+      .dt-pace {
+        text-align: center;
+        font-size: 0.78rem;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+
       .wc-section { margin-top: 14px; }
       .wc-header, .wc-row {
         display: grid;
@@ -5512,6 +5546,7 @@
         .hero, .panel, .hero-card, .stat-card, .record-item {
           box-shadow: none !important;
           border: 1px solid #ccc !important;
+          -webkit-backdrop-filter: none !important;
           backdrop-filter: none !important;
           background: white !important;
           break-inside: avoid;

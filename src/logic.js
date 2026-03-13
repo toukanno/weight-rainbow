@@ -689,7 +689,7 @@ export function parseCSVImport(csvText) {
     const dt = row[0]?.trim();
     const wt = Number(row[1]?.trim());
 
-    if (!dt || !/^\d{4}-\d{2}-\d{2}$/.test(dt)) {
+    if (!dt || !/^\d{4}-\d{2}-\d{2}$/.test(dt) || isNaN(new Date(dt + "T00:00:00").getTime())) {
       errors.push(`Row ${i + 1}: invalid date "${row[0]}"`);
       continue;
     }
@@ -995,8 +995,8 @@ export function csvEscape(val) {
 }
 
 export function exportRecordsToCSV(records) {
-  if (!records.length) return "";
   const header = "date,weight,bmi,bodyFat,source,note";
+  if (!records.length) return "\uFEFF" + header;
   const rows = records.map((r) =>
     [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source ?? "", r.note ?? ""].map(csvEscape).join(",")
   );
@@ -3537,5 +3537,57 @@ export function calcBodyFatTrend(records) {
     min: +Math.min(...bfs).toFixed(1),
     max: +Math.max(...bfs).toFixed(1),
     avg,
+  };
+}
+
+/**
+ * Calculate a daily weight target based on goal weight and current pace.
+ * Uses the user's actual weekly rate to project where they should be today.
+ * Returns { target, current, diff, pace, isAbove, isBelow, onTarget }
+ */
+export function calcDailyTarget(records, goalWeight) {
+  if (!records || records.length < 7 || !Number.isFinite(goalWeight) || goalWeight <= 0) {
+    return null;
+  }
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const current = sorted[sorted.length - 1].wt;
+  const remaining = goalWeight - current;
+
+  if (Math.abs(remaining) < 0.1) {
+    return { target: +goalWeight.toFixed(1), current: +current.toFixed(1), diff: 0, pace: 0, isAbove: false, isBelow: false, onTarget: true };
+  }
+
+  // Calculate ideal pace: 0.5kg/week in the right direction
+  const direction = remaining > 0 ? 1 : -1; // 1 = gain, -1 = lose
+  const idealPace = 0.5 * direction; // kg per week
+
+  // Find the reference point from ~7 days ago
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const weekAgoStr = `${weekAgo.getFullYear()}-${String(weekAgo.getMonth() + 1).padStart(2, "0")}-${String(weekAgo.getDate()).padStart(2, "0")}`;
+  const recentStart = sorted.find((r) => r.dt >= weekAgoStr) || sorted[Math.max(0, sorted.length - 7)];
+  const daysSinceRef = Math.max(1, Math.ceil(
+    (new Date(sorted[sorted.length - 1].dt + "T00:00:00") - new Date(recentStart.dt + "T00:00:00")) / 86400000
+  ));
+
+  // Where weight "should" be today based on ideal pace
+  const dailyIdeal = idealPace / 7;
+  const target = +(recentStart.wt + dailyIdeal * daysSinceRef).toFixed(1);
+
+  const diff = +(current - target).toFixed(1);
+  // For loss: being below target is good. For gain: being above target is good.
+  const isAbove = diff > 0.1;
+  const isBelow = diff < -0.1;
+  const onTarget = Math.abs(diff) <= 0.1;
+
+  return {
+    target,
+    current: +current.toFixed(1),
+    diff,
+    pace: +idealPace.toFixed(2),
+    isAbove,
+    isBelow,
+    onTarget,
   };
 }

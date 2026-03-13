@@ -1344,7 +1344,7 @@ function parseCSVImport(csvText) {
     if (row.length === 1 && !row[0].trim()) continue;
     const dt = row[0]?.trim();
     const wt = Number(row[1]?.trim());
-    if (!dt || !/^\d{4}-\d{2}-\d{2}$/.test(dt)) {
+    if (!dt || !/^\d{4}-\d{2}-\d{2}$/.test(dt) || isNaN((/* @__PURE__ */ new Date(dt + "T00:00:00")).getTime())) {
       errors.push(`Row ${i + 1}: invalid date "${row[0]}"`);
       continue;
     }
@@ -3612,6 +3612,41 @@ function calcBodyFatTrend(records) {
     avg
   };
 }
+function calcDailyTarget(records, goalWeight) {
+  if (!records || records.length < 7 || !Number.isFinite(goalWeight) || goalWeight <= 0) {
+    return null;
+  }
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const current = sorted[sorted.length - 1].wt;
+  const remaining = goalWeight - current;
+  if (Math.abs(remaining) < 0.1) {
+    return { target: +goalWeight.toFixed(1), current: +current.toFixed(1), diff: 0, pace: 0, isAbove: false, isBelow: false, onTarget: true };
+  }
+  const direction = remaining > 0 ? 1 : -1;
+  const idealPace = 0.5 * direction;
+  const weekAgo = /* @__PURE__ */ new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const weekAgoStr = `${weekAgo.getFullYear()}-${String(weekAgo.getMonth() + 1).padStart(2, "0")}-${String(weekAgo.getDate()).padStart(2, "0")}`;
+  const recentStart = sorted.find((r) => r.dt >= weekAgoStr) || sorted[Math.max(0, sorted.length - 7)];
+  const daysSinceRef = Math.max(1, Math.ceil(
+    (/* @__PURE__ */ new Date(sorted[sorted.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(recentStart.dt + "T00:00:00")) / 864e5
+  ));
+  const dailyIdeal = idealPace / 7;
+  const target = +(recentStart.wt + dailyIdeal * daysSinceRef).toFixed(1);
+  const diff = +(current - target).toFixed(1);
+  const isAbove = diff > 0.1;
+  const isBelow = diff < -0.1;
+  const onTarget = Math.abs(diff) <= 0.1;
+  return {
+    target,
+    current: +current.toFixed(1),
+    diff,
+    pace: +idealPace.toFixed(2),
+    isAbove,
+    isBelow,
+    onTarget
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -4484,7 +4519,14 @@ var translations = {
     "bfTrend.down": "\u6E1B\u5C11\u50BE\u5411",
     "bfTrend.up": "\u5897\u52A0\u50BE\u5411",
     "bfTrend.neutral": "\u5B89\u5B9A",
-    "bfTrend.nodata": "\u4F53\u8102\u80AA\u30C7\u30FC\u30BF\u304C\u4E0D\u8DB3\u3057\u3066\u3044\u307E\u3059"
+    "bfTrend.nodata": "\u4F53\u8102\u80AA\u30C7\u30FC\u30BF\u304C\u4E0D\u8DB3\u3057\u3066\u3044\u307E\u3059",
+    "dtarget.title": "\u4ECA\u65E5\u306E\u76EE\u6A19\u4F53\u91CD",
+    "dtarget.target": "\u76EE\u6A19",
+    "dtarget.current": "\u73FE\u5728",
+    "dtarget.above": "\u76EE\u6A19\u3088\u308A {diff}kg \u4E0A",
+    "dtarget.below": "\u76EE\u6A19\u3088\u308A {diff}kg \u4E0B",
+    "dtarget.onTarget": "\u76EE\u6A19\u901A\u308A\uFF01",
+    "dtarget.pace": "\u9031 {pace}kg \u30DA\u30FC\u30B9"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5175,7 +5217,7 @@ var translations = {
     "ideal.overweight": "Overweight",
     "ideal.obese": "Obese",
     "fresh.today": "Recorded today",
-    "fresh.recent": "Last recorded {days} day(s) ago ({weight}kg)",
+    "fresh.recent": "Last recorded {days} days ago ({weight}kg)",
     "fresh.stale": "No record for {days} days. Log today's weight!",
     "fresh.veryStale": "No record for {days} days. Time to get back on track!",
     "multiRate.title": "Change Rate by Period",
@@ -26505,6 +26547,7 @@ function render() {
             ${renderBodyFatTrend()}
             ${renderWeeklySummaryComparison()}
             ${renderGoalProgressRing()}
+            ${renderDailyTarget()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -28296,6 +28339,41 @@ function renderBodyFatTrend() {
         <span>${t("bfTrend.avg")}: ${data.avg.toFixed(1)}%</span>
         <span>${t("bfTrend.range")}: ${data.min.toFixed(1)}\u2013${data.max.toFixed(1)}%</span>
       </div>
+    </div>
+  `;
+}
+function renderDailyTarget() {
+  const goalWeight = Number(state.profile.goalWeight);
+  if (!goalWeight || state.records.length < 2) return "";
+  const data = calcDailyTarget(state.records, goalWeight);
+  if (!data) return "";
+  let statusMsg, statusCls;
+  if (data.onTarget) {
+    statusMsg = t("dtarget.onTarget");
+    statusCls = "dt-on";
+  } else if (data.isAbove) {
+    statusMsg = t("dtarget.above").replace("{diff}", Math.abs(data.diff).toFixed(1));
+    statusCls = "dt-above";
+  } else {
+    statusMsg = t("dtarget.below").replace("{diff}", Math.abs(data.diff).toFixed(1));
+    statusCls = "dt-below";
+  }
+  const paceStr = t("dtarget.pace").replace("{pace}", Math.abs(data.pace).toFixed(2));
+  return `
+    <div class="dt-section">
+      <div class="helper">${t("dtarget.title")}</div>
+      <div class="dt-grid">
+        <div class="dt-cell">
+          <span class="dt-label">${t("dtarget.target")}</span>
+          <span class="dt-val">${data.target}kg</span>
+        </div>
+        <div class="dt-cell">
+          <span class="dt-label">${t("dtarget.current")}</span>
+          <span class="dt-val">${data.current}kg</span>
+        </div>
+      </div>
+      <div class="dt-status ${statusCls}">${statusMsg}</div>
+      <div class="dt-pace">${paceStr}</div>
     </div>
   `;
 }
