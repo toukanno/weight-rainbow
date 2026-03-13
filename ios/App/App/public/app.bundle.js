@@ -23395,7 +23395,8 @@
       [t("export.header.weight")]: r.wt,
       [t("export.header.bmi")]: r.bmi ?? "",
       [t("export.header.bodyFat")]: r.bf ?? "",
-      [t("export.header.source")]: r.source
+      [t("export.header.source")]: r.source,
+      [t("entry.note")]: r.note ?? ""
     }));
     const ws = utils.json_to_sheet(rows);
     const wb = utils.book_new();
