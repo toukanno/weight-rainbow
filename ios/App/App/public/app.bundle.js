@@ -29130,6 +29130,9 @@ function saveRecordWithWeight(weight, source) {
   const updated = upsertRecord(state.records, record);
   state.records = trimRecords(updated, MAX_RECORDS);
   quickWeight = weightResult.weight;
+  if (imagePreviewUrl && imagePreviewUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(imagePreviewUrl);
+  }
   imagePreviewUrl = "";
   detectedWeights = [];
   activeEntryMode = "manual";
@@ -29291,6 +29294,9 @@ async function pickNativePhoto() {
       promptLabelPhoto: t("camera.photo"),
       promptLabelPicture: t("camera.picture")
     });
+    if (imagePreviewUrl && imagePreviewUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
     imagePreviewUrl = photo.webPath || "";
     state.form.imageName = photo.path?.split("/").pop() || "camera-photo.jpeg";
     detectedWeights = [];
@@ -29717,6 +29723,9 @@ function resetData() {
   quickWeight = 65;
   voiceTranscript = "";
   detectedWeights = [];
+  if (imagePreviewUrl && imagePreviewUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(imagePreviewUrl);
+  }
   imagePreviewUrl = "";
   activeEntryMode = "manual";
   showAllRecords = false;
