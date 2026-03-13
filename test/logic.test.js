@@ -36,6 +36,8 @@ import {
   calcDayOfWeekAvg,
   calcWeightStability,
   detectMilestone,
+  exportRecordsToCSV,
+  parseCSVImport,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -1148,5 +1150,69 @@ describe("detectMilestone", () => {
     ];
     const result = detectMilestone(records, 71.2);
     expect(result).toBeNull();
+  });
+});
+
+describe("exportRecordsToCSV", () => {
+  it("returns empty string for empty records", () => {
+    expect(exportRecordsToCSV([])).toBe("");
+  });
+
+  it("generates valid CSV with header", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70.5, bmi: 24.4, bf: 20, source: "manual", note: "good" },
+      { dt: "2025-01-02", wt: 70.0, bmi: null, bf: null, source: "quick", note: "" },
+    ];
+    const csv = exportRecordsToCSV(records);
+    const lines = csv.split("\n");
+    expect(lines[0]).toBe("date,weight,bmi,bodyFat,source,note");
+    expect(lines[1]).toBe("2025-01-01,70.5,24.4,20,manual,good");
+    expect(lines[2]).toBe("2025-01-02,70,,,quick,");
+  });
+
+  it("escapes commas and quotes in notes", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bmi: null, bf: null, source: "manual", note: 'hello, "world"' },
+    ];
+    const csv = exportRecordsToCSV(records);
+    expect(csv).toContain('"hello, ""world"""');
+  });
+});
+
+describe("parseCSVImport", () => {
+  it("returns empty for empty input", () => {
+    const result = parseCSVImport("");
+    expect(result.records).toHaveLength(0);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("returns error for header-only CSV", () => {
+    const result = parseCSVImport("date,weight,bmi");
+    expect(result.records).toHaveLength(0);
+  });
+
+  it("parses valid CSV rows", () => {
+    const csv = "date,weight,bmi,bodyFat,source,note\n2025-01-01,70.5,24.4,20,manual,test note";
+    const result = parseCSVImport(csv);
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].dt).toBe("2025-01-01");
+    expect(result.records[0].wt).toBe(70.5);
+    expect(result.records[0].source).toBe("import");
+    expect(result.records[0].note).toBe("test note");
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("reports errors for invalid rows", () => {
+    const csv = "date,weight\nbad-date,70\n2025-01-01,999999";
+    const result = parseCSVImport(csv);
+    expect(result.records).toHaveLength(0);
+    expect(result.errors.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("handles quoted fields with commas", () => {
+    const csv = 'date,weight,bmi,bodyFat,source,note\n2025-01-01,70,,,,\"hello, world\"';
+    const result = parseCSVImport(csv);
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].note).toBe("hello, world");
   });
 });
