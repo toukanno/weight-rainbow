@@ -2081,6 +2081,34 @@ function calcWeightRegression(records) {
     totalDays: Math.round(totalDays)
   };
 }
+function calcBMIHistory(records) {
+  const withBMI = records.filter((r) => r.bmi != null && Number.isFinite(r.bmi));
+  if (withBMI.length < 3) return null;
+  const bmis = withBMI.map((r) => r.bmi);
+  const first = bmis[0];
+  const latest = bmis[bmis.length - 1];
+  const min = Math.round(Math.min(...bmis) * 10) / 10;
+  const max = Math.round(Math.max(...bmis) * 10) / 10;
+  const change = Math.round((latest - first) * 10) / 10;
+  const avg = Math.round(bmis.reduce((s, b) => s + b, 0) / bmis.length * 10) / 10;
+  const zones = { under: 0, normal: 0, over: 0, obese: 0 };
+  for (const b of bmis) {
+    if (b < 18.5) zones.under++;
+    else if (b < 25) zones.normal++;
+    else if (b < 30) zones.over++;
+    else zones.obese++;
+  }
+  const total = bmis.length;
+  const zonePcts = {
+    under: Math.round(zones.under / total * 100),
+    normal: Math.round(zones.normal / total * 100),
+    over: Math.round(zones.over / total * 100),
+    obese: Math.round(zones.obese / total * 100)
+  };
+  const currentZone = latest < 18.5 ? "under" : latest < 25 ? "normal" : latest < 30 ? "over" : "obese";
+  const improving = change < 0 && first > 18.5;
+  return { first, latest, min, max, change, avg, zones: zonePcts, currentZone, improving, count: total };
+}
 
 // src/i18n.js
 var translations = {
@@ -2620,7 +2648,15 @@ var translations = {
     "regression.strong": "\u4E00\u8CAB\u3057\u305F\u50BE\u5411",
     "regression.moderate": "\u3084\u3084\u5909\u52D5\u3042\u308A",
     "regression.weak": "\u3070\u3089\u3064\u304D\u304C\u5927\u304D\u3044",
-    "regression.hint": "\u5168\u8A18\u9332\u3092\u901A\u3058\u305F\u4F53\u91CD\u306E\u4E00\u8CAB\u6027\u3092\u5206\u6790"
+    "regression.hint": "\u5168\u8A18\u9332\u3092\u901A\u3058\u305F\u4F53\u91CD\u306E\u4E00\u8CAB\u6027\u3092\u5206\u6790",
+    "bmiHist.title": "BMI \u63A8\u79FB\u30B5\u30DE\u30EA\u30FC",
+    "bmiHist.first": "\u521D\u56DE: {bmi}",
+    "bmiHist.latest": "\u6700\u65B0: {bmi}",
+    "bmiHist.change": "\u5909\u5316: {change}",
+    "bmiHist.range": "\u7BC4\u56F2: {min} \u301C {max}",
+    "bmiHist.avg": "\u5E73\u5747: {avg}",
+    "bmiHist.improving": "\u6539\u5584\u50BE\u5411\u3067\u3059\uFF01",
+    "bmiHist.hint": "BMI\u306E\u5909\u9077\u3092\u8FFD\u8DE1"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3158,7 +3194,15 @@ var translations = {
     "regression.strong": "Consistent trend",
     "regression.moderate": "Some variation",
     "regression.weak": "High variability",
-    "regression.hint": "Analyzes consistency of your weight trend over all records"
+    "regression.hint": "Analyzes consistency of your weight trend over all records",
+    "bmiHist.title": "BMI History Summary",
+    "bmiHist.first": "First: {bmi}",
+    "bmiHist.latest": "Latest: {bmi}",
+    "bmiHist.change": "Change: {change}",
+    "bmiHist.range": "Range: {min} \u2013 {max}",
+    "bmiHist.avg": "Average: {avg}",
+    "bmiHist.improving": "BMI is improving!",
+    "bmiHist.hint": "Track your BMI journey"
   }
 };
 function createTranslator(language) {
@@ -24246,6 +24290,7 @@ function render() {
                 ${renderDayOfWeekChange()}
                 ${renderPersonalRecords()}
                 ${renderWeightRegression()}
+                ${renderBMIHistory()}
               </div>
               ` : ""}
             </div>
@@ -25071,6 +25116,30 @@ function renderWeightRegression() {
         </div>
       </div>
       <div class="helper hint-small">${t("regression.hint")}</div>
+    </div>
+  `;
+}
+function renderBMIHistory() {
+  const bh = calcBMIHistory(state.records);
+  if (!bh) return "";
+  const zoneColors = { under: "#3b82f6", normal: "#10b981", over: "#f59e0b", obese: "#ef4444" };
+  const zoneBar = ["under", "normal", "over", "obese"].filter((z) => bh.zones[z] > 0).map((z) => `<div class="bmi-hist-seg" style="width:${bh.zones[z]}%;background:${zoneColors[z]};" title="${t("bmi." + z)} ${bh.zones[z]}%"></div>`).join("");
+  const changeStr = bh.change > 0 ? "+" + bh.change : String(bh.change);
+  return `
+    <div class="bmi-hist-section">
+      <div class="helper">${t("bmiHist.title")}</div>
+      <div class="bmi-hist-stats">
+        <span>${t("bmiHist.first").replace("{bmi}", bh.first)}</span>
+        <span>${t("bmiHist.latest").replace("{bmi}", bh.latest)}</span>
+        <span>${t("bmiHist.change").replace("{change}", changeStr)}</span>
+      </div>
+      <div class="bmi-hist-bar">${zoneBar}</div>
+      <div class="bmi-hist-detail">
+        <span>${t("bmiHist.range").replace("{min}", bh.min).replace("{max}", bh.max)}</span>
+        <span>${t("bmiHist.avg").replace("{avg}", bh.avg)}</span>
+      </div>
+      ${bh.improving ? `<div class="bmi-hist-improving">${t("bmiHist.improving")}</div>` : ""}
+      <div class="helper hint-small">${t("bmiHist.hint")}</div>
     </div>
   `;
 }

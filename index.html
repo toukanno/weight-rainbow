@@ -550,6 +550,19 @@
           transform: translateY(-1px);
           box-shadow: 0 18px 36px color-mix(in srgb, var(--accent) 28%, transparent);
         }
+
+        .btn.secondary:hover {
+          background: color-mix(in srgb, var(--surface-strong) 85%, var(--accent));
+          border-color: var(--accent);
+          transform: translateY(-1px);
+        }
+
+        .btn.ghost:hover {
+          background: color-mix(in srgb, var(--surface) 90%, var(--accent));
+          border-color: color-mix(in srgb, var(--border) 60%, var(--accent));
+          color: var(--text);
+          transform: translateY(-1px);
+        }
       }
 
       .btn.secondary {
@@ -1545,6 +1558,43 @@
         margin-top: 4px;
       }
 
+      .bmi-hist-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .bmi-hist-stats {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        margin-top: 6px;
+        color: var(--text);
+      }
+      .bmi-hist-bar {
+        display: flex;
+        height: 8px;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 8px;
+      }
+      .bmi-hist-seg {
+        min-width: 2px;
+        transition: width 0.3s;
+      }
+      .bmi-hist-detail {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.78rem;
+        color: var(--text);
+        margin-top: 4px;
+      }
+      .bmi-hist-improving {
+        font-size: 0.82rem;
+        color: #10b981;
+        margin-top: 4px;
+        font-weight: 600;
+      }
+
       .analytics-toggle-section {
         margin-top: 14px;
         padding-top: 12px;
@@ -2066,6 +2116,20 @@
         font-weight: 700;
         font-size: 1rem;
         transition: transform 0.12s, box-shadow 0.12s;
+      }
+
+      @media (hover: hover) {
+        .quick-buttons button:hover {
+          background: color-mix(in srgb, var(--surface-strong) 85%, var(--accent));
+          border-color: var(--accent);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 15%, transparent);
+        }
+
+        .quick-buttons .quick-save:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 12px 28px color-mix(in srgb, var(--accent) 30%, transparent);
+        }
       }
 
       .quick-buttons button:active {

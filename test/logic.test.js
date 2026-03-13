@@ -69,6 +69,7 @@ import {
   calcDayOfWeekChange,
   calcPersonalRecords,
   calcWeightRegression,
+  calcBMIHistory,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -4519,6 +4520,59 @@ describe("calcWeightRegression", () => {
   });
 });
 
+describe("calcBMIHistory", () => {
+  it("returns null for fewer than 3 BMI records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bmi: 24.2 },
+      { dt: "2025-01-02", wt: 71, bmi: 24.6 },
+    ];
+    expect(calcBMIHistory(records)).toBeNull();
+  });
+
+  it("calculates BMI history stats correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bmi: 24.2 },
+      { dt: "2025-01-02", wt: 68, bmi: 23.5 },
+      { dt: "2025-01-03", wt: 65, bmi: 22.5 },
+      { dt: "2025-01-04", wt: 63, bmi: 21.8 },
+    ];
+    const result = calcBMIHistory(records);
+    expect(result).not.toBeNull();
+    expect(result.first).toBe(24.2);
+    expect(result.latest).toBe(21.8);
+    expect(result.min).toBe(21.8);
+    expect(result.max).toBe(24.2);
+    expect(result.change).toBe(-2.4);
+    expect(result.currentZone).toBe("normal");
+    expect(result.zones.normal).toBe(100);
+    expect(result.count).toBe(4);
+  });
+
+  it("detects improving trend when BMI decreasing from overweight", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 80, bmi: 27.7 },
+      { dt: "2025-01-02", wt: 78, bmi: 27.0 },
+      { dt: "2025-01-03", wt: 75, bmi: 26.0 },
+    ];
+    const result = calcBMIHistory(records);
+    expect(result.improving).toBe(true);
+  });
+
+  it("correctly distributes zones", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 50, bmi: 17.3 },
+      { dt: "2025-01-02", wt: 65, bmi: 22.5 },
+      { dt: "2025-01-03", wt: 80, bmi: 27.7 },
+      { dt: "2025-01-04", wt: 95, bmi: 32.9 },
+    ];
+    const result = calcBMIHistory(records);
+    expect(result.zones.under).toBe(25);
+    expect(result.zones.normal).toBe(25);
+    expect(result.zones.over).toBe(25);
+    expect(result.zones.obese).toBe(25);
+  });
+});
+
 describe("buildRecord edge cases", () => {
   it("truncates note to 100 characters", () => {
     const longNote = "x".repeat(150);
@@ -4618,5 +4672,181 @@ describe("calcSourceBreakdown edge cases", () => {
     const result = calcSourceBreakdown(records);
     expect(result.manual).toBe(2);
     expect(result.voice).toBe(1);
+  });
+});
+
+describe("calcInsight edge cases", () => {
+  it("returns weekComparison null when no records in both weeks", () => {
+    const records = [
+      { dt: "2024-01-01", wt: 70 },
+      { dt: "2024-01-02", wt: 69 },
+      { dt: "2024-01-03", wt: 68 },
+    ];
+    const result = calcInsight(records);
+    expect(result).not.toBeNull();
+    expect(result.weekComparison).toBeNull();
+  });
+
+  it("bestDay corresponds to most common recording day", () => {
+    // Monday = 1 (2025-01-06, 2025-01-13, 2025-01-20 are all Mondays)
+    const records = [
+      { dt: "2025-01-06", wt: 70 },
+      { dt: "2025-01-13", wt: 69 },
+      { dt: "2025-01-20", wt: 68 },
+    ];
+    const result = calcInsight(records);
+    expect(result.bestDay).toBe(1); // Monday
+  });
+});
+
+describe("NOTE_TAGS edge cases", () => {
+  it("is an array of strings", () => {
+    expect(Array.isArray(NOTE_TAGS)).toBe(true);
+    NOTE_TAGS.forEach((tag) => expect(typeof tag).toBe("string"));
+  });
+
+  it("contains no duplicate tags", () => {
+    const unique = new Set(NOTE_TAGS);
+    expect(unique.size).toBe(NOTE_TAGS.length);
+  });
+
+  it("contains expected lifestyle tags", () => {
+    expect(NOTE_TAGS).toContain("sleep");
+    expect(NOTE_TAGS).toContain("alcohol");
+    expect(NOTE_TAGS).toContain("stress");
+    expect(NOTE_TAGS).toContain("travel");
+  });
+});
+
+describe("createDefaultProfile edge cases", () => {
+  it("returns correct default values", () => {
+    const profile = createDefaultProfile();
+    expect(profile.name).toBe("");
+    expect(profile.heightCm).toBe("");
+    expect(profile.age).toBe("");
+    expect(profile.gender).toBe("unspecified");
+  });
+
+  it("returns a new object each time", () => {
+    const p1 = createDefaultProfile();
+    const p2 = createDefaultProfile();
+    expect(p1).not.toBe(p2);
+    expect(p1).toEqual(p2);
+  });
+});
+
+describe("createDefaultSettings edge cases", () => {
+  it("returns correct default values", () => {
+    const settings = createDefaultSettings();
+    expect(settings.language).toBe("ja");
+    expect(settings.theme).toBe("prism");
+    expect(settings.chartStyle).toBe("detailed");
+    expect(settings.goalWeight).toBeNull();
+    expect(settings.reminderEnabled).toBe(false);
+    expect(settings.reminderTime).toBe("21:00");
+    expect(settings.autoTheme).toBe(false);
+  });
+
+  it("returns a new object each time", () => {
+    const s1 = createDefaultSettings();
+    const s2 = createDefaultSettings();
+    expect(s1).not.toBe(s2);
+  });
+});
+
+describe("trimRecords edge cases", () => {
+  it("returns empty array for empty input", () => {
+    expect(trimRecords([])).toEqual([]);
+  });
+
+  it("does not mutate original array", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i,
+    }));
+    const original = [...records];
+    trimRecords(records, 3);
+    expect(records).toEqual(original);
+  });
+});
+
+describe("parseVoiceWeight edge cases", () => {
+  it("handles fullwidth numbers in voice transcript", () => {
+    expect(parseVoiceWeight("体重は６５．３キロです")).toBe(65.3);
+  });
+
+  it("handles 点 (ten) as decimal separator", () => {
+    expect(parseVoiceWeight("70点5")).toBe(70.5);
+  });
+
+  it("returns null for empty string", () => {
+    expect(parseVoiceWeight("")).toBeNull();
+  });
+
+  it("returns null for out-of-range values", () => {
+    expect(parseVoiceWeight("体重は5キロです")).toBeNull();
+  });
+
+  it("handles kg suffix", () => {
+    expect(parseVoiceWeight("72.1kg")).toBe(72.1);
+  });
+});
+
+describe("calcWeightComparison edge cases", () => {
+  it("returns null for empty records", () => {
+    expect(calcWeightComparison([])).toBeNull();
+  });
+
+  it("returns null when only one record exists", () => {
+    expect(calcWeightComparison([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns null when records are too old for any period", () => {
+    const records = [
+      { dt: "2020-01-01", wt: 70 },
+      { dt: "2020-01-02", wt: 71 },
+    ];
+    const result = calcWeightComparison(records);
+    expect(result).toBeNull();
+  });
+});
+
+describe("calcBMIHistory edge cases", () => {
+  it("filters out records without BMI", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69, bmi: 23.5 },
+      { dt: "2025-01-03", wt: 68 },
+    ];
+    expect(calcBMIHistory(records)).toBeNull();
+  });
+
+  it("handles records with NaN BMI", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bmi: NaN },
+      { dt: "2025-01-02", wt: 69, bmi: 23.5 },
+      { dt: "2025-01-03", wt: 68, bmi: 22.5 },
+    ];
+    expect(calcBMIHistory(records)).toBeNull();
+  });
+
+  it("not improving when first BMI is underweight", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 50, bmi: 17.0 },
+      { dt: "2025-01-02", wt: 49, bmi: 16.7 },
+      { dt: "2025-01-03", wt: 48, bmi: 16.3 },
+    ];
+    const result = calcBMIHistory(records);
+    expect(result.improving).toBe(false);
+  });
+
+  it("calculates correct average", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bmi: 20.0 },
+      { dt: "2025-01-02", wt: 72, bmi: 22.0 },
+      { dt: "2025-01-03", wt: 74, bmi: 24.0 },
+    ];
+    const result = calcBMIHistory(records);
+    expect(result.avg).toBe(22.0);
   });
 });
