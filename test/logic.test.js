@@ -99,6 +99,7 @@ import {
   calcWeightFluctuation,
   calcWeightAnomalies,
   calcSuccessRate,
+  calcRecordingRate,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -7566,5 +7567,59 @@ describe("calcSuccessRate", () => {
     expect(result.up).toBe(1);
     expect(result.total).toBe(3);
     expect(result.successRate).toBe(67);
+  });
+});
+
+describe("calcRecordingRate", () => {
+  it("returns null for fewer than 2 records", () => {
+    expect(calcRecordingRate([])).toBeNull();
+    expect(calcRecordingRate([{ dt: "2026-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("calculates 100% for consecutive daily records", () => {
+    const records = [
+      { dt: "2026-03-10", wt: 70 },
+      { dt: "2026-03-11", wt: 70 },
+      { dt: "2026-03-12", wt: 70 },
+    ];
+    const result = calcRecordingRate(records);
+    expect(result.totalDays).toBe(3);
+    expect(result.recordedDays).toBe(3);
+    expect(result.rate).toBe(100);
+  });
+
+  it("calculates rate for sparse records", () => {
+    const records = [
+      { dt: "2026-03-01", wt: 70 },
+      { dt: "2026-03-10", wt: 69 },
+    ];
+    const result = calcRecordingRate(records);
+    expect(result.totalDays).toBe(10);
+    expect(result.recordedDays).toBe(2);
+    expect(result.rate).toBe(20);
+  });
+
+  it("includes weeks array with 4 entries", () => {
+    const records = [
+      { dt: "2026-02-01", wt: 70 },
+      { dt: "2026-03-14", wt: 69 },
+    ];
+    const result = calcRecordingRate(records);
+    expect(result.weeks).toHaveLength(4);
+    result.weeks.forEach((w) => {
+      expect(w).toHaveProperty("recorded");
+      expect(w).toHaveProperty("total");
+    });
+  });
+
+  it("deduplicates same-date records", () => {
+    const records = [
+      { dt: "2026-03-10", wt: 70 },
+      { dt: "2026-03-10", wt: 71 },
+      { dt: "2026-03-12", wt: 69 },
+    ];
+    const result = calcRecordingRate(records);
+    expect(result.recordedDays).toBe(2);
+    expect(result.totalDays).toBe(3);
   });
 });

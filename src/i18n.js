@@ -751,6 +751,9 @@ export const translations = {
     "success.down": "減少",
     "success.same": "維持",
     "success.up": "増加",
+    "recRate.title": "記録率",
+    "recRate.summary": "{recorded}日 / {total}日",
+    "recRate.weeks": "直近4週間",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1504,6 +1507,9 @@ export const translations = {
     "success.down": "Down",
     "success.same": "Same",
     "success.up": "Up",
+    "recRate.title": "Recording Rate",
+    "recRate.summary": "{recorded} / {total} days",
+    "recRate.weeks": "Last 4 weeks",
   },
 };
 

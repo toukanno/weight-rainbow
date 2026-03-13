@@ -3125,6 +3125,34 @@ function calcSuccessRate(records) {
   const recentRate = rTotal > 0 ? Math.round((rDown + rSame) / rTotal * 100) : null;
   return { total, down, same, up, successRate, recentRate };
 }
+function calcRecordingRate(records) {
+  if (records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const firstDate = /* @__PURE__ */ new Date(sorted[0].dt + "T00:00:00");
+  const lastDate = /* @__PURE__ */ new Date(sorted[sorted.length - 1].dt + "T00:00:00");
+  const totalDays = Math.round((lastDate - firstDate) / 864e5) + 1;
+  const uniqueDates = new Set(sorted.map((r) => r.dt));
+  const recordedDays = uniqueDates.size;
+  const rate = Math.round(recordedDays / totalDays * 100);
+  const weeks = [];
+  for (let w = 3; w >= 0; w--) {
+    const weekEnd = new Date(lastDate);
+    weekEnd.setDate(weekEnd.getDate() - w * 7);
+    const weekStart = new Date(weekEnd);
+    weekStart.setDate(weekStart.getDate() - 6);
+    let recorded = 0;
+    let total = 0;
+    for (let d = new Date(weekStart); d <= weekEnd; d.setDate(d.getDate() + 1)) {
+      const ds = localDateStr(d);
+      if (ds >= sorted[0].dt) {
+        total++;
+        if (uniqueDates.has(ds)) recorded++;
+      }
+    }
+    weeks.push({ start: localDateStr(weekStart), recorded, total });
+  }
+  return { totalDays, recordedDays, rate, weeks };
+}
 
 // src/i18n.js
 var translations = {
@@ -3892,7 +3920,10 @@ var translations = {
     "success.recent": "\u76F4\u8FD130\u56DE",
     "success.down": "\u6E1B\u5C11",
     "success.same": "\u7DAD\u6301",
-    "success.up": "\u5897\u52A0"
+    "success.up": "\u5897\u52A0",
+    "recRate.title": "\u8A18\u9332\u7387",
+    "recRate.summary": "{recorded}\u65E5 / {total}\u65E5",
+    "recRate.weeks": "\u76F4\u8FD14\u9031\u9593"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4658,7 +4689,10 @@ var translations = {
     "success.recent": "Last 30",
     "success.down": "Down",
     "success.same": "Same",
-    "success.up": "Up"
+    "success.up": "Up",
+    "recRate.title": "Recording Rate",
+    "recRate.summary": "{recorded} / {total} days",
+    "recRate.weeks": "Last 4 weeks"
   }
 };
 function createTranslator(language) {
@@ -25777,6 +25811,7 @@ function render() {
             ${renderLongTermProgress()}
             ${renderWeightFluctuation()}
             ${renderSuccessRate()}
+            ${renderRecordingRate()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -27195,6 +27230,27 @@ function renderSuccessRate() {
         <span class="success-leg-item"><span class="success-dot up"></span>${t("success.up")} ${sr.up}</span>
       </div>
       ${sr.recentRate !== null ? `<div class="helper hint-small" style="margin-top:4px;">${t("success.recent")}: ${sr.recentRate}%</div>` : ""}
+    </div>
+  `;
+}
+function renderRecordingRate() {
+  const rr = calcRecordingRate(state.records);
+  if (!rr) return "";
+  const summary = t("recRate.summary").replace("{recorded}", rr.recordedDays).replace("{total}", rr.totalDays);
+  const weekBars = rr.weeks.map((w) => {
+    const pct = w.total > 0 ? Math.round(w.recorded / w.total * 100) : 0;
+    return `<div class="rr-week">
+      <div class="rr-bar-track"><div class="rr-bar-fill" style="width:${pct}%"></div></div>
+      <span class="rr-week-label">${w.recorded}/${w.total}</span>
+    </div>`;
+  }).join("");
+  return `
+    <div class="rr-section">
+      <div class="helper">${t("recRate.title")}</div>
+      <div class="rr-rate-big">${rr.rate}%</div>
+      <div class="helper hint-small">${summary}</div>
+      <div class="helper hint-small" style="margin-top:6px;">${t("recRate.weeks")}</div>
+      <div class="rr-weeks">${weekBars}</div>
     </div>
   `;
 }

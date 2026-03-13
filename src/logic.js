@@ -2885,3 +2885,39 @@ export function calcSuccessRate(records) {
 
   return { total, down, same, up, successRate, recentRate };
 }
+
+/**
+ * Calculate recording rate — how consistently the user records weights.
+ * Returns { totalDays, recordedDays, rate, weeks: [{ start, recorded, total }] }
+ */
+export function calcRecordingRate(records) {
+  if (records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const firstDate = new Date(sorted[0].dt + "T00:00:00");
+  const lastDate = new Date(sorted[sorted.length - 1].dt + "T00:00:00");
+  const totalDays = Math.round((lastDate - firstDate) / 86400000) + 1;
+  const uniqueDates = new Set(sorted.map((r) => r.dt));
+  const recordedDays = uniqueDates.size;
+  const rate = Math.round((recordedDays / totalDays) * 100);
+
+  // Last 4 weeks breakdown
+  const weeks = [];
+  for (let w = 3; w >= 0; w--) {
+    const weekEnd = new Date(lastDate);
+    weekEnd.setDate(weekEnd.getDate() - w * 7);
+    const weekStart = new Date(weekEnd);
+    weekStart.setDate(weekStart.getDate() - 6);
+    let recorded = 0;
+    let total = 0;
+    for (let d = new Date(weekStart); d <= weekEnd; d.setDate(d.getDate() + 1)) {
+      const ds = localDateStr(d);
+      if (ds >= sorted[0].dt) {
+        total++;
+        if (uniqueDates.has(ds)) recorded++;
+      }
+    }
+    weeks.push({ start: localDateStr(weekStart), recorded, total });
+  }
+
+  return { totalDays, recordedDays, rate, weeks };
+}

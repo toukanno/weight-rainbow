@@ -102,6 +102,7 @@ import {
   calcWeightFluctuation,
   calcWeightAnomalies,
   calcSuccessRate,
+  calcRecordingRate,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -762,6 +763,7 @@ function render() {
             ${renderLongTermProgress()}
             ${renderWeightFluctuation()}
             ${renderSuccessRate()}
+            ${renderRecordingRate()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -2258,6 +2260,28 @@ function renderSuccessRate() {
         <span class="success-leg-item"><span class="success-dot up"></span>${t("success.up")} ${sr.up}</span>
       </div>
       ${sr.recentRate !== null ? `<div class="helper hint-small" style="margin-top:4px;">${t("success.recent")}: ${sr.recentRate}%</div>` : ""}
+    </div>
+  `;
+}
+
+function renderRecordingRate() {
+  const rr = calcRecordingRate(state.records);
+  if (!rr) return "";
+  const summary = t("recRate.summary").replace("{recorded}", rr.recordedDays).replace("{total}", rr.totalDays);
+  const weekBars = rr.weeks.map((w) => {
+    const pct = w.total > 0 ? Math.round((w.recorded / w.total) * 100) : 0;
+    return `<div class="rr-week">
+      <div class="rr-bar-track"><div class="rr-bar-fill" style="width:${pct}%"></div></div>
+      <span class="rr-week-label">${w.recorded}/${w.total}</span>
+    </div>`;
+  }).join("");
+  return `
+    <div class="rr-section">
+      <div class="helper">${t("recRate.title")}</div>
+      <div class="rr-rate-big">${rr.rate}%</div>
+      <div class="helper hint-small">${summary}</div>
+      <div class="helper hint-small" style="margin-top:6px;">${t("recRate.weeks")}</div>
+      <div class="rr-weeks">${weekBars}</div>
     </div>
   `;
 }
