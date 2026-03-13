@@ -2159,6 +2159,10 @@
         background: linear-gradient(135deg, color-mix(in srgb, #fbbf24 18%, #1e2337), color-mix(in srgb, #f87171 14%, #1e2337));
       }
 
+      body[data-theme="midnight"] .tag-import {
+        background: linear-gradient(135deg, color-mix(in srgb, #a78bfa 18%, #1e2337), color-mix(in srgb, #3b82f6 14%, #1e2337));
+      }
+
       body[data-theme="midnight"] .source-chip {
         background: rgba(30, 35, 55, 0.6);
         border-color: rgba(139, 146, 176, 0.2);
@@ -2354,7 +2358,7 @@
     </style>
   </head>
   <body data-theme="prism">
-    <div id="app"></div>
+    <div id="app"><div style="display:flex;align-items:center;justify-content:center;min-height:60vh;font-family:system-ui;color:#5b6187;"><div style="text-align:center;"><div style="font-size:2.4rem;margin-bottom:12px;">🌈</div><div style="font-size:1.1rem;font-weight:700;">読み込み中…</div></div></div></div>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script type="module" src="./src/app.js"></script>
   </body>

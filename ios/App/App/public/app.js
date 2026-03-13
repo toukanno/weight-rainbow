@@ -1420,6 +1420,15 @@ function calcSmoothedWeight(records, smoothing = 0.1) {
   const trend = lookback > 0 ? Math.round((smoothed - Math.round(emaOld * 10) / 10) * 10) / 10 : 0;
   return { smoothed, trend };
 }
+function calcCalendarChangeMap(records) {
+  if (records.length < 2) return {};
+  const map = {};
+  for (let i = 1; i < records.length; i++) {
+    const diff = Math.round((records[i].wt - records[i - 1].wt) * 10) / 10;
+    map[records[i].dt] = diff;
+  }
+  return map;
+}
 
 // src/i18n.js
 var translations = {
@@ -1709,6 +1718,8 @@ var translations = {
     "calendar.fri": "\u91D1",
     "calendar.sat": "\u571F",
     "calendar.records": "{count}\u4EF6\u306E\u8A18\u9332",
+    "calendar.decreased": "\u6E1B\u5C11",
+    "calendar.increased": "\u5897\u52A0",
     "achievement.records_1": "\u521D\u8A18\u9332",
     "achievement.records_10": "10\u56DE\u8A18\u9332\u9054\u6210",
     "achievement.records_30": "30\u56DE\u8A18\u9332\u9054\u6210",
@@ -2069,6 +2080,8 @@ var translations = {
     "calendar.fri": "Fri",
     "calendar.sat": "Sat",
     "calendar.records": "{count} records",
+    "calendar.decreased": "Decreased",
+    "calendar.increased": "Increased",
     "achievement.records_1": "First record",
     "achievement.records_10": "10 records",
     "achievement.records_30": "30 records",
@@ -23508,18 +23521,36 @@ function renderCalendar() {
   const todayDate = /* @__PURE__ */ new Date();
   const isCurrentMonth = calendarYear === todayDate.getFullYear() && calendarMonth === todayDate.getMonth();
   const todayDay = todayDate.getDate();
+  const changeMap = calcCalendarChangeMap(state.records);
   for (const d of data.days) {
     const hasRecord = d.wt !== null;
     const isToday = isCurrentMonth && d.day === todayDay;
-    const intensity = d.intensity !== null ? d.intensity : 0;
-    const bg = hasRecord ? `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)` : "";
-    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${d.wt} kg` : ""}">
+    const change = changeMap[d.dt];
+    let bg = "";
+    let changeLabel = "";
+    if (hasRecord && change !== void 0) {
+      if (change < 0) {
+        const alpha = Math.min(50, Math.round(Math.abs(change) * 30 + 15));
+        bg = `background: color-mix(in srgb, var(--ok, #10b981) ${alpha}%, transparent)`;
+      } else if (change > 0) {
+        const alpha = Math.min(50, Math.round(change * 30 + 15));
+        bg = `background: color-mix(in srgb, var(--warn, #f59e0b) ${alpha}%, transparent)`;
+      } else {
+        bg = `background: color-mix(in srgb, var(--accent) 20%, transparent)`;
+      }
+      changeLabel = ` (${change > 0 ? "+" : ""}${change.toFixed(1)})`;
+    } else if (hasRecord) {
+      const intensity = d.intensity !== null ? d.intensity : 0;
+      bg = `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)`;
+    }
+    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${d.wt}kg${changeLabel}` : ""}">
       <span class="calendar-day">${d.day}</span>
       ${hasRecord ? `<span class="calendar-wt">${d.wt}</span>` : ""}
     </div>`;
   }
   html += `</div>`;
-  html += `<div class="helper" style="margin-top:8px">${t("calendar.records").replace("{count}", data.recordCount)}</div>`;
+  html += `<div class="calendar-legend"><span class="cal-legend-item"><span class="cal-dot cal-dot-down"></span>${t("calendar.decreased")}</span><span class="cal-legend-item"><span class="cal-dot cal-dot-up"></span>${t("calendar.increased")}</span></div>`;
+  html += `<div class="helper" style="margin-top:4px">${t("calendar.records").replace("{count}", data.recordCount)}</div>`;
   return html;
 }
 function renderStat(label, value) {
