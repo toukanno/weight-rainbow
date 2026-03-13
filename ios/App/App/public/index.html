@@ -589,6 +589,7 @@
 
       .btn:active {
         transform: scale(0.97);
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
       }
 
       @media (hover: hover) {
@@ -3020,6 +3021,38 @@
       .wc-pos { color: var(--danger); font-weight: 600; }
       .wc-zero { color: var(--muted); }
 
+      .gr-section { margin-top: 14px; }
+      .gr-layout {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        margin: 8px 0;
+      }
+      .gr-ring { width: 120px; height: 120px; flex-shrink: 0; }
+      .gr-pct-text { font-size: 22px; font-weight: 800; fill: var(--text); }
+      .gr-goal-text { font-size: 11px; fill: var(--muted); }
+      .gr-stats { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+      .gr-stat {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+      }
+      .gr-stat-label { color: var(--muted); }
+      .gr-stat-val { font-weight: 600; }
+      .gr-badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 8px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-align: center;
+        margin-top: 4px;
+      }
+      .gr-on { color: var(--ok); background: color-mix(in srgb, var(--ok) 15%, transparent); }
+      .gr-off { color: var(--danger); background: color-mix(in srgb, var(--danger) 15%, transparent); }
+      .gr-done { color: var(--ok); background: color-mix(in srgb, var(--ok) 20%, transparent); }
+      .gr-eta { font-size: 0.78rem; color: var(--sub); margin-top: 2px; }
+
       .success-section {
         margin-top: 14px;
         text-align: center;
@@ -3488,6 +3521,7 @@
       @media (hover: hover) {
         .chip:hover {
           border-color: var(--accent);
+          background: color-mix(in srgb, var(--accent) 8%, var(--surface));
           transform: translateY(-1px);
         }
       }
@@ -3851,6 +3885,7 @@
       @media (hover: hover) {
         .date-shortcut:hover {
           color: var(--accent);
+          background: color-mix(in srgb, var(--accent) 8%, var(--surface));
           transform: translateY(-1px);
         }
       }

@@ -111,6 +111,7 @@ import {
   calcTrendStreak,
   calcBMITrend,
   calcWeeklySummaryComparison,
+  calcGoalProgressRing,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -8422,5 +8423,66 @@ describe("calcWeeklySummaryComparison", () => {
       expect(result.lastWeek).toHaveProperty("avg");
       expect(result.lastWeek).toHaveProperty("count");
     }
+  });
+});
+
+describe("calcGoalProgressRing", () => {
+  it("returns null for no records", () => {
+    expect(calcGoalProgressRing([], 65)).toBeNull();
+    expect(calcGoalProgressRing(null, 65)).toBeNull();
+  });
+
+  it("returns null for invalid goal", () => {
+    expect(calcGoalProgressRing([{ dt: "2025-01-01", wt: 70 }], 0)).toBeNull();
+    expect(calcGoalProgressRing([{ dt: "2025-01-01", wt: 70 }], NaN)).toBeNull();
+  });
+
+  it("returns 100% when at goal", () => {
+    const records = [{ dt: "2025-01-01", wt: 65 }];
+    const result = calcGoalProgressRing(records, 65);
+    expect(result.percent).toBe(100);
+    expect(result.remaining).toBe(0);
+  });
+
+  it("calculates progress for weight loss goal", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 80 },
+      { dt: "2025-01-15", wt: 75 },
+    ];
+    const result = calcGoalProgressRing(records, 70);
+    expect(result.percent).toBe(50); // lost 5 of 10 needed
+    expect(result.lost).toBe(5);
+    expect(result.remaining).toBe(5);
+    expect(result.startWeight).toBe(80);
+    expect(result.currentWeight).toBe(75);
+  });
+
+  it("calculates progress for weight gain goal", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 50 },
+      { dt: "2025-01-15", wt: 55 },
+    ];
+    const result = calcGoalProgressRing(records, 60);
+    expect(result.percent).toBe(50);
+    expect(result.remaining).toBe(5);
+  });
+
+  it("caps percent at 100", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 80 },
+      { dt: "2025-01-15", wt: 65 },
+    ];
+    const result = calcGoalProgressRing(records, 70);
+    expect(result.percent).toBe(100);
+  });
+
+  it("returns weeklyRate and onTrack fields", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 80 - i * 0.3,
+    }));
+    const result = calcGoalProgressRing(records, 70);
+    expect(typeof result.weeklyRate).toBe("number");
+    expect(typeof result.onTrack).toBe("boolean");
   });
 });

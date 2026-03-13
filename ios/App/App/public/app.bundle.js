@@ -3544,6 +3544,49 @@ function calcWeeklySummaryComparison(records) {
     }
   };
 }
+function calcGoalProgressRing(records, goalWeight) {
+  if (!records || records.length < 1 || !Number.isFinite(goalWeight) || goalWeight <= 0) {
+    return null;
+  }
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const startWeight = sorted[0].wt;
+  const currentWeight = sorted[sorted.length - 1].wt;
+  const totalToLose = startWeight - goalWeight;
+  if (Math.abs(totalToLose) < 0.1) {
+    return { percent: 100, startWeight, currentWeight, goalWeight, lost: 0, remaining: 0, weeklyRate: 0, estimatedWeeks: 0, onTrack: true };
+  }
+  const lost = startWeight - currentWeight;
+  const direction = totalToLose > 0 ? 1 : -1;
+  const progress = lost * direction / Math.abs(totalToLose);
+  const percent = Math.min(100, Math.max(0, Math.round(progress * 100)));
+  const remaining = +Math.abs(currentWeight - goalWeight).toFixed(1);
+  let weeklyRate = 0;
+  if (sorted.length >= 7) {
+    const fourWeeksAgo = /* @__PURE__ */ new Date();
+    fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+    const cutoffStr = `${fourWeeksAgo.getFullYear()}-${String(fourWeeksAgo.getMonth() + 1).padStart(2, "0")}-${String(fourWeeksAgo.getDate()).padStart(2, "0")}`;
+    const recent = sorted.filter((r) => r.dt >= cutoffStr);
+    if (recent.length >= 2) {
+      const firstR = recent[0].wt;
+      const lastR = recent[recent.length - 1].wt;
+      const daySpan = Math.max(1, Math.ceil((/* @__PURE__ */ new Date(recent[recent.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(recent[0].dt + "T00:00:00")) / 864e5));
+      weeklyRate = +((firstR - lastR) / daySpan * 7).toFixed(2);
+    }
+  }
+  const estimatedWeeks = weeklyRate * direction > 0.05 ? Math.ceil(remaining / Math.abs(weeklyRate)) : null;
+  const onTrack = weeklyRate * direction > 0;
+  return {
+    percent,
+    startWeight: +startWeight.toFixed(1),
+    currentWeight: +currentWeight.toFixed(1),
+    goalWeight: +goalWeight,
+    lost: +(lost * direction).toFixed(1),
+    remaining,
+    weeklyRate: +weeklyRate.toFixed(2),
+    estimatedWeeks,
+    onTrack
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -26417,6 +26460,7 @@ function render() {
             ${renderTrendStreak()}
             ${renderBMITrend()}
             ${renderWeeklySummaryComparison()}
+            ${renderGoalProgressRing()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -28138,6 +28182,43 @@ function renderWeeklySummaryComparison() {
       <div class="helper">${t("wcomp.title")}</div>
       <div class="wc-header"><span></span><span>${t("wcomp.lastWeek")}</span><span>${t("wcomp.thisWeek")}</span><span>${t("wcomp.diff")}</span></div>
       ${rows}
+    </div>
+  `;
+}
+function renderGoalProgressRing() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const data = calcGoalProgressRing(state.records, goalWeight);
+  if (!data) return "";
+  const r = 54, cx = 60, cy = 60, stroke = 10;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - data.percent / 100 * circ;
+  const trackColor = "var(--border)";
+  const fillColor = data.percent >= 100 ? "var(--ok)" : data.onTrack ? "var(--accent)" : "var(--danger)";
+  const statusLabel = data.percent >= 100 ? t("gring.done") : data.onTrack ? t("gring.onTrack") : t("gring.offTrack");
+  const statusCls = data.percent >= 100 ? "gr-done" : data.onTrack ? "gr-on" : "gr-off";
+  const rateSign = data.weeklyRate > 0 ? "-" : data.weeklyRate < 0 ? "+" : "";
+  const etaText = data.estimatedWeeks ? t("gring.eta").replace("{weeks}", data.estimatedWeeks) : "";
+  return `
+    <div class="gr-section">
+      <div class="helper">${t("gring.title")}</div>
+      <div class="gr-layout">
+        <svg class="gr-ring" viewBox="0 0 120 120">
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${trackColor}" stroke-width="${stroke}"/>
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${fillColor}" stroke-width="${stroke}"
+            stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}"
+            stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"
+            style="transition:stroke-dashoffset 0.5s ease"/>
+          <text x="${cx}" y="${cy - 6}" text-anchor="middle" class="gr-pct-text">${data.percent}%</text>
+          <text x="${cx}" y="${cy + 14}" text-anchor="middle" class="gr-goal-text">${data.goalWeight.toFixed(1)}kg</text>
+        </svg>
+        <div class="gr-stats">
+          <div class="gr-stat"><span class="gr-stat-label">${t("gring.lost")}</span><span class="gr-stat-val">${data.lost.toFixed(1)}kg</span></div>
+          <div class="gr-stat"><span class="gr-stat-label">${t("gring.remaining")}</span><span class="gr-stat-val">${data.remaining.toFixed(1)}kg</span></div>
+          <div class="gr-stat"><span class="gr-stat-label">${t("gring.rate")}</span><span class="gr-stat-val">${rateSign}${Math.abs(data.weeklyRate).toFixed(1)}kg/w</span></div>
+          <div class="gr-badge ${statusCls}">${statusLabel}</div>
+          ${etaText ? `<div class="gr-eta">${etaText}</div>` : ""}
+        </div>
+      </div>
     </div>
   `;
 }
