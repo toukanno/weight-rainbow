@@ -40,6 +40,7 @@ import {
   detectMilestone,
   exportRecordsToCSV,
   parseCSVImport,
+  calcBodyFatStats,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -589,6 +590,7 @@ function render() {
             </div>` : ""}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
+            ${renderBodyFatStats()}
           </section>
 
           <!-- Monthly Stats Panel -->
@@ -1022,6 +1024,24 @@ function renderStability() {
   `;
 }
 
+function renderBodyFatStats() {
+  const bfStats = calcBodyFatStats(state.records);
+  if (!bfStats) return "";
+  const changeCls = bfStats.change < 0 ? "loss" : bfStats.change > 0 ? "gain" : "neutral";
+  return `
+    <div class="bodyfat-stats-section">
+      <div class="helper">${t("bodyFat.stats")}</div>
+      <div class="stat-grid">
+        ${renderStat(t("bodyFat.latest"), `${bfStats.latest.toFixed(1)}%`)}
+        ${renderStat(t("bodyFat.change"), `<span class="${changeCls}">${bfStats.change > 0 ? "+" : ""}${bfStats.change.toFixed(1)}%</span>`)}
+        ${renderStat(t("bodyFat.min"), `${bfStats.min.toFixed(1)}%`)}
+        ${renderStat(t("bodyFat.max"), `${bfStats.max.toFixed(1)}%`)}
+      </div>
+      <div class="helper hint-small" style="margin-top:4px;">${t("bodyFat.count").replace("{count}", bfStats.count)}</div>
+    </div>
+  `;
+}
+
 function renderDayOfWeekAvg() {
   const dowData = calcDayOfWeekAvg(state.records);
   if (!dowData) return "";
@@ -1063,9 +1083,11 @@ function renderRecordList() {
     }
   }
 
+  // Build dt→index map for O(1) lookup instead of O(n) indexOf
+  const dtIndex = new Map(state.records.map((r, i) => [r.dt, i]));
   return displayed.map((record) => {
-    const prevIndex = state.records.indexOf(record) - 1;
-    const prevRecord = prevIndex >= 0 ? state.records[prevIndex] : null;
+    const idx = dtIndex.get(record.dt) ?? -1;
+    const prevRecord = idx > 0 ? state.records[idx - 1] : null;
     let badge = null;
     if (record.dt === minDt) badge = { type: "best", icon: "⭐", label: t("records.best") };
     else if (record.dt === maxDt) badge = { type: "highest", icon: "📍", label: t("records.highest") };
@@ -1803,7 +1825,7 @@ function handleCSVImport(e) {
     }
     merged = trimRecords(merged);
     state.records = merged;
-    localStorage.setItem(STORAGE_KEYS.records, JSON.stringify(merged));
+    persist();
     let msg = t("import.csv.success").replace("{count}", records.length);
     if (errors.length) {
       msg += " " + t("import.csv.errors").replace("{count}", errors.length);
