@@ -1638,7 +1638,13 @@
         }
 
         .tab-row {
-          grid-template-columns: 1fr;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 6px;
+        }
+
+        .tab-row .tab {
+          padding: 10px 8px;
+          font-size: 13px;
         }
 
         .record-row,
