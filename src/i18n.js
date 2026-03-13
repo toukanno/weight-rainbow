@@ -427,6 +427,8 @@ export const translations = {
     "records.showLess": "Show less",
     "records.search": "Search by date, note, or weight",
     "records.searchResult": "{count} results",
+    "records.best": "Lowest weight",
+    "records.highest": "Highest weight",
     "export.excel": "Export Excel",
     "export.csv": "Export CSV",
     "export.text": "Export Text",

@@ -1299,6 +1299,8 @@ var translations = {
     "records.showLess": "\u9589\u3058\u308B",
     "records.search": "\u65E5\u4ED8\u30FB\u30E1\u30E2\u30FB\u4F53\u91CD\u3067\u691C\u7D22",
     "records.searchResult": "{count}\u4EF6\u304C\u30D2\u30C3\u30C8",
+    "records.best": "\u6700\u4F4E\u4F53\u91CD\u8A18\u9332",
+    "records.highest": "\u6700\u9AD8\u4F53\u91CD\u8A18\u9332",
     "export.excel": "Excel\u51FA\u529B",
     "export.csv": "CSV\u51FA\u529B",
     "export.text": "\u30C6\u30AD\u30B9\u30C8\u51FA\u529B",
@@ -1590,6 +1592,8 @@ var translations = {
     "records.showLess": "Show less",
     "records.search": "Search by date, note, or weight",
     "records.searchResult": "{count} results",
+    "records.best": "Lowest weight",
+    "records.highest": "Highest weight",
     "export.excel": "Export Excel",
     "export.csv": "Export CSV",
     "export.text": "Export Text",
@@ -23028,7 +23032,7 @@ function renderTab(mode, label) {
   const isActive = activeEntryMode === mode;
   return `<button type="button" class="tab ${isActive ? "active" : ""}" data-mode="${mode}" role="tab" aria-selected="${isActive}" tabindex="${isActive ? "0" : "-1"}">${label}</button>`;
 }
-function renderRecord(record, prevRecord) {
+function renderRecord(record, prevRecord, badge) {
   const bmiText = record.bmi ? `${record.bmi.toFixed(1)} / ${t(getBMIStatus(record.bmi))}` : t("chart.none");
   let diffHtml = "";
   if (prevRecord) {
@@ -23038,10 +23042,11 @@ function renderRecord(record, prevRecord) {
       diffHtml = `<span class="record-diff ${cls}">${diff > 0 ? "+" : ""}${diff.toFixed(1)}</span>`;
     }
   }
+  const badgeHtml = badge ? ` <span class="record-badge record-badge-${badge.type}" title="${badge.label}">${badge.icon}</span>` : "";
   return `
-    <div class="record-item">
+    <div class="record-item${badge ? ` record-${badge.type}` : ""}">
       <div class="record-row">
-        <div class="tag tag-${record.source}">${t(`entry.source.${record.source}`)}</div>
+        <div class="tag tag-${record.source}">${t(`entry.source.${record.source}`)}${badgeHtml}</div>
         <div>
           <div class="record-weight">${formatWeight(record.wt)} ${diffHtml}</div>
           <div class="helper">${escapeAttr(record.dt)}${record.imageName ? ` / ${escapeAttr(record.imageName)}` : ""}</div>
@@ -23057,10 +23062,29 @@ function renderRecordList() {
   const filtered = filterRecords(state.records, recordSearchQuery);
   const reversed = filtered.slice().reverse();
   const displayed = showAllRecords || recordSearchQuery ? reversed : reversed.slice(0, 5);
+  let minDt = null;
+  let maxDt = null;
+  if (state.records.length >= 3) {
+    let minWt = Infinity;
+    let maxWt = -Infinity;
+    for (const r of state.records) {
+      if (r.wt < minWt) {
+        minWt = r.wt;
+        minDt = r.dt;
+      }
+      if (r.wt > maxWt) {
+        maxWt = r.wt;
+        maxDt = r.dt;
+      }
+    }
+  }
   return displayed.map((record) => {
     const prevIndex = state.records.indexOf(record) - 1;
     const prevRecord = prevIndex >= 0 ? state.records[prevIndex] : null;
-    return renderRecord(record, prevRecord);
+    let badge = null;
+    if (record.dt === minDt) badge = { type: "best", icon: "\u2B50", label: t("records.best") };
+    else if (record.dt === maxDt) badge = { type: "highest", icon: "\u{1F4CD}", label: t("records.highest") };
+    return renderRecord(record, prevRecord, badge);
   }).join("");
 }
 function renderPickerIntOptions(selected) {
