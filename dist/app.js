@@ -1164,11 +1164,12 @@ function calcMonthlyStats(records) {
   for (const r of records) {
     const key = r.dt.slice(0, 7);
     if (!byMonth[key]) byMonth[key] = [];
-    byMonth[key].push(r.wt);
+    byMonth[key].push(r);
   }
-  const months2 = Object.keys(byMonth).sort().reverse();
+  const months2 = Object.keys(byMonth).sort((a, b) => b.localeCompare(a));
   return months2.map((key) => {
-    const weights = byMonth[key];
+    const sorted = byMonth[key].sort((a, b) => a.dt.localeCompare(b.dt));
+    const weights = sorted.map((r) => r.wt);
     const avg = Math.round(weights.reduce((a, b) => a + b, 0) / weights.length * 10) / 10;
     const min = Math.round(Math.min(...weights) * 10) / 10;
     const max = Math.round(Math.max(...weights) * 10) / 10;
@@ -1382,7 +1383,7 @@ function calcDaysSinceLastRecord(records) {
 function calcLongestStreak(records) {
   if (!records.length) return 0;
   const dates = new Set(records.map((r) => r.dt));
-  const sorted = [...dates].sort();
+  const sorted = [...dates].sort((a, b) => a.localeCompare(b));
   let longest = 1;
   let current = 1;
   for (let i = 1; i < sorted.length; i++) {
