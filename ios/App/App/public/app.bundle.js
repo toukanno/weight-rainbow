@@ -3032,7 +3032,6 @@ function calcLongTermProgress(records) {
     } else {
       const cutoff = new Date(latestDate);
       cutoff.setDate(cutoff.getDate() - p.days);
-      const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
       let closest = null;
       let closestDiff = Infinity;
       for (const r of sorted) {
@@ -3808,12 +3807,17 @@ var translations = {
     "recent.title": "\u76F4\u8FD1\u306E\u8A18\u9332",
     "monthAvg.title": "\u6708\u5225\u5E73\u5747\u4F53\u91CD",
     "monthAvg.noData": "\u30C7\u30FC\u30BF\u306A\u3057",
+    "monthAvg.label": "{m}\u6708",
     "ltp.title": "\u9577\u671F\u30D7\u30ED\u30B0\u30EC\u30B9",
     "ltp.1m": "1\u30F6\u6708\u524D",
     "ltp.3m": "3\u30F6\u6708\u524D",
     "ltp.6m": "6\u30F6\u6708\u524D",
     "ltp.1y": "1\u5E74\u524D",
-    "ltp.all": "\u958B\u59CB\u6642"
+    "ltp.all": "\u958B\u59CB\u6642",
+    "fluct.title": "\u4F53\u91CD\u5909\u52D5\u5E45",
+    "fluct.7d": "\u76F4\u8FD17\u65E5",
+    "fluct.30d": "\u76F4\u8FD130\u65E5",
+    "fluct.range": "\u5E45"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4560,12 +4564,17 @@ var translations = {
     "recent.title": "Recent Entries",
     "monthAvg.title": "Monthly Averages",
     "monthAvg.noData": "No data",
+    "monthAvg.label": "{m}",
     "ltp.title": "Long-term Progress",
     "ltp.1m": "1 month ago",
     "ltp.3m": "3 months ago",
     "ltp.6m": "6 months ago",
     "ltp.1y": "1 year ago",
-    "ltp.all": "Start"
+    "ltp.all": "Start",
+    "fluct.title": "Weight Fluctuation",
+    "fluct.7d": "Last 7 days",
+    "fluct.30d": "Last 30 days",
+    "fluct.range": "Range"
   }
 };
 function createTranslator(language) {
@@ -26985,7 +26994,7 @@ function renderMonthlyAverages() {
   const range = maxAvg - minAvg || 1;
   const bars = months2.map((m, i) => {
     if (m.avg === null) {
-      return `<div class="mavg-bar-wrap"><div class="mavg-bar empty"></div><div class="mavg-label">${m.label.slice(5)}\u6708</div></div>`;
+      return `<div class="mavg-bar-wrap"><div class="mavg-bar empty"></div><div class="mavg-label">${t("monthAvg.label").replace("{m}", m.label.slice(5))}</div></div>`;
     }
     const pct = Math.max(10, (m.avg - minAvg) / range * 80 + 10);
     const prev = i > 0 ? months2[i - 1] : null;
@@ -26993,7 +27002,7 @@ function renderMonthlyAverages() {
     return `<div class="mavg-bar-wrap">
       <div class="mavg-value">${m.avg.toFixed(1)}</div>
       <div class="mavg-bar ${cls}" style="height:${pct}%"></div>
-      <div class="mavg-label">${m.label.slice(5)}\u6708</div>
+      <div class="mavg-label">${t("monthAvg.label").replace("{m}", m.label.slice(5))}</div>
       <div class="mavg-count">${m.count}</div>
     </div>`;
   }).join("");

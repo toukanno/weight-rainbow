@@ -99,6 +99,7 @@ import {
   getRecentEntries,
   calcMonthlyAverages,
   calcLongTermProgress,
+  calcWeightFluctuation,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -750,6 +751,7 @@ function render() {
             ${renderWeeklyAverages()}
             ${renderRecordingCalendar()}
             ${renderLongTermProgress()}
+            ${renderWeightFluctuation()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -2129,7 +2131,7 @@ function renderMonthlyAverages() {
   const range = maxAvg - minAvg || 1;
   const bars = months.map((m, i) => {
     if (m.avg === null) {
-      return `<div class="mavg-bar-wrap"><div class="mavg-bar empty"></div><div class="mavg-label">${m.label.slice(5)}月</div></div>`;
+      return `<div class="mavg-bar-wrap"><div class="mavg-bar empty"></div><div class="mavg-label">${t("monthAvg.label").replace("{m}", m.label.slice(5))}</div></div>`;
     }
     const pct = Math.max(10, ((m.avg - minAvg) / range) * 80 + 10);
     const prev = i > 0 ? months[i - 1] : null;
@@ -2137,7 +2139,7 @@ function renderMonthlyAverages() {
     return `<div class="mavg-bar-wrap">
       <div class="mavg-value">${m.avg.toFixed(1)}</div>
       <div class="mavg-bar ${cls}" style="height:${pct}%"></div>
-      <div class="mavg-label">${m.label.slice(5)}月</div>
+      <div class="mavg-label">${t("monthAvg.label").replace("{m}", m.label.slice(5))}</div>
       <div class="mavg-count">${m.count}</div>
     </div>`;
   }).join("");
@@ -2170,6 +2172,34 @@ function renderLongTermProgress() {
   return `
     <div class="ltp-section">
       <div class="helper">${t("ltp.title")}</div>
+      ${rows}
+    </div>
+  `;
+}
+
+function renderWeightFluctuation() {
+  const fluct = calcWeightFluctuation(state.records);
+  if (!fluct) return "";
+  const withData = fluct.periods.filter((p) => p.hasData);
+  if (withData.length === 0) return "";
+  const labelMap = { "7d": "fluct.7d", "30d": "fluct.30d" };
+  const rows = withData.map((p) => {
+    const pos = Math.max(0, Math.min(100, p.position));
+    return `<div class="fluct-row">
+      <span class="fluct-label">${t(labelMap[p.label])}</span>
+      <div class="fluct-bar-wrap">
+        <span class="fluct-min">${p.min.toFixed(1)}</span>
+        <div class="fluct-bar">
+          <div class="fluct-marker" style="left:${pos}%"></div>
+        </div>
+        <span class="fluct-max">${p.max.toFixed(1)}</span>
+      </div>
+      <span class="fluct-range">${t("fluct.range")} ${p.range.toFixed(1)}kg</span>
+    </div>`;
+  }).join("");
+  return `
+    <div class="fluct-section">
+      <div class="helper">${t("fluct.title")}</div>
       ${rows}
     </div>
   `;

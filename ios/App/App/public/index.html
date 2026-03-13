@@ -2523,6 +2523,59 @@
       .ltp-change.down { color: var(--accent-3); }
       .ltp-change.up { color: var(--accent-2); }
 
+      .fluct-section {
+        margin-top: 14px;
+      }
+      .fluct-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 0;
+      }
+      .fluct-label {
+        min-width: 62px;
+        font-size: 0.78rem;
+        color: var(--muted);
+        font-weight: 500;
+      }
+      .fluct-bar-wrap {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .fluct-min, .fluct-max {
+        font-size: 0.7rem;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        min-width: 32px;
+      }
+      .fluct-min { text-align: right; }
+      .fluct-bar {
+        flex: 1;
+        height: 8px;
+        background: var(--border);
+        border-radius: 4px;
+        position: relative;
+        min-width: 60px;
+      }
+      .fluct-marker {
+        position: absolute;
+        top: -3px;
+        width: 14px;
+        height: 14px;
+        background: var(--accent);
+        border-radius: 50%;
+        transform: translateX(-50%);
+        box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+      }
+      .fluct-range {
+        font-size: 0.72rem;
+        color: var(--muted);
+        min-width: 58px;
+        text-align: right;
+      }
+
       .mpr-section {
         margin-top: 14px;
       }
