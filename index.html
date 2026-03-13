@@ -4233,6 +4233,16 @@
         }
       }
 
+      .rc-section { margin-top: 14px; }
+      .rc-level { font-size: 1.1rem; font-weight: 700; text-align: center; margin: 6px 0; }
+      .rc-bars { display: flex; flex-direction: column; gap: 6px; }
+      .rc-bar-row { display: flex; align-items: center; gap: 8px; }
+      .rc-bar-label { font-size: 0.78rem; color: var(--muted); min-width: 72px; text-align: right; }
+      .rc-bar-track { flex: 1; height: 8px; background: color-mix(in srgb, var(--muted) 12%, transparent); border-radius: 4px; overflow: hidden; }
+      .rc-bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s ease; }
+      .rc-bar-val { font-size: 0.78rem; font-weight: 700; min-width: 36px; }
+      .rc-tip { font-size: 0.78rem; color: var(--muted); text-align: center; margin-top: 8px; font-style: italic; }
+
       .date-shortcuts {
         display: flex;
         gap: 6px;
@@ -5319,7 +5329,7 @@
         background: var(--surface-strong);
         border: 1px solid var(--border);
         color: var(--text);
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 600;
         white-space: nowrap;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -5764,7 +5774,7 @@
         .pill,
         .streak-badge,
         .trend-indicator {
-          font-size: 11px;
+          font-size: 12px;
           padding: 3px 8px;
         }
 
@@ -5809,11 +5819,11 @@
         }
 
         .calendar-grid {
-          font-size: 11px;
+          font-size: 12px;
         }
 
         .calendar-wt {
-          font-size: 11px;
+          font-size: 12px;
         }
 
         .summary-tabs {
@@ -5822,7 +5832,7 @@
 
         .summary-tab {
           padding: 6px 8px;
-          font-size: 11px;
+          font-size: 12px;
         }
 
         .calorie-cards {
