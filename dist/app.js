@@ -1362,6 +1362,7 @@ var translations = {
     "section.records": "\u8A18\u9332\u4E00\u89A7",
     "records.empty": "\u307E\u3060\u8A18\u9332\u304C\u3042\u308A\u307E\u305B\u3093",
     "records.delete": "\u524A\u9664",
+    "records.deleted": "\u8A18\u9332\u3092\u524A\u9664\u3057\u307E\u3057\u305F",
     "records.showAll": "\u3059\u3079\u3066\u8868\u793A",
     "records.showLess": "\u9589\u3058\u308B",
     "records.search": "\u65E5\u4ED8\u30FB\u30E1\u30E2\u30FB\u4F53\u91CD\u3067\u691C\u7D22",
@@ -1548,7 +1549,13 @@ var translations = {
     "source.breakdown": "\u5165\u529B\u65B9\u6CD5\u306E\u5185\u8A33",
     "source.count": "{count}\u4EF6",
     "dowAvg.title": "\u66DC\u65E5\u5225\u5E73\u5747\u4F53\u91CD",
-    "dowAvg.diff": "\u5168\u4F53\u5E73\u5747\u3068\u306E\u5DEE"
+    "dowAvg.diff": "\u5168\u4F53\u5E73\u5747\u3068\u306E\u5DEE",
+    "stability.title": "\u4F53\u91CD\u5B89\u5B9A\u5EA6",
+    "stability.score": "\u30B9\u30B3\u30A2",
+    "stability.stddev": "\u6A19\u6E96\u504F\u5DEE",
+    "stability.high": "\u5B89\u5B9A",
+    "stability.medium": "\u3084\u3084\u5909\u52D5",
+    "stability.low": "\u5909\u52D5\u5927"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1683,6 +1690,7 @@ var translations = {
     "section.records": "Records",
     "records.empty": "No records yet",
     "records.delete": "Delete",
+    "records.deleted": "Record deleted",
     "records.showAll": "Show all",
     "records.showLess": "Show less",
     "records.search": "Search by date, note, or weight",
@@ -1867,7 +1875,13 @@ var translations = {
     "source.breakdown": "Input Method Breakdown",
     "source.count": "{count} records",
     "dowAvg.title": "Average Weight by Day",
-    "dowAvg.diff": "vs overall avg"
+    "dowAvg.diff": "vs overall avg",
+    "stability.title": "Weight Stability",
+    "stability.score": "Score",
+    "stability.stddev": "Std Dev",
+    "stability.high": "Stable",
+    "stability.medium": "Moderate",
+    "stability.low": "Fluctuating"
   }
 };
 function createTranslator(language) {
@@ -22502,9 +22516,17 @@ function showFirstLaunchModal() {
     });
   });
 }
+var statusClearTimer = null;
 function setStatus(message, kind = "ok") {
   statusMessage = message;
   statusKind = kind;
+  clearTimeout(statusClearTimer);
+  if (kind === "ok" && message) {
+    statusClearTimer = setTimeout(() => {
+      statusMessage = "";
+      render();
+    }, 4e3);
+  }
   render();
 }
 function updateLanguage(language) {
@@ -23416,9 +23438,10 @@ function bindEvents() {
   app.querySelectorAll("[data-delete-date]").forEach((button) => {
     button.addEventListener("click", () => {
       if (!window.confirm(t("confirm.deleteRecord"))) return;
+      lastUndoState = { records: [...state.records], quickWeight };
       state.records = state.records.filter((r) => r.dt !== button.dataset.deleteDate);
       persist();
-      render();
+      setStatus(t("records.deleted"));
     });
   });
   app.querySelector('[data-action="share-chart"]')?.addEventListener("click", shareChart);

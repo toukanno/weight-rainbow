@@ -172,9 +172,17 @@ function showFirstLaunchModal() {
   });
 }
 
+let statusClearTimer = null;
 function setStatus(message, kind = "ok") {
   statusMessage = message;
   statusKind = kind;
+  clearTimeout(statusClearTimer);
+  if (kind === "ok" && message) {
+    statusClearTimer = setTimeout(() => {
+      statusMessage = "";
+      render();
+    }, 4000);
+  }
   render();
 }
 
@@ -1128,9 +1136,10 @@ function bindEvents() {
   app.querySelectorAll("[data-delete-date]").forEach((button) => {
     button.addEventListener("click", () => {
       if (!window.confirm(t("confirm.deleteRecord"))) return;
+      lastUndoState = { records: [...state.records], quickWeight };
       state.records = state.records.filter((r) => r.dt !== button.dataset.deleteDate);
       persist();
-      render();
+      setStatus(t("records.deleted"));
     });
   });
 
