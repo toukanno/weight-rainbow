@@ -783,9 +783,11 @@
         cursor: pointer;
         transition: color 0.15s, border-color 0.15s, background 0.15s, transform 0.1s ease;
       }
-      .note-tag:hover {
-        color: var(--accent);
-        border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+      @media (hover: hover) {
+        .note-tag:hover {
+          color: var(--accent);
+          border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+        }
       }
       .note-tag.active {
         background: color-mix(in srgb, var(--accent) 16%, transparent);
@@ -815,9 +817,11 @@
         cursor: pointer;
         transition: background 0.15s, border-color 0.15s;
       }
-      .quick-note-chip:hover {
-        background: color-mix(in srgb, var(--accent) 16%, transparent);
-        border-color: var(--accent);
+      @media (hover: hover) {
+        .quick-note-chip:hover {
+          background: color-mix(in srgb, var(--accent) 16%, transparent);
+          border-color: var(--accent);
+        }
       }
       .quick-note-chip:focus-visible {
         outline: 2px solid var(--accent);
@@ -3586,8 +3590,10 @@
         transition: background 0.15s, transform 0.1s ease;
       }
 
-      .record-delete:hover {
-        background: color-mix(in srgb, var(--error) 16%, transparent);
+      @media (hover: hover) {
+        .record-delete:hover {
+          background: color-mix(in srgb, var(--error) 16%, transparent);
+        }
       }
 
       .record-delete:focus-visible {
@@ -4633,8 +4639,10 @@
         color: #e4e7f0;
       }
 
-      body[data-theme="midnight"] .google-btn:hover {
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+      @media (hover: hover) {
+        body[data-theme="midnight"] .google-btn:hover {
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
       }
 
       body[data-theme="midnight"] .record-delete {
