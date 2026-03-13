@@ -1120,9 +1120,9 @@ function renderCalendar() {
       const intensity = d.intensity !== null ? d.intensity : 0;
       bg = `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)`;
     }
-    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${d.wt}kg${changeLabel}` : ""}"${hasRecord ? ` aria-label="${d.day}${t("calendar.dayUnit")} ${d.wt}kg${changeLabel}"` : ""}>
+    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${Number(d.wt).toFixed(1)}kg${changeLabel}` : ""}"${hasRecord ? ` aria-label="${d.day}${t("calendar.dayUnit")} ${Number(d.wt).toFixed(1)}kg${changeLabel}"` : ""}>
       <span class="calendar-day">${d.day}</span>
-      ${hasRecord ? `<span class="calendar-wt">${d.wt}</span>` : ""}
+      ${hasRecord ? `<span class="calendar-wt">${Number(d.wt).toFixed(1)}</span>` : ""}
     </div>`;
   }
   html += `</div>`;
@@ -1651,7 +1651,7 @@ function renderWeightHeatmap() {
       if (day.isFuture) return `<div class="heatmap-cell" data-level="0"></div>`;
       const dir = day.direction || "";
       const title = day.weight != null
-        ? `${day.date}: ${day.weight}kg${day.change != null ? ` (${day.change > 0 ? "+" : ""}${day.change}kg)` : ""}`
+        ? `${day.date}: ${Number(day.weight).toFixed(1)}kg${day.change != null ? ` (${day.change > 0 ? "+" : ""}${day.change.toFixed(1)}kg)` : ""}`
         : `${day.date}: ${t("heatmap.noData")}`;
       return `<div class="heatmap-cell ${dir}" data-level="${day.level}" title="${title}"></div>`;
     }).join("");
@@ -2008,9 +2008,9 @@ function renderTrendIndicator() {
   const cls = trend.direction === "down" ? "trend-down" : trend.direction === "up" ? "trend-up" : "trend-stable";
   let msg;
   if (trend.direction === "down") {
-    msg = `${Math.abs(trend.change)}kg ${t("trend.down")}`;
+    msg = `${Math.abs(trend.change).toFixed(1)}kg ${t("trend.down")}`;
   } else if (trend.direction === "up") {
-    msg = `+${trend.change}kg ${t("trend.up")}`;
+    msg = `+${trend.change.toFixed(1)}kg ${t("trend.up")}`;
   } else {
     msg = t("trend.stable");
   }
