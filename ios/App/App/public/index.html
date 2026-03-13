@@ -462,7 +462,7 @@
       input:focus,
       select:focus {
         outline: none;
-        border-color: color-mix(in srgb, var(--accent) 64%, white);
+        border-color: color-mix(in srgb, var(--accent) 64%, var(--bg));
         box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent);
         transform: translateY(-1px);
       }
@@ -740,6 +740,48 @@
       .source-chip strong {
         color: var(--accent);
       }
+
+      .dow-avg-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .dow-avg-row {
+        display: flex;
+        gap: 4px;
+        margin-top: 8px;
+        flex-wrap: wrap;
+      }
+      .dow-avg-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex: 1;
+        min-width: 44px;
+        padding: 6px 2px;
+        border-radius: 10px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+      }
+      .dow-label {
+        font-size: 0.68rem;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .dow-value {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--text);
+        margin-top: 2px;
+      }
+      .dow-diff {
+        font-size: 0.66rem;
+        font-weight: 600;
+        margin-top: 1px;
+      }
+      .dow-diff.loss { color: var(--ok, #10b981); }
+      .dow-diff.gain { color: var(--warn, #f59e0b); }
+      .dow-diff.neutral { color: var(--muted); }
 
       .record-date-range {
         margin-top: 8px;
@@ -1304,7 +1346,8 @@
       }
 
       .rainbow-card {
-        background: rgba(255,255,255,0.92);
+        background: var(--surface-strong, rgba(255,255,255,0.92));
+        color: var(--text);
         border-radius: 28px;
         padding: 36px 48px;
         text-align: center;

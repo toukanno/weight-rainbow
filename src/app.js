@@ -35,6 +35,7 @@ import {
   toggleNoteTag,
   filterRecordsByDateRange,
   calcSourceBreakdown,
+  calcDayOfWeekAvg,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -547,6 +548,7 @@ function render() {
                 : t("insight.weekSame")
               }</div>` : ""}
             </div>` : ""}
+            ${renderDayOfWeekAvg()}
           </section>
 
           <!-- Monthly Stats Panel -->
@@ -942,6 +944,28 @@ function renderSourceBreakdown() {
           const icon = sourceIcons[src] || "📊";
           const pct = Math.round((count / state.records.length) * 100);
           return `<span class="source-chip"><span class="source-icon">${icon}</span> ${t("entry.source." + src)} <strong>${count}</strong> (${pct}%)</span>`;
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderDayOfWeekAvg() {
+  const dowData = calcDayOfWeekAvg(state.records);
+  if (!dowData) return "";
+  return `
+    <div class="dow-avg-section">
+      <div class="helper">${t("dowAvg.title")}</div>
+      <div class="dow-avg-row">
+        ${dowData.avgs.map((avg, i) => {
+          if (avg === null) return "";
+          const diff = Math.round((avg - dowData.overallAvg) * 10) / 10;
+          const cls = diff < -0.1 ? "loss" : diff > 0.1 ? "gain" : "neutral";
+          return `<div class="dow-avg-item">
+            <span class="dow-label">${t("day." + i)}</span>
+            <span class="dow-value">${avg.toFixed(1)}</span>
+            <span class="dow-diff ${cls}">${diff > 0 ? "+" : ""}${diff.toFixed(1)}</span>
+          </div>`;
         }).join("")}
       </div>
     </div>
@@ -1622,19 +1646,23 @@ function exportExcel() {
     setStatus(t("records.empty"), "error");
     return;
   }
-  const rows = state.records.map((r) => ({
-    [t("export.header.date")]: r.dt,
-    [t("export.header.weight")]: r.wt,
-    [t("export.header.bmi")]: r.bmi ?? "",
-    [t("export.header.bodyFat")]: r.bf ?? "",
-    [t("export.header.source")]: r.source,
-    [t("export.header.note")]: r.note ?? "",
-  }));
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, t("chart.records"));
-  XLSX.writeFile(wb, `weight-rainbow-${new Date().toISOString().slice(0, 10)}.xlsx`);
-  setStatus(t("export.excelDone"));
+  try {
+    const rows = state.records.map((r) => ({
+      [t("export.header.date")]: r.dt,
+      [t("export.header.weight")]: r.wt,
+      [t("export.header.bmi")]: r.bmi ?? "",
+      [t("export.header.bodyFat")]: r.bf ?? "",
+      [t("export.header.source")]: r.source,
+      [t("export.header.note")]: r.note ?? "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, t("chart.records"));
+    XLSX.writeFile(wb, `weight-rainbow-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    setStatus(t("export.excelDone"));
+  } catch {
+    setStatus(t("export.error"), "error");
+  }
 }
 
 function csvEscape(value) {
@@ -1648,14 +1676,18 @@ function exportCSV() {
     setStatus(t("records.empty"), "error");
     return;
   }
-  const headers = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source"), t("export.header.note")];
-  const header = headers.map(csvEscape).join(",");
-  const lines = state.records.map((r) =>
-    [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source, r.note ?? ""].map(csvEscape).join(",")
-  );
-  const csv = "\uFEFF" + [header, ...lines].join("\r\n");
-  downloadFile(csv, `weight-rainbow-${new Date().toISOString().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
-  setStatus(t("export.csvDone"));
+  try {
+    const headers = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source"), t("export.header.note")];
+    const header = headers.map(csvEscape).join(",");
+    const lines = state.records.map((r) =>
+      [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source, r.note ?? ""].map(csvEscape).join(",")
+    );
+    const csv = "\uFEFF" + [header, ...lines].join("\r\n");
+    downloadFile(csv, `weight-rainbow-${new Date().toISOString().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
+    setStatus(t("export.csvDone"));
+  } catch {
+    setStatus(t("export.error"), "error");
+  }
 }
 
 function exportText() {
@@ -1663,26 +1695,30 @@ function exportText() {
     setStatus(t("records.empty"), "error");
     return;
   }
-  const lines = state.records.map((r) => {
-    const bmiStr = r.bmi ? ` / BMI: ${r.bmi.toFixed(1)}` : "";
-    const bfStr = r.bf ? ` / BF: ${Number(r.bf).toFixed(1)}%` : "";
-    const noteStr = r.note ? `  [${r.note}]` : "";
-    const dow = t("day." + new Date(r.dt + "T00:00:00").getDay());
-    return `${r.dt} (${dow})  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})${noteStr}`;
-  });
-  const stats = calcStats(state.records, state.profile);
-  const summaryLines = [];
-  if (stats) {
-    summaryLines.push("");
-    summaryLines.push("=".repeat(48));
-    summaryLines.push(`${t("chart.latest")}: ${stats.latestWeight.toFixed(1)}kg / ${t("chart.avg")}: ${stats.avgWeight.toFixed(1)}kg`);
-    summaryLines.push(`${t("chart.min")}: ${stats.minWeight.toFixed(1)}kg / ${t("chart.max")}: ${stats.maxWeight.toFixed(1)}kg`);
-    summaryLines.push(`${t("chart.change")}: ${stats.change > 0 ? "+" : ""}${stats.change.toFixed(1)}kg / ${t("summary.count")}: ${state.records.length}`);
-    if (stats.latestBMI) summaryLines.push(`BMI: ${stats.latestBMI.toFixed(1)} (${t(getBMIStatus(stats.latestBMI))})`);
+  try {
+    const lines = state.records.map((r) => {
+      const bmiStr = r.bmi ? ` / BMI: ${r.bmi.toFixed(1)}` : "";
+      const bfStr = r.bf ? ` / BF: ${Number(r.bf).toFixed(1)}%` : "";
+      const noteStr = r.note ? `  [${r.note}]` : "";
+      const dow = t("day." + new Date(r.dt + "T00:00:00").getDay());
+      return `${r.dt} (${dow})  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})${noteStr}`;
+    });
+    const stats = calcStats(state.records, state.profile);
+    const summaryLines = [];
+    if (stats) {
+      summaryLines.push("");
+      summaryLines.push("=".repeat(48));
+      summaryLines.push(`${t("chart.latest")}: ${stats.latestWeight.toFixed(1)}kg / ${t("chart.avg")}: ${stats.avgWeight.toFixed(1)}kg`);
+      summaryLines.push(`${t("chart.min")}: ${stats.minWeight.toFixed(1)}kg / ${t("chart.max")}: ${stats.maxWeight.toFixed(1)}kg`);
+      summaryLines.push(`${t("chart.change")}: ${stats.change > 0 ? "+" : ""}${stats.change.toFixed(1)}kg / ${t("summary.count")}: ${state.records.length}`);
+      if (stats.latestBMI) summaryLines.push(`BMI: ${stats.latestBMI.toFixed(1)} (${t(getBMIStatus(stats.latestBMI))})`);
+    }
+    const text = `${t("app.title")} - ${new Date().toISOString().slice(0, 10)}\n${"=".repeat(48)}\n${lines.join("\n")}${summaryLines.join("\n")}`;
+    downloadFile(text, `weight-rainbow-${new Date().toISOString().slice(0, 10)}.txt`, "text/plain");
+    setStatus(t("export.textDone"));
+  } catch {
+    setStatus(t("export.error"), "error");
   }
-  const text = `${t("app.title")} - ${new Date().toISOString().slice(0, 10)}\n${"=".repeat(48)}\n${lines.join("\n")}${summaryLines.join("\n")}`;
-  downloadFile(text, `weight-rainbow-${new Date().toISOString().slice(0, 10)}.txt`, "text/plain");
-  setStatus(t("export.textDone"));
 }
 
 function downloadFile(content, filename, mimeType) {

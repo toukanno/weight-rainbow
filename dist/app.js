@@ -1196,6 +1196,21 @@ function filterRecords(records, query) {
     return false;
   });
 }
+function calcDayOfWeekAvg(records) {
+  if (records.length < 7) return null;
+  const sums = [0, 0, 0, 0, 0, 0, 0];
+  const counts = [0, 0, 0, 0, 0, 0, 0];
+  for (const r of records) {
+    const dow = (/* @__PURE__ */ new Date(r.dt + "T00:00:00")).getDay();
+    sums[dow] += r.wt;
+    counts[dow]++;
+  }
+  const avgs = sums.map((s, i) => counts[i] > 0 ? Math.round(s / counts[i] * 10) / 10 : null);
+  const validAvgs = avgs.filter((a) => a !== null);
+  if (!validAvgs.length) return null;
+  const overallAvg = Math.round(validAvgs.reduce((a, b) => a + b, 0) / validAvgs.length * 10) / 10;
+  return { avgs, counts, overallAvg };
+}
 function calcSourceBreakdown(records) {
   if (!records.length) return null;
   const counts = {};
@@ -1359,6 +1374,7 @@ var translations = {
     "export.excelDone": "Excel\u30D5\u30A1\u30A4\u30EB\u3092\u51FA\u529B\u3057\u307E\u3057\u305F",
     "export.csvDone": "CSV\u30D5\u30A1\u30A4\u30EB\u3092\u51FA\u529B\u3057\u307E\u3057\u305F",
     "export.textDone": "\u30C6\u30AD\u30B9\u30C8\u30D5\u30A1\u30A4\u30EB\u3092\u51FA\u529B\u3057\u307E\u3057\u305F",
+    "export.error": "\u30A8\u30AF\u30B9\u30DD\u30FC\u30C8\u306B\u5931\u6557\u3057\u307E\u3057\u305F",
     "export.header.date": "\u65E5\u4ED8",
     "export.header.weight": "\u4F53\u91CD (kg)",
     "export.header.bmi": "BMI",
@@ -1494,7 +1510,7 @@ var translations = {
     "camera.cancel": "\u30AD\u30E3\u30F3\u30BB\u30EB",
     "camera.photo": "\u30D5\u30A9\u30C8\u30E9\u30A4\u30D6\u30E9\u30EA",
     "camera.picture": "\u30AB\u30E1\u30E9",
-    "record.dailyLimit": "\u540C\u3058\u65E5\u4ED8\u306E\u8A18\u9332\u306F\u4E0A\u66F8\u304D\u3055\u308C\u307E\u3059",
+    "record.dailyLimit": "1\u65E510\u56DE\u307E\u3067\u4F53\u91CD\u3092\u8A18\u9332\u3067\u304D\u307E\u3059\uFF08\u540C\u65E5\u306F\u4E0A\u66F8\u304D\uFF09",
     "entry.note": "\u30E1\u30E2",
     "entry.noteHint": "\u98DF\u4E8B\u30FB\u904B\u52D5\u306A\u3069\uFF08100\u6587\u5B57\u307E\u3067\uFF09",
     "rate.title": "\u9031\u9593\u30DA\u30FC\u30B9",
@@ -1530,7 +1546,9 @@ var translations = {
     "records.to": "\u7D42\u4E86\u65E5",
     "records.clearRange": "\u30AF\u30EA\u30A2",
     "source.breakdown": "\u5165\u529B\u65B9\u6CD5\u306E\u5185\u8A33",
-    "source.count": "{count}\u4EF6"
+    "source.count": "{count}\u4EF6",
+    "dowAvg.title": "\u66DC\u65E5\u5225\u5E73\u5747\u4F53\u91CD",
+    "dowAvg.diff": "\u5168\u4F53\u5E73\u5747\u3068\u306E\u5DEE"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1677,6 +1695,7 @@ var translations = {
     "export.excelDone": "Excel file exported",
     "export.csvDone": "CSV file exported",
     "export.textDone": "Text file exported",
+    "export.error": "Export failed",
     "export.header.date": "Date",
     "export.header.weight": "Weight (kg)",
     "export.header.bmi": "BMI",
@@ -1812,7 +1831,7 @@ var translations = {
     "camera.cancel": "Cancel",
     "camera.photo": "Photo Library",
     "camera.picture": "Camera",
-    "record.dailyLimit": "Records on the same date are overwritten",
+    "record.dailyLimit": "Up to 10 weight entries per day (same date is overwritten)",
     "rate.title": "Weekly Rate",
     "rate.value": "{rate}kg/week",
     "rate.period": "{change}kg over {days} days",
@@ -1846,7 +1865,9 @@ var translations = {
     "records.to": "To",
     "records.clearRange": "Clear",
     "source.breakdown": "Input Method Breakdown",
-    "source.count": "{count} records"
+    "source.count": "{count} records",
+    "dowAvg.title": "Average Weight by Day",
+    "dowAvg.diff": "vs overall avg"
   }
 };
 function createTranslator(language) {
@@ -22827,6 +22848,7 @@ function render() {
               <div class="helper">${t("insight.bestDay").replace("{day}", t("day." + insight.bestDay))}</div>
               ${insight.weekComparison !== null ? `<div class="helper">${insight.weekComparison > 0.05 ? t("insight.weekUp").replace("{diff}", insight.weekComparison.toFixed(1)) : insight.weekComparison < -0.05 ? t("insight.weekDown").replace("{diff}", insight.weekComparison.toFixed(1)) : t("insight.weekSame")}</div>` : ""}
             </div>` : ""}
+            ${renderDayOfWeekAvg()}
           </section>
 
           <!-- Monthly Stats Panel -->
@@ -23211,6 +23233,27 @@ function renderSourceBreakdown() {
     const icon = sourceIcons[src] || "\u{1F4CA}";
     const pct = Math.round(count / state.records.length * 100);
     return `<span class="source-chip"><span class="source-icon">${icon}</span> ${t("entry.source." + src)} <strong>${count}</strong> (${pct}%)</span>`;
+  }).join("")}
+      </div>
+    </div>
+  `;
+}
+function renderDayOfWeekAvg() {
+  const dowData = calcDayOfWeekAvg(state.records);
+  if (!dowData) return "";
+  return `
+    <div class="dow-avg-section">
+      <div class="helper">${t("dowAvg.title")}</div>
+      <div class="dow-avg-row">
+        ${dowData.avgs.map((avg, i) => {
+    if (avg === null) return "";
+    const diff = Math.round((avg - dowData.overallAvg) * 10) / 10;
+    const cls = diff < -0.1 ? "loss" : diff > 0.1 ? "gain" : "neutral";
+    return `<div class="dow-avg-item">
+            <span class="dow-label">${t("day." + i)}</span>
+            <span class="dow-value">${avg.toFixed(1)}</span>
+            <span class="dow-diff ${cls}">${diff > 0 ? "+" : ""}${diff.toFixed(1)}</span>
+          </div>`;
   }).join("")}
       </div>
     </div>
@@ -23814,19 +23857,23 @@ function exportExcel() {
     setStatus(t("records.empty"), "error");
     return;
   }
-  const rows = state.records.map((r) => ({
-    [t("export.header.date")]: r.dt,
-    [t("export.header.weight")]: r.wt,
-    [t("export.header.bmi")]: r.bmi ?? "",
-    [t("export.header.bodyFat")]: r.bf ?? "",
-    [t("export.header.source")]: r.source,
-    [t("export.header.note")]: r.note ?? ""
-  }));
-  const ws = utils.json_to_sheet(rows);
-  const wb = utils.book_new();
-  utils.book_append_sheet(wb, ws, t("chart.records"));
-  writeFileSync(wb, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.xlsx`);
-  setStatus(t("export.excelDone"));
+  try {
+    const rows = state.records.map((r) => ({
+      [t("export.header.date")]: r.dt,
+      [t("export.header.weight")]: r.wt,
+      [t("export.header.bmi")]: r.bmi ?? "",
+      [t("export.header.bodyFat")]: r.bf ?? "",
+      [t("export.header.source")]: r.source,
+      [t("export.header.note")]: r.note ?? ""
+    }));
+    const ws = utils.json_to_sheet(rows);
+    const wb = utils.book_new();
+    utils.book_append_sheet(wb, ws, t("chart.records"));
+    writeFileSync(wb, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.xlsx`);
+    setStatus(t("export.excelDone"));
+  } catch {
+    setStatus(t("export.error"), "error");
+  }
 }
 function csvEscape(value) {
   const str = String(value ?? "");
@@ -23838,42 +23885,50 @@ function exportCSV() {
     setStatus(t("records.empty"), "error");
     return;
   }
-  const headers = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source"), t("export.header.note")];
-  const header = headers.map(csvEscape).join(",");
-  const lines = state.records.map(
-    (r) => [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source, r.note ?? ""].map(csvEscape).join(",")
-  );
-  const csv = "\uFEFF" + [header, ...lines].join("\r\n");
-  downloadFile(csv, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
-  setStatus(t("export.csvDone"));
+  try {
+    const headers = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source"), t("export.header.note")];
+    const header = headers.map(csvEscape).join(",");
+    const lines = state.records.map(
+      (r) => [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source, r.note ?? ""].map(csvEscape).join(",")
+    );
+    const csv = "\uFEFF" + [header, ...lines].join("\r\n");
+    downloadFile(csv, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
+    setStatus(t("export.csvDone"));
+  } catch {
+    setStatus(t("export.error"), "error");
+  }
 }
 function exportText() {
   if (!state.records.length) {
     setStatus(t("records.empty"), "error");
     return;
   }
-  const lines = state.records.map((r) => {
-    const bmiStr = r.bmi ? ` / BMI: ${r.bmi.toFixed(1)}` : "";
-    const bfStr = r.bf ? ` / BF: ${Number(r.bf).toFixed(1)}%` : "";
-    const noteStr = r.note ? `  [${r.note}]` : "";
-    const dow = t("day." + (/* @__PURE__ */ new Date(r.dt + "T00:00:00")).getDay());
-    return `${r.dt} (${dow})  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})${noteStr}`;
-  });
-  const stats = calcStats(state.records, state.profile);
-  const summaryLines = [];
-  if (stats) {
-    summaryLines.push("");
-    summaryLines.push("=".repeat(48));
-    summaryLines.push(`${t("chart.latest")}: ${stats.latestWeight.toFixed(1)}kg / ${t("chart.avg")}: ${stats.avgWeight.toFixed(1)}kg`);
-    summaryLines.push(`${t("chart.min")}: ${stats.minWeight.toFixed(1)}kg / ${t("chart.max")}: ${stats.maxWeight.toFixed(1)}kg`);
-    summaryLines.push(`${t("chart.change")}: ${stats.change > 0 ? "+" : ""}${stats.change.toFixed(1)}kg / ${t("summary.count")}: ${state.records.length}`);
-    if (stats.latestBMI) summaryLines.push(`BMI: ${stats.latestBMI.toFixed(1)} (${t(getBMIStatus(stats.latestBMI))})`);
-  }
-  const text = `${t("app.title")} - ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}
+  try {
+    const lines = state.records.map((r) => {
+      const bmiStr = r.bmi ? ` / BMI: ${r.bmi.toFixed(1)}` : "";
+      const bfStr = r.bf ? ` / BF: ${Number(r.bf).toFixed(1)}%` : "";
+      const noteStr = r.note ? `  [${r.note}]` : "";
+      const dow = t("day." + (/* @__PURE__ */ new Date(r.dt + "T00:00:00")).getDay());
+      return `${r.dt} (${dow})  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})${noteStr}`;
+    });
+    const stats = calcStats(state.records, state.profile);
+    const summaryLines = [];
+    if (stats) {
+      summaryLines.push("");
+      summaryLines.push("=".repeat(48));
+      summaryLines.push(`${t("chart.latest")}: ${stats.latestWeight.toFixed(1)}kg / ${t("chart.avg")}: ${stats.avgWeight.toFixed(1)}kg`);
+      summaryLines.push(`${t("chart.min")}: ${stats.minWeight.toFixed(1)}kg / ${t("chart.max")}: ${stats.maxWeight.toFixed(1)}kg`);
+      summaryLines.push(`${t("chart.change")}: ${stats.change > 0 ? "+" : ""}${stats.change.toFixed(1)}kg / ${t("summary.count")}: ${state.records.length}`);
+      if (stats.latestBMI) summaryLines.push(`BMI: ${stats.latestBMI.toFixed(1)} (${t(getBMIStatus(stats.latestBMI))})`);
+    }
+    const text = `${t("app.title")} - ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}
 ${"=".repeat(48)}
 ${lines.join("\n")}${summaryLines.join("\n")}`;
-  downloadFile(text, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.txt`, "text/plain");
-  setStatus(t("export.textDone"));
+    downloadFile(text, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.txt`, "text/plain");
+    setStatus(t("export.textDone"));
+  } catch {
+    setStatus(t("export.error"), "error");
+  }
 }
 function downloadFile(content, filename, mimeType) {
   const blob = new Blob([content], { type: mimeType });
