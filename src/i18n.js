@@ -745,6 +745,12 @@ export const translations = {
     "anomaly.title": "異常値検出",
     "anomaly.entry": "{date}の記録 {wt}kg（予測: {expected}kg、差: {diff}kg）",
     "anomaly.hint": "入力ミスの可能性があるデータです",
+    "success.title": "成功率",
+    "success.rate": "減少・維持した割合",
+    "success.recent": "直近30回",
+    "success.down": "減少",
+    "success.same": "維持",
+    "success.up": "増加",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1492,6 +1498,12 @@ export const translations = {
     "anomaly.title": "Anomaly Detection",
     "anomaly.entry": "{date}: {wt}kg (expected: {expected}kg, diff: {diff}kg)",
     "anomaly.hint": "These entries may contain data entry errors",
+    "success.title": "Success Rate",
+    "success.rate": "Days weight decreased or stayed",
+    "success.recent": "Last 30",
+    "success.down": "Down",
+    "success.same": "Same",
+    "success.up": "Up",
   },
 };
 

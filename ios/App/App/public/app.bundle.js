@@ -28511,13 +28511,7 @@ function handleImportData(event) {
         }
       }
       if (data.profile && !state.profile.name) {
-        const p = data.profile;
-        const safe = {};
-        if (typeof p.name === "string") safe.name = p.name.slice(0, 50);
-        if (Number.isFinite(Number(p.heightCm)) && Number(p.heightCm) >= 50 && Number(p.heightCm) <= 300) safe.heightCm = String(p.heightCm);
-        if (Number.isFinite(Number(p.age)) && Number(p.age) >= 1 && Number(p.age) <= 150) safe.age = String(p.age);
-        if (["male", "female", "other", ""].includes(p.gender)) safe.gender = p.gender;
-        state.profile = { ...state.profile, ...safe };
+        state.profile = sanitizeProfile({ ...createDefaultProfile(), ...data.profile });
       }
       if (!persist()) {
         setStatus(t("status.storageError"), "error");

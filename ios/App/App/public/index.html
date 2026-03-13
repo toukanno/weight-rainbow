@@ -2588,6 +2588,51 @@
       }
       .anomaly-row:last-child { border-bottom: none; }
 
+      .success-section {
+        margin-top: 14px;
+        text-align: center;
+      }
+      .success-rate-big {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: var(--accent);
+        margin: 4px 0;
+      }
+      .success-bar {
+        display: flex;
+        height: 10px;
+        border-radius: 5px;
+        overflow: hidden;
+        margin: 8px 0;
+      }
+      .success-seg {
+        transition: width 0.3s ease;
+      }
+      .success-seg.down { background: var(--accent-3); }
+      .success-seg.same { background: var(--ok); }
+      .success-seg.up { background: var(--accent-2); }
+      .success-legend {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        font-size: 0.75rem;
+        color: var(--muted);
+      }
+      .success-leg-item {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .success-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .success-dot.down { background: var(--accent-3); }
+      .success-dot.same { background: var(--ok); }
+      .success-dot.up { background: var(--accent-2); }
+
       .mpr-section {
         margin-top: 14px;
       }

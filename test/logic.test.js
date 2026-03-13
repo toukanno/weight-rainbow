@@ -7513,3 +7513,58 @@ describe("calcWeightAnomalies", () => {
     }
   });
 });
+
+describe("calcSuccessRate", () => {
+  it("returns null for fewer than 2 records", () => {
+    expect(calcSuccessRate([])).toBeNull();
+    expect(calcSuccessRate([{ dt: "2026-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("calculates 100% when all weights decrease", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 72 },
+      { dt: "2026-01-02", wt: 71 },
+      { dt: "2026-01-03", wt: 70 },
+    ];
+    const result = calcSuccessRate(records);
+    expect(result.successRate).toBe(100);
+    expect(result.down).toBe(2);
+    expect(result.up).toBe(0);
+  });
+
+  it("calculates 0% when all weights increase", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 68 },
+      { dt: "2026-01-02", wt: 69 },
+      { dt: "2026-01-03", wt: 70 },
+    ];
+    const result = calcSuccessRate(records);
+    expect(result.successRate).toBe(0);
+    expect(result.up).toBe(2);
+  });
+
+  it("counts same weight as success", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 70 },
+      { dt: "2026-01-02", wt: 70 },
+      { dt: "2026-01-03", wt: 70 },
+    ];
+    const result = calcSuccessRate(records);
+    expect(result.successRate).toBe(100);
+    expect(result.same).toBe(2);
+  });
+
+  it("calculates mixed results correctly", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 70 },
+      { dt: "2026-01-02", wt: 69 }, // down
+      { dt: "2026-01-03", wt: 70 }, // up
+      { dt: "2026-01-04", wt: 69 }, // down
+    ];
+    const result = calcSuccessRate(records);
+    expect(result.down).toBe(2);
+    expect(result.up).toBe(1);
+    expect(result.total).toBe(3);
+    expect(result.successRate).toBe(67);
+  });
+});
