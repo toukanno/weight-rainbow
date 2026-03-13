@@ -27004,8 +27004,10 @@ async function shareChart() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `weight-chart-${todayLocal()}.png`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1e3);
     setStatus(t("share.done"));
   } catch {
     setStatus(t("share.error"), "error");

@@ -83,6 +83,7 @@ import {
   calcGoalCountdown,
   calcBodyComposition,
   generateWeightSummary,
+  getFrequentNotes,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -549,6 +550,14 @@ function render() {
                     return `<button type="button" class="note-tag${active ? " active" : ""}" data-note-tag="${tag}">${t("note.tag." + tag)}</button>`;
                   }).join("")}
                 </div>
+                ${(() => {
+                  const freq = getFrequentNotes(state.records, 4);
+                  if (freq.length === 0) return "";
+                  return `<div class="quick-notes-row">
+                    <span class="quick-notes-label">${t("quickNote.label")}:</span>
+                    ${freq.map((n) => `<button type="button" class="quick-note-chip" data-quick-note="${escapeAttr(n.text)}">${n.text.length > 15 ? n.text.slice(0, 15) + "…" : n.text}</button>`).join("")}
+                  </div>`;
+                })()}
               </div>
 
               <!-- Quick Record Section -->
@@ -2317,6 +2326,12 @@ function bindEvents() {
       render();
     });
   });
+  app.querySelectorAll("[data-quick-note]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.form.note = button.dataset.quickNote;
+      render();
+    });
+  });
 
   app.querySelectorAll("input, select").forEach((element) => {
     element.addEventListener("input", handleFieldInput);
@@ -2965,8 +2980,10 @@ async function shareChart() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `weight-chart-${todayLocal()}.png`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     setStatus(t("share.done"));
   } catch {
     setStatus(t("share.error"), "error");
