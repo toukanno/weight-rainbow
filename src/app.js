@@ -957,18 +957,36 @@ function renderCalendar() {
   const todayDate = new Date();
   const isCurrentMonth = calendarYear === todayDate.getFullYear() && calendarMonth === todayDate.getMonth();
   const todayDay = todayDate.getDate();
+  const changeMap = calcCalendarChangeMap(state.records);
   for (const d of data.days) {
     const hasRecord = d.wt !== null;
     const isToday = isCurrentMonth && d.day === todayDay;
-    const intensity = d.intensity !== null ? d.intensity : 0;
-    const bg = hasRecord ? `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)` : "";
-    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${d.wt} kg` : ""}">
+    const change = changeMap[d.dt];
+    let bg = "";
+    let changeLabel = "";
+    if (hasRecord && change !== undefined) {
+      if (change < 0) {
+        const alpha = Math.min(50, Math.round(Math.abs(change) * 30 + 15));
+        bg = `background: color-mix(in srgb, var(--ok, #10b981) ${alpha}%, transparent)`;
+      } else if (change > 0) {
+        const alpha = Math.min(50, Math.round(change * 30 + 15));
+        bg = `background: color-mix(in srgb, var(--warn, #f59e0b) ${alpha}%, transparent)`;
+      } else {
+        bg = `background: color-mix(in srgb, var(--accent) 20%, transparent)`;
+      }
+      changeLabel = ` (${change > 0 ? "+" : ""}${change.toFixed(1)})`;
+    } else if (hasRecord) {
+      const intensity = d.intensity !== null ? d.intensity : 0;
+      bg = `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)`;
+    }
+    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${d.wt}kg${changeLabel}` : ""}">
       <span class="calendar-day">${d.day}</span>
       ${hasRecord ? `<span class="calendar-wt">${d.wt}</span>` : ""}
     </div>`;
   }
   html += `</div>`;
-  html += `<div class="helper" style="margin-top:8px">${t("calendar.records").replace("{count}", data.recordCount)}</div>`;
+  html += `<div class="calendar-legend"><span class="cal-legend-item"><span class="cal-dot cal-dot-down"></span>${t("calendar.decreased")}</span><span class="cal-legend-item"><span class="cal-dot cal-dot-up"></span>${t("calendar.increased")}</span></div>`;
+  html += `<div class="helper" style="margin-top:4px">${t("calendar.records").replace("{count}", data.recordCount)}</div>`;
   return html;
 }
 

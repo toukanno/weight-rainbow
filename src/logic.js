@@ -787,6 +787,16 @@ export function calcSmoothedWeight(records, smoothing = 0.1) {
   return { smoothed, trend };
 }
 
+export function calcCalendarChangeMap(records) {
+  if (records.length < 2) return {};
+  const map = {};
+  for (let i = 1; i < records.length; i++) {
+    const diff = Math.round((records[i].wt - records[i - 1].wt) * 10) / 10;
+    map[records[i].dt] = diff;
+  }
+  return map;
+}
+
 export function exportRecordsToCSV(records) {
   if (!records.length) return "";
   const header = "date,weight,bmi,bodyFat,source,note";

@@ -43,6 +43,7 @@ import {
   calcLongestStreak,
   calcTrendForecast,
   calcSmoothedWeight,
+  calcCalendarChangeMap,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -1391,5 +1392,114 @@ describe("calcSmoothedWeight", () => {
     }
     const result = calcSmoothedWeight(records);
     expect(result.trend).toBeLessThan(0);
+  });
+});
+
+describe("calcCalendarChangeMap", () => {
+  it("returns empty for fewer than 2 records", () => {
+    expect(calcCalendarChangeMap([])).toEqual({});
+    expect(calcCalendarChangeMap([{ dt: "2025-01-01", wt: 70 }])).toEqual({});
+  });
+
+  it("calculates changes between consecutive records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72 },
+      { dt: "2025-01-02", wt: 71.5 },
+      { dt: "2025-01-03", wt: 72.1 },
+    ];
+    const map = calcCalendarChangeMap(records);
+    expect(map["2025-01-02"]).toBe(-0.5);
+    expect(map["2025-01-03"]).toBe(0.6);
+    expect(map["2025-01-01"]).toBeUndefined();
+  });
+
+  it("handles zero change", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70 },
+    ];
+    const map = calcCalendarChangeMap(records);
+    expect(map["2025-01-02"]).toBe(0);
+  });
+});
+
+describe("validateWeight edge cases", () => {
+  it("accepts boundary values", () => {
+    expect(validateWeight("20")).toEqual({ valid: true, weight: 20 });
+    expect(validateWeight("300")).toEqual({ valid: true, weight: 300 });
+  });
+
+  it("rejects out of range", () => {
+    expect(validateWeight("19.9").valid).toBe(false);
+    expect(validateWeight("300.1").valid).toBe(false);
+  });
+
+  it("rejects empty string", () => {
+    expect(validateWeight("").valid).toBe(false);
+  });
+
+  it("accepts two decimal places", () => {
+    expect(validateWeight("65.55")).toEqual({ valid: true, weight: 65.55 });
+  });
+
+  it("rejects three decimal places", () => {
+    expect(validateWeight("65.555").valid).toBe(false);
+  });
+});
+
+describe("upsertRecord edge cases", () => {
+  it("overwrites existing record on same date", () => {
+    const records = [{ dt: "2025-01-01", wt: 70, source: "manual" }];
+    const newRecord = { dt: "2025-01-01", wt: 69.5, source: "voice" };
+    const result = upsertRecord(records, newRecord);
+    expect(result.length).toBe(1);
+    expect(result[0].wt).toBe(69.5);
+    expect(result[0].source).toBe("voice");
+  });
+
+  it("maintains sort order after insert", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-03", wt: 71 },
+    ];
+    const result = upsertRecord(records, { dt: "2025-01-02", wt: 70.5 });
+    expect(result.map((r) => r.dt)).toEqual(["2025-01-01", "2025-01-02", "2025-01-03"]);
+  });
+});
+
+describe("calcStats edge cases", () => {
+  it("returns null for empty array", () => {
+    expect(calcStats([])).toBeNull();
+  });
+
+  it("handles single record", () => {
+    const stats = calcStats([{ dt: "2025-01-01", wt: 70 }], { heightCm: 170 });
+    expect(stats.latestWeight).toBe(70);
+    expect(stats.minWeight).toBe(70);
+    expect(stats.maxWeight).toBe(70);
+    expect(stats.change).toBe(0);
+  });
+});
+
+describe("parseCSVImport edge cases", () => {
+  it("ignores empty lines between data rows", () => {
+    const csv = "date,weight,bmi,bodyFat,source,note\n2025-01-01,70,,,,\n\n2025-01-02,71,,,,\n";
+    const result = parseCSVImport(csv);
+    expect(result.records.length).toBe(2);
+    expect(result.errors.length).toBe(0);
+  });
+
+  it("handles weight at boundary (20kg)", () => {
+    const csv = "date,weight\n2025-01-01,20\n";
+    const result = parseCSVImport(csv);
+    expect(result.records.length).toBe(1);
+    expect(result.records[0].wt).toBe(20);
+  });
+
+  it("rejects weight below minimum", () => {
+    const csv = "date,weight\n2025-01-01,19\n";
+    const result = parseCSVImport(csv);
+    expect(result.records.length).toBe(0);
+    expect(result.errors.length).toBe(1);
   });
 });
