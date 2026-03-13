@@ -27,6 +27,7 @@ import {
   THEME_LIST,
   buildCalendarMonth,
   calcWeeklyRate,
+  calcMonthlyStats,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -60,6 +61,7 @@ let chartPeriod = "all"; // "7", "30", "90", "all"
 let reminderTimer = null;
 let calendarYear = new Date().getFullYear();
 let calendarMonth = new Date().getMonth();
+let showMonthlyStats = false;
 
 // Initialize quick weight from last record
 {
@@ -503,6 +505,9 @@ function render() {
             </div>
           </section>
 
+          <!-- Monthly Stats Panel -->
+          ${renderMonthlyStats()}
+
           <!-- Calendar Panel -->
           <section class="panel">
             <div class="section-header">
@@ -750,6 +755,41 @@ function renderMetric(label, value) {
   return `<div class="metric"><div class="label">${label}</div><div class="value">${value}</div></div>`;
 }
 
+function renderMonthlyStats() {
+  const monthlyStats = calcMonthlyStats(state.records);
+  if (!monthlyStats.length) return "";
+  const visible = showMonthlyStats ? monthlyStats : monthlyStats.slice(0, 3);
+  return `
+    <section class="panel">
+      <div class="section-header">
+        <div>
+          <h2>${t("monthly.title")}</h2>
+          <p>${t("monthly.hint")}</p>
+        </div>
+      </div>
+      <div class="monthly-stats-list">
+        ${visible.map((m) => {
+          const changeColor = m.change < 0 ? "var(--ok, #10b981)" : m.change > 0 ? "var(--warn, #f59e0b)" : "var(--muted)";
+          return `
+            <div class="monthly-stats-row">
+              <div class="monthly-label">${m.month}</div>
+              <div class="monthly-values">
+                <span title="${t("summary.avg")}">${t("summary.avg")}: ${m.avg.toFixed(1)}kg</span>
+                <span title="${t("summary.min")}">↓${m.min.toFixed(1)}</span>
+                <span title="${t("summary.max")}">↑${m.max.toFixed(1)}</span>
+                <span style="color:${changeColor}">${m.change > 0 ? "+" : ""}${m.change.toFixed(1)}kg</span>
+                <span class="helper">${t("monthly.records").replace("{count}", m.count)}</span>
+              </div>
+            </div>`;
+        }).join("")}
+      </div>
+      ${monthlyStats.length > 3 ? `
+        <button type="button" class="btn secondary" style="margin-top:10px;width:100%;" data-action="toggle-monthly">
+          ${showMonthlyStats ? t("records.showLess") : t("monthly.showAll").replace("{count}", monthlyStats.length)}
+        </button>` : ""}
+    </section>`;
+}
+
 function renderCalendar() {
   const data = buildCalendarMonth(state.records, calendarYear, calendarMonth);
   const dayNames = ["calendar.sun", "calendar.mon", "calendar.tue", "calendar.wed", "calendar.thu", "calendar.fri", "calendar.sat"];
@@ -869,6 +909,10 @@ function bindEvents() {
   app.querySelector('[data-action="quick-save"]')?.addEventListener("click", quickSaveRecord);
   app.querySelector('[data-action="toggle-records"]')?.addEventListener("click", () => {
     showAllRecords = !showAllRecords;
+    render();
+  });
+  app.querySelector('[data-action="toggle-monthly"]')?.addEventListener("click", () => {
+    showMonthlyStats = !showMonthlyStats;
     render();
   });
   app.querySelector('[data-action="export-excel"]')?.addEventListener("click", exportExcel);
@@ -2007,7 +2051,7 @@ async function googleBackup() {
     const data = {
       exportedAt: new Date().toISOString(),
       records: state.records.map((r) => ({
-        dt: r.dt, wt: r.wt, bmi: r.bmi, source: r.source, createdAt: r.createdAt,
+        dt: r.dt, wt: r.wt, bmi: r.bmi, bf: r.bf ?? null, source: r.source, note: r.note ?? "", createdAt: r.createdAt,
       })),
       settings: {
         goalWeight: state.settings.goalWeight,

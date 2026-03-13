@@ -1121,6 +1121,24 @@ function calcAchievements(records, streak, goalWeight) {
   }
   return achievements;
 }
+function calcMonthlyStats(records) {
+  if (!records.length) return [];
+  const byMonth = {};
+  for (const r of records) {
+    const key = r.dt.slice(0, 7);
+    if (!byMonth[key]) byMonth[key] = [];
+    byMonth[key].push(r.wt);
+  }
+  const months2 = Object.keys(byMonth).sort().reverse();
+  return months2.map((key) => {
+    const weights = byMonth[key];
+    const avg = Math.round(weights.reduce((a, b) => a + b, 0) / weights.length * 10) / 10;
+    const min = Math.round(Math.min(...weights) * 10) / 10;
+    const max = Math.round(Math.max(...weights) * 10) / 10;
+    const change = Math.round((weights[weights.length - 1] - weights[0]) * 10) / 10;
+    return { month: key, count: weights.length, avg, min, max, change };
+  });
+}
 
 // src/i18n.js
 var translations = {
@@ -22225,6 +22243,7 @@ var chartPeriod = "all";
 var reminderTimer = null;
 var calendarYear = (/* @__PURE__ */ new Date()).getFullYear();
 var calendarMonth = (/* @__PURE__ */ new Date()).getMonth();
+var showMonthlyStats = false;
 {
   const lastRecord = state.records[state.records.length - 1];
   if (lastRecord) quickWeight = lastRecord.wt;
@@ -22635,6 +22654,9 @@ function render() {
             </div>
           </section>
 
+          <!-- Monthly Stats Panel -->
+          ${renderMonthlyStats()}
+
           <!-- Calendar Panel -->
           <section class="panel">
             <div class="section-header">
@@ -22877,6 +22899,40 @@ function render() {
 function renderMetric(label, value) {
   return `<div class="metric"><div class="label">${label}</div><div class="value">${value}</div></div>`;
 }
+function renderMonthlyStats() {
+  const monthlyStats = calcMonthlyStats(state.records);
+  if (!monthlyStats.length) return "";
+  const visible = showMonthlyStats ? monthlyStats : monthlyStats.slice(0, 3);
+  return `
+    <section class="panel">
+      <div class="section-header">
+        <div>
+          <h2>${t("monthly.title")}</h2>
+          <p>${t("monthly.hint")}</p>
+        </div>
+      </div>
+      <div class="monthly-stats-list">
+        ${visible.map((m) => {
+    const changeColor = m.change < 0 ? "var(--ok, #10b981)" : m.change > 0 ? "var(--warn, #f59e0b)" : "var(--muted)";
+    return `
+            <div class="monthly-stats-row">
+              <div class="monthly-label">${m.month}</div>
+              <div class="monthly-values">
+                <span title="${t("summary.avg")}">${t("summary.avg")}: ${m.avg.toFixed(1)}kg</span>
+                <span title="${t("summary.min")}">\u2193${m.min.toFixed(1)}</span>
+                <span title="${t("summary.max")}">\u2191${m.max.toFixed(1)}</span>
+                <span style="color:${changeColor}">${m.change > 0 ? "+" : ""}${m.change.toFixed(1)}kg</span>
+                <span class="helper">${t("monthly.records").replace("{count}", m.count)}</span>
+              </div>
+            </div>`;
+  }).join("")}
+      </div>
+      ${monthlyStats.length > 3 ? `
+        <button type="button" class="btn secondary" style="margin-top:10px;width:100%;" data-action="toggle-monthly">
+          ${showMonthlyStats ? t("records.showLess") : t("monthly.showAll").replace("{count}", monthlyStats.length)}
+        </button>` : ""}
+    </section>`;
+}
 function renderCalendar() {
   const data = buildCalendarMonth(state.records, calendarYear, calendarMonth);
   const dayNames = ["calendar.sun", "calendar.mon", "calendar.tue", "calendar.wed", "calendar.thu", "calendar.fri", "calendar.sat"];
@@ -22986,6 +23042,10 @@ function bindEvents() {
   app.querySelector('[data-action="quick-save"]')?.addEventListener("click", quickSaveRecord);
   app.querySelector('[data-action="toggle-records"]')?.addEventListener("click", () => {
     showAllRecords = !showAllRecords;
+    render();
+  });
+  app.querySelector('[data-action="toggle-monthly"]')?.addEventListener("click", () => {
+    showMonthlyStats = !showMonthlyStats;
     render();
   });
   app.querySelector('[data-action="export-excel"]')?.addEventListener("click", exportExcel);
@@ -23989,7 +24049,9 @@ async function googleBackup() {
         dt: r.dt,
         wt: r.wt,
         bmi: r.bmi,
+        bf: r.bf ?? null,
         source: r.source,
+        note: r.note ?? "",
         createdAt: r.createdAt
       })),
       settings: {
