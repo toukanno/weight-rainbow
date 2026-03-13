@@ -2357,6 +2357,55 @@ function calcVolatilityIndex(records) {
     dataPoints: changes.length
   };
 }
+function calcPeriodComparison(records) {
+  if (records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const today = /* @__PURE__ */ new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  function statsForRange(recs) {
+    if (recs.length === 0) return null;
+    const weights = recs.map((r) => r.wt);
+    const avg = Math.round(weights.reduce((s, w) => s + w, 0) / weights.length * 10) / 10;
+    const min = Math.round(Math.min(...weights) * 10) / 10;
+    const max = Math.round(Math.max(...weights) * 10) / 10;
+    return { avg, min, max, count: recs.length };
+  }
+  const dayOfWeek = today.getDay();
+  const weekStart = new Date(today);
+  weekStart.setDate(weekStart.getDate() - dayOfWeek);
+  const prevWeekStart = new Date(weekStart);
+  prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+  function dateStr(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  const weekStartStr = dateStr(weekStart);
+  const prevWeekStartStr = dateStr(prevWeekStart);
+  const thisWeek = sorted.filter((r) => r.dt >= weekStartStr && r.dt <= todayStr);
+  const prevWeek = sorted.filter((r) => r.dt >= prevWeekStartStr && r.dt < weekStartStr);
+  const monthStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
+  const prevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const prevMonthStart = dateStr(prevMonth);
+  const prevMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+  const prevMonthEndStr = dateStr(prevMonthEnd);
+  const thisMonth = sorted.filter((r) => r.dt >= monthStart && r.dt <= todayStr);
+  const lastMonth = sorted.filter((r) => r.dt >= prevMonthStart && r.dt <= prevMonthEndStr);
+  const weekly = {
+    current: statsForRange(thisWeek),
+    previous: statsForRange(prevWeek)
+  };
+  if (weekly.current && weekly.previous) {
+    weekly.avgDiff = Math.round((weekly.current.avg - weekly.previous.avg) * 10) / 10;
+  }
+  const monthly = {
+    current: statsForRange(thisMonth),
+    previous: statsForRange(lastMonth)
+  };
+  if (monthly.current && monthly.previous) {
+    monthly.avgDiff = Math.round((monthly.current.avg - monthly.previous.avg) * 10) / 10;
+  }
+  if (!weekly.current && !monthly.current) return null;
+  return { weekly, monthly };
+}
 
 // src/i18n.js
 var translations = {
@@ -2962,7 +3011,18 @@ var translations = {
     "volatility.increasing": "\u5909\u52D5\u304C\u5897\u52A0\u4E2D",
     "volatility.decreasing": "\u5909\u52D5\u304C\u6E1B\u5C11\u4E2D",
     "volatility.stable": "\u5909\u52D5\u306F\u5B89\u5B9A",
-    "volatility.hint": "\u65E5\u3005\u306E\u4F53\u91CD\u5909\u52D5\u306F\u81EA\u7136\u306A\u3053\u3068\u3067\u3059"
+    "volatility.hint": "\u65E5\u3005\u306E\u4F53\u91CD\u5909\u52D5\u306F\u81EA\u7136\u306A\u3053\u3068\u3067\u3059",
+    "compare.title": "\u671F\u9593\u6BD4\u8F03",
+    "compare.weekly": "\u9031\u9593\u6BD4\u8F03",
+    "compare.monthly": "\u6708\u9593\u6BD4\u8F03",
+    "compare.thisWeek": "\u4ECA\u9031",
+    "compare.lastWeek": "\u5148\u9031",
+    "compare.thisMonth": "\u4ECA\u6708",
+    "compare.lastMonth": "\u5148\u6708",
+    "compare.avg": "\u5E73\u5747: {val}kg",
+    "compare.diff": "\u5DEE: {val}kg",
+    "compare.noData": "\u30C7\u30FC\u30BF\u4E0D\u8DB3",
+    "compare.records": "{n}\u4EF6"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3566,7 +3626,18 @@ var translations = {
     "volatility.increasing": "Volatility increasing",
     "volatility.decreasing": "Volatility decreasing",
     "volatility.stable": "Volatility stable",
-    "volatility.hint": "Daily weight fluctuations are completely normal"
+    "volatility.hint": "Daily weight fluctuations are completely normal",
+    "compare.title": "Period Comparison",
+    "compare.weekly": "Weekly",
+    "compare.monthly": "Monthly",
+    "compare.thisWeek": "This week",
+    "compare.lastWeek": "Last week",
+    "compare.thisMonth": "This month",
+    "compare.lastMonth": "Last month",
+    "compare.avg": "Avg: {val}kg",
+    "compare.diff": "Diff: {val}kg",
+    "compare.noData": "No data",
+    "compare.records": "{n} records"
   }
 };
 function createTranslator(language) {
@@ -24509,7 +24580,7 @@ function render() {
                   <button type="button" data-quick-adj="+1.0" aria-label="+1.0 kg">+1.0</button>
                 </div>
                 <div class="quick-buttons" style="margin-top:10px;">
-                  <button type="button" class="quick-save" data-action="quick-save">${t("quick.save")}</button>
+                  <button type="button" class="quick-save" data-action="quick-save" aria-label="${t("quick.save")}">${t("quick.save")}</button>
                 </div>
               </div>
 
@@ -24537,7 +24608,7 @@ function render() {
                   <p class="helper hint-small" style="margin-top: 4px; text-align: center;">${t("photo.zoomHint")}</p>
                   ${!supportsTextDetection && !detectedWeights.length ? `<p class="helper" style="margin-top: 8px; text-align: center;">${t("photo.manualHint")}</p>` : ""}
                 ` : ""}
-                ${detectedWeights.length ? `<div style="margin-top: 12px;"><div class="helper">${t("entry.photoDetected")}</div><div class="chip-row" style="margin-top: 8px;">${detectedWeights.map((weight) => `<button type="button" class="chip" data-pick-weight="${weight}">${formatWeight(weight)}</button>`).join("")}</div></div>` : ""}
+                ${detectedWeights.length ? `<div style="margin-top: 12px;"><div class="helper">${t("entry.photoDetected")}</div><div class="chip-row" style="margin-top: 8px;">${detectedWeights.map((weight) => `<button type="button" class="chip" data-pick-weight="${weight}" aria-label="${formatWeight(weight)} kg">${formatWeight(weight)}</button>`).join("")}</div></div>` : ""}
                 ${!supportsTextDetection && !imagePreviewUrl ? `<span class="helper">${t("entry.photoFallback")}</span>` : ""}
               </div>
 
@@ -24661,6 +24732,7 @@ function render() {
                 ${renderProgressSummary()}
                 ${renderMilestoneTimeline()}
                 ${renderVolatilityIndex()}
+                ${renderPeriodComparison()}
               </div>
               ` : ""}
             </div>
@@ -25667,6 +25739,42 @@ function renderVolatilityIndex() {
       </div>
       <div class="volatility-trend">${t("volatility." + vi.trend)}</div>
       <div class="helper hint-small">${t("volatility.hint")}</div>
+    </div>
+  `;
+}
+function renderPeriodComparison() {
+  const pc = calcPeriodComparison(state.records);
+  if (!pc) return "";
+  function renderPair(label, period, curLabel, prevLabel) {
+    if (!period.current && !period.previous) return "";
+    const cur = period.current;
+    const prev = period.previous;
+    const diffStr = period.avgDiff != null ? period.avgDiff > 0 ? "+" + period.avgDiff : String(period.avgDiff) : "\u2014";
+    const diffColor = period.avgDiff != null ? period.avgDiff < 0 ? "#10b981" : period.avgDiff > 0 ? "#ef4444" : "var(--text)" : "var(--text)";
+    return `
+      <div class="compare-pair">
+        <div class="compare-pair-title">${label}</div>
+        <div class="compare-row">
+          <div class="compare-cell">
+            <span class="compare-label">${curLabel}</span>
+            <span class="compare-value">${cur ? t("compare.avg").replace("{val}", cur.avg) : t("compare.noData")}</span>
+            ${cur ? `<span class="compare-count">${t("compare.records").replace("{n}", cur.count)}</span>` : ""}
+          </div>
+          <div class="compare-cell">
+            <span class="compare-label">${prevLabel}</span>
+            <span class="compare-value">${prev ? t("compare.avg").replace("{val}", prev.avg) : t("compare.noData")}</span>
+            ${prev ? `<span class="compare-count">${t("compare.records").replace("{n}", prev.count)}</span>` : ""}
+          </div>
+        </div>
+        ${period.avgDiff != null ? `<div class="compare-diff" style="color:${diffColor}">${t("compare.diff").replace("{val}", diffStr)}</div>` : ""}
+      </div>
+    `;
+  }
+  return `
+    <div class="compare-section">
+      <div class="helper">${t("compare.title")}</div>
+      ${renderPair(t("compare.weekly"), pc.weekly, t("compare.thisWeek"), t("compare.lastWeek"))}
+      ${renderPair(t("compare.monthly"), pc.monthly, t("compare.thisMonth"), t("compare.lastMonth"))}
     </div>
   `;
 }

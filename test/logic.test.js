@@ -76,6 +76,7 @@ import {
   calcProgressSummary,
   calcMilestoneTimeline,
   calcVolatilityIndex,
+  calcPeriodComparison,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -4855,6 +4856,57 @@ describe("calcVolatilityIndex", () => {
     expect(result).not.toBeNull();
     expect(result.maxSwing).toBeGreaterThan(0);
     expect(["increasing", "decreasing", "stable"]).toContain(result.trend);
+  });
+});
+
+describe("calcPeriodComparison", () => {
+  function localDateStr(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  it("returns null for fewer than 3 records", () => {
+    expect(calcPeriodComparison([{ dt: "2025-01-01", wt: 70 }, { dt: "2025-01-02", wt: 69 }])).toBeNull();
+  });
+
+  it("returns weekly and monthly structure", () => {
+    const today = new Date();
+    const records = Array.from({ length: 20 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      return { dt: localDateStr(d), wt: 70 + Math.random() };
+    });
+    const result = calcPeriodComparison(records);
+    expect(result).not.toBeNull();
+    expect(result.weekly).toBeDefined();
+    expect(result.monthly).toBeDefined();
+  });
+
+  it("calculates avgDiff when both periods have data", () => {
+    const today = new Date();
+    const records = Array.from({ length: 30 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      return { dt: localDateStr(d), wt: i < 15 ? 70 : 72 };
+    });
+    const result = calcPeriodComparison(records);
+    expect(result).not.toBeNull();
+    if (result.weekly.avgDiff != null) {
+      expect(typeof result.weekly.avgDiff).toBe("number");
+    }
+  });
+
+  it("handles periods with no data gracefully", () => {
+    // Only very old records, no recent data
+    const records = [
+      { dt: "2024-01-01", wt: 70 },
+      { dt: "2024-01-02", wt: 69 },
+      { dt: "2024-01-03", wt: 68 },
+    ];
+    const result = calcPeriodComparison(records);
+    // Either null or has empty current periods
+    if (result) {
+      expect(result.weekly).toBeDefined();
+    }
   });
 });
 

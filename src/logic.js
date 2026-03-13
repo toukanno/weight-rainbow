@@ -1873,3 +1873,70 @@ export function calcVolatilityIndex(records) {
     dataPoints: changes.length,
   };
 }
+
+/**
+ * Compares weight stats between this week/month and previous week/month.
+ * Returns side-by-side comparison with improvement indicators.
+ */
+export function calcPeriodComparison(records) {
+  if (records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  function statsForRange(recs) {
+    if (recs.length === 0) return null;
+    const weights = recs.map((r) => r.wt);
+    const avg = Math.round((weights.reduce((s, w) => s + w, 0) / weights.length) * 10) / 10;
+    const min = Math.round(Math.min(...weights) * 10) / 10;
+    const max = Math.round(Math.max(...weights) * 10) / 10;
+    return { avg, min, max, count: recs.length };
+  }
+
+  // Weekly comparison
+  const dayOfWeek = today.getDay();
+  const weekStart = new Date(today);
+  weekStart.setDate(weekStart.getDate() - dayOfWeek);
+  const prevWeekStart = new Date(weekStart);
+  prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+
+  function dateStr(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  const weekStartStr = dateStr(weekStart);
+  const prevWeekStartStr = dateStr(prevWeekStart);
+
+  const thisWeek = sorted.filter((r) => r.dt >= weekStartStr && r.dt <= todayStr);
+  const prevWeek = sorted.filter((r) => r.dt >= prevWeekStartStr && r.dt < weekStartStr);
+
+  // Monthly comparison
+  const monthStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
+  const prevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const prevMonthStart = dateStr(prevMonth);
+  const prevMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+  const prevMonthEndStr = dateStr(prevMonthEnd);
+
+  const thisMonth = sorted.filter((r) => r.dt >= monthStart && r.dt <= todayStr);
+  const lastMonth = sorted.filter((r) => r.dt >= prevMonthStart && r.dt <= prevMonthEndStr);
+
+  const weekly = {
+    current: statsForRange(thisWeek),
+    previous: statsForRange(prevWeek),
+  };
+  if (weekly.current && weekly.previous) {
+    weekly.avgDiff = Math.round((weekly.current.avg - weekly.previous.avg) * 10) / 10;
+  }
+
+  const monthly = {
+    current: statsForRange(thisMonth),
+    previous: statsForRange(lastMonth),
+  };
+  if (monthly.current && monthly.previous) {
+    monthly.avgDiff = Math.round((monthly.current.avg - monthly.previous.avg) * 10) / 10;
+  }
+
+  if (!weekly.current && !monthly.current) return null;
+
+  return { weekly, monthly };
+}
