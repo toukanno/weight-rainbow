@@ -1054,6 +1054,37 @@
       label: `${year}-${String(month + 1).padStart(2, "0")}`
     };
   }
+  function calcAchievements(records, streak, goalWeight) {
+    const achievements = [];
+    if (!records.length) return achievements;
+    const countMilestones = [1, 10, 30, 50, 100, 180];
+    for (const m of countMilestones) {
+      if (records.length >= m) {
+        achievements.push({ id: `records_${m}`, icon: "\u{1F4CA}", tier: m >= 100 ? "gold" : m >= 30 ? "silver" : "bronze" });
+      }
+    }
+    const streakMilestones = [3, 7, 14, 30, 60, 100];
+    for (const m of streakMilestones) {
+      if (streak >= m) {
+        achievements.push({ id: `streak_${m}`, icon: "\u{1F525}", tier: m >= 30 ? "gold" : m >= 7 ? "silver" : "bronze" });
+      }
+    }
+    if (records.length >= 2) {
+      const firstWt = records[0].wt;
+      const latestWt = records[records.length - 1].wt;
+      const lost = firstWt - latestWt;
+      const lossMilestones = [1, 3, 5, 10, 20];
+      for (const m of lossMilestones) {
+        if (lost >= m) {
+          achievements.push({ id: `loss_${m}`, icon: "\u2B07\uFE0F", tier: m >= 10 ? "gold" : m >= 5 ? "silver" : "bronze" });
+        }
+      }
+    }
+    if (Number.isFinite(goalWeight) && records[records.length - 1].wt <= goalWeight) {
+      achievements.push({ id: "goal_achieved", icon: "\u{1F3AF}", tier: "gold" });
+    }
+    return achievements;
+  }
 
   // src/i18n.js
   var translations = {
@@ -1299,6 +1330,24 @@
       "calendar.fri": "\u91D1",
       "calendar.sat": "\u571F",
       "calendar.records": "{count}\u4EF6\u306E\u8A18\u9332",
+      "achievement.records_1": "\u521D\u8A18\u9332",
+      "achievement.records_10": "10\u56DE\u8A18\u9332\u9054\u6210",
+      "achievement.records_30": "30\u56DE\u8A18\u9332\u9054\u6210",
+      "achievement.records_50": "50\u56DE\u8A18\u9332\u9054\u6210",
+      "achievement.records_100": "100\u56DE\u8A18\u9332\u9054\u6210",
+      "achievement.records_180": "180\u56DE\u8A18\u9332\u9054\u6210",
+      "achievement.streak_3": "3\u65E5\u9023\u7D9A",
+      "achievement.streak_7": "7\u65E5\u9023\u7D9A",
+      "achievement.streak_14": "14\u65E5\u9023\u7D9A",
+      "achievement.streak_30": "30\u65E5\u9023\u7D9A",
+      "achievement.streak_60": "60\u65E5\u9023\u7D9A",
+      "achievement.streak_100": "100\u65E5\u9023\u7D9A",
+      "achievement.loss_1": "-1kg\u9054\u6210",
+      "achievement.loss_3": "-3kg\u9054\u6210",
+      "achievement.loss_5": "-5kg\u9054\u6210",
+      "achievement.loss_10": "-10kg\u9054\u6210",
+      "achievement.loss_20": "-20kg\u9054\u6210",
+      "achievement.goal_achieved": "\u76EE\u6A19\u9054\u6210\uFF01",
       "bodyFat.label": "\u4F53\u8102\u80AA\u7387 (%)",
       "bodyFat.hint": "\u4F53\u8102\u80AA\u7387\uFF08\u4EFB\u610F\uFF09",
       "bodyFat.invalid": "\u4F53\u8102\u80AA\u7387\u306F\u6570\u5024\u3067\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044",
@@ -1554,6 +1603,24 @@
       "calendar.fri": "Fri",
       "calendar.sat": "Sat",
       "calendar.records": "{count} records",
+      "achievement.records_1": "First record",
+      "achievement.records_10": "10 records",
+      "achievement.records_30": "30 records",
+      "achievement.records_50": "50 records",
+      "achievement.records_100": "100 records",
+      "achievement.records_180": "180 records",
+      "achievement.streak_3": "3-day streak",
+      "achievement.streak_7": "7-day streak",
+      "achievement.streak_14": "14-day streak",
+      "achievement.streak_30": "30-day streak",
+      "achievement.streak_60": "60-day streak",
+      "achievement.streak_100": "100-day streak",
+      "achievement.loss_1": "-1kg milestone",
+      "achievement.loss_3": "-3kg milestone",
+      "achievement.loss_5": "-5kg milestone",
+      "achievement.loss_10": "-10kg milestone",
+      "achievement.loss_20": "-20kg milestone",
+      "achievement.goal_achieved": "Goal achieved!",
       "bodyFat.label": "Body Fat (%)",
       "bodyFat.hint": "Body fat percentage (optional)",
       "bodyFat.invalid": "Enter body fat as a valid number",
@@ -22243,6 +22310,7 @@
     const trend = calcWeightTrend(state.records);
     const bmiStatus = stats?.latestBMI ? t(getBMIStatus(stats.latestBMI)) : t("bmi.unknown");
     const motivation = getMotivationalMessage(streak, trend, state.records, goalProgress);
+    const achievements = calcAchievements(state.records, streak, goalWeight);
     const previewWeightResult = validateWeight(state.form.weight);
     const currentBMI = previewWeightResult.valid && state.profile.heightCm ? buildRecord({
       date: state.form.date || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
@@ -22268,6 +22336,7 @@
               ${trend ? `<span class="trend-indicator ${trend}">${trend === "down" ? "\u{1F4C9}" : trend === "up" ? "\u{1F4C8}" : "\u27A1\uFE0F"} ${t("trend." + trend)}</span>` : ""}
             </div>
             ${motivation ? `<p class="motivation-msg">${motivation}</p>` : ""}
+            ${achievements.length ? `<div class="achievement-row">${achievements.map((a) => `<span class="achievement-badge ${a.tier}" title="${t("achievement." + a.id)}">${a.icon}</span>`).join("")}</div>` : ""}
           </div>
           <div class="hero-card">
             <div class="eyebrow">${t("bmi.title")}</div>

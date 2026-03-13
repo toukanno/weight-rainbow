@@ -1434,6 +1434,45 @@
         color: #818cf8;
       }
 
+      /* Achievement Badges */
+      .achievement-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+      }
+
+      .achievement-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        font-size: 16px;
+        cursor: default;
+        transition: transform 0.15s;
+      }
+
+      .achievement-badge:hover {
+        transform: scale(1.2);
+      }
+
+      .achievement-badge.bronze {
+        background: linear-gradient(135deg, #cd7f32, #b87333);
+        box-shadow: 0 2px 8px rgba(205, 127, 50, 0.3);
+      }
+
+      .achievement-badge.silver {
+        background: linear-gradient(135deg, #c0c0c0, #a8a8a8);
+        box-shadow: 0 2px 8px rgba(192, 192, 192, 0.3);
+      }
+
+      .achievement-badge.gold {
+        background: linear-gradient(135deg, #ffd700, #ffb300);
+        box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+      }
+
       /* Midnight theme overrides for new elements */
       body[data-theme="midnight"] .google-btn {
         background: rgba(30, 35, 55, 0.7);
@@ -1502,6 +1541,10 @@
 
         .reminder-grid {
           grid-template-columns: 1fr;
+        }
+
+        .hero-bottom {
+          grid-template-columns: repeat(2, 1fr) !important;
         }
       }
     </style>
