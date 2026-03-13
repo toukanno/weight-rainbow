@@ -1645,7 +1645,8 @@ function exportText() {
     const bmiStr = r.bmi ? ` / BMI: ${r.bmi.toFixed(1)}` : "";
     const bfStr = r.bf ? ` / BF: ${Number(r.bf).toFixed(1)}%` : "";
     const noteStr = r.note ? `  [${r.note}]` : "";
-    return `${r.dt}  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})${noteStr}`;
+    const dow = t("day." + new Date(r.dt + "T00:00:00").getDay());
+    return `${r.dt} (${dow})  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})${noteStr}`;
   });
   const stats = calcStats(state.records, state.profile);
   const summaryLines = [];
@@ -2074,7 +2075,8 @@ function drawChart() {
     const tip = document.getElementById("chartTooltip");
     if (cd < 30 && tip) {
       const r = snapRecords[ci];
-      tip.textContent = `${r.dt}: ${r.wt.toFixed(1)}kg${r.bmi ? ` (BMI ${r.bmi.toFixed(1)})` : ""}${r.bf ? ` BF ${Number(r.bf).toFixed(1)}%` : ""}${r.note ? ` — ${r.note}` : ""}`;
+      const dow = t("day." + new Date(r.dt + "T00:00:00").getDay());
+      tip.textContent = `${r.dt} (${dow}): ${r.wt.toFixed(1)}kg${r.bmi ? ` (BMI ${r.bmi.toFixed(1)})` : ""}${r.bf ? ` BF ${Number(r.bf).toFixed(1)}%` : ""}${r.note ? ` — ${r.note}` : ""}`;
       tip.style.display = "block";
       clearTimeout(canvas._tooltipTimer);
     } else if (tip) {
