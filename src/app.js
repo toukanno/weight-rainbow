@@ -421,11 +421,16 @@ function render() {
     : null;
   const previewLarge = previewDiff !== null && Math.abs(previewDiff) >= 2;
 
+  // Search filter count (computed once, used in both header and record list)
+  const filteredBySearch = recordSearchQuery ? filterRecords(state.records, recordSearchQuery) : state.records;
+  const filteredSearchCount = filteredBySearch.length;
+
   // Duplicate date warning
   const selectedDate = state.form.date || todayLocal();
   const existingRecord = state.records.find((r) => r.dt === selectedDate);
 
   app.innerHTML = `
+    <a href="#entrySection" class="skip-link">${t("a11y.skipToEntry")}</a>
     <main class="app-shell">
       <section class="hero">
         <div class="hero-top">
@@ -551,7 +556,7 @@ function render() {
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel" id="entrySection">
             <div class="section-header">
               <div>
                 <h2>${t("section.entry")}</h2>
@@ -850,7 +855,7 @@ function render() {
             ${state.records.length > 3 ? `
             <div class="record-search">
               <input id="recordSearch" type="search" placeholder="${escapeAttr(t("records.search"))}" value="${escapeAttr(recordSearchQuery)}" autocomplete="off" aria-label="${t("records.search")}" />
-              ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : `<span class="helper hint-small desktop-only">⌘K</span>`}
+              ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filteredSearchCount)}</span>` : `<span class="helper hint-small desktop-only">⌘K</span>`}
             </div>
             <div class="record-date-range">
               <div class="helper hint-small">${t("records.dateRange")}</div>
