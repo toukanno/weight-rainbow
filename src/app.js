@@ -3433,11 +3433,13 @@ async function toggleVoiceInput() {
 
   recognition.onerror = (e) => {
     voiceActive = false;
+    try { recognition.abort(); } catch { /* already stopped */ }
     if (e.error === "no-speech") {
       setStatus(t("status.voiceNoSpeech"), "warn");
     } else {
       setStatus(t("status.voiceError"), "error");
     }
+    render();
   };
 
   recognition.onend = () => {
