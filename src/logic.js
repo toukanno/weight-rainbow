@@ -1035,7 +1035,7 @@ export function calcTagImpact(records) {
   }
   const results = [];
   for (const [tag, data] of Object.entries(tagData)) {
-    if (data.count < 2) continue;
+    if (data.count < 3) continue;
     const avg = Math.round((data.diffs.reduce((s, d) => s + d, 0) / data.count) * 100) / 100;
     results.push({ tag, avgChange: avg, count: data.count });
   }
@@ -2519,6 +2519,9 @@ export function generateAICoachReport(records, profile, goalWeight) {
   } else if (trend === "up" && wantsLoss) {
     score -= 10;
     risks.push("trendAgainstGoal");
+  } else if (!trend && (wantsLoss || wantsGain)) {
+    score -= 5;
+    risks.push("flatTrend");
   }
 
   // 2. Weekly rate check (healthy: 0.2-0.5 kg/week loss)

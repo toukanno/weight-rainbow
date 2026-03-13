@@ -1641,7 +1641,7 @@ function calcTagImpact(records) {
   }
   const results = [];
   for (const [tag, data] of Object.entries(tagData)) {
-    if (data.count < 2) continue;
+    if (data.count < 3) continue;
     const avg = Math.round(data.diffs.reduce((s, d) => s + d, 0) / data.count * 100) / 100;
     results.push({ tag, avgChange: avg, count: data.count });
   }
@@ -2839,6 +2839,9 @@ function generateAICoachReport(records, profile, goalWeight) {
   } else if (trend === "up" && wantsLoss) {
     score -= 10;
     risks.push("trendAgainstGoal");
+  } else if (!trend && (wantsLoss || wantsGain)) {
+    score -= 5;
+    risks.push("flatTrend");
   }
   if (weeklyRate) {
     const absRate = Math.abs(weeklyRate.weeklyRate);
@@ -4467,6 +4470,7 @@ var translations = {
     "ai.highlight.nearGoal": "\u{1F3AF} \u76EE\u6A19\u4F53\u91CD\u307E\u3067\u3042\u3068\u5C11\u3057\uFF01\u30B4\u30FC\u30EB\u304C\u898B\u3048\u3066\u3044\u307E\u3059",
     "ai.highlight.goalSoon": "\u{1F3C1} \u3042\u30681\u30F6\u6708\u4EE5\u5185\u306B\u76EE\u6A19\u9054\u6210\u306E\u898B\u8FBC\u307F\u3067\u3059",
     "ai.risk.trendAgainstGoal": "\u26A0\uFE0F \u73FE\u5728\u306E\u30C8\u30EC\u30F3\u30C9\u306F\u76EE\u6A19\u3068\u9006\u65B9\u5411\u3067\u3059",
+    "ai.risk.flatTrend": "\u{1F4C8} \u4F53\u91CD\u304C\u6A2A\u3070\u3044\u3067\u3059\u3002\u76EE\u6A19\u306B\u5411\u3051\u3066\u98DF\u4E8B\u3084\u904B\u52D5\u3092\u898B\u76F4\u3057\u307E\u3057\u3087\u3046",
     "ai.risk.rapidChange": "\u26A0\uFE0F \u4F53\u91CD\u5909\u52D5\u304C\u6025\u6FC0\u3067\u3059\uFF08\u90311kg\u4EE5\u4E0A\uFF09",
     "ai.risk.inconsistent": "\u{1F4DD} \u8A18\u9332\u306E\u983B\u5EA6\u304C\u4F4E\u4E0B\u3057\u3066\u3044\u307E\u3059",
     "ai.risk.highVolatility": "\u{1F4CA} \u4F53\u91CD\u306E\u5909\u52D5\u304C\u5927\u304D\u3044\u3067\u3059",
@@ -5363,6 +5367,7 @@ var translations = {
     "ai.highlight.nearGoal": "\u{1F3AF} Almost at your goal weight!",
     "ai.highlight.goalSoon": "\u{1F3C1} On track to hit your goal within a month",
     "ai.risk.trendAgainstGoal": "\u26A0\uFE0F Current trend is moving away from your goal",
+    "ai.risk.flatTrend": "\u{1F4C8} Weight is plateauing. Consider adjusting your diet or exercise",
     "ai.risk.rapidChange": "\u26A0\uFE0F Rapid weight change detected (>1 kg/week)",
     "ai.risk.inconsistent": "\u{1F4DD} Recording frequency has dropped",
     "ai.risk.highVolatility": "\u{1F4CA} High weight fluctuation detected",
@@ -29003,6 +29008,14 @@ function bindEvents() {
       }
       saveRecordFromPicker();
     }
+    if (e.target.closest('[data-action="dismiss-warning"]')) {
+      const container = document.querySelector(".validate-warnings");
+      if (container) {
+        container.style.display = "none";
+        container.innerHTML = "";
+      }
+      validationBypass = false;
+    }
   });
   app.querySelector('[data-action="export-data"]')?.addEventListener("click", exportData);
   app.querySelector('[data-action="reset-data"]')?.addEventListener("click", resetData);
@@ -29369,7 +29382,7 @@ function saveRecordWithWeight(weight, source) {
           if (w.type === "outsideRange") return escHtml(t("validate.outsideRange").replace("{min}", w.min).replace("{max}", w.max));
           return "";
         }).filter(Boolean);
-        container.innerHTML = `<div class="validate-warning-box"><p class="validate-warning-title">${escHtml(t("validate.title"))}</p>${msgs.map((m) => `<p class="validate-warning-msg">${m}</p>`).join("")}<button type="button" class="btn ghost validate-confirm" data-action="confirm-save">${escHtml(t("entry.save"))}</button></div>`;
+        container.innerHTML = `<div class="validate-warning-box"><p class="validate-warning-title">${escHtml(t("validate.title"))}</p>${msgs.map((m) => `<p class="validate-warning-msg">${m}</p>`).join("")}<div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="btn ghost validate-confirm" data-action="confirm-save">${escHtml(t("entry.save"))}</button><button type="button" class="btn ghost" data-action="dismiss-warning">${escHtml(t("camera.cancel"))}</button></div></div>`;
         container.style.display = "block";
         validationBypass = true;
         return;

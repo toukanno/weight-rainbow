@@ -3308,6 +3308,11 @@ function bindEvents() {
       if (container) { container.style.display = "none"; container.innerHTML = ""; }
       saveRecordFromPicker();
     }
+    if (e.target.closest('[data-action="dismiss-warning"]')) {
+      const container = document.querySelector(".validate-warnings");
+      if (container) { container.style.display = "none"; container.innerHTML = ""; }
+      validationBypass = false;
+    }
   });
   app.querySelector('[data-action="export-data"]')?.addEventListener("click", exportData);
   app.querySelector('[data-action="reset-data"]')?.addEventListener("click", resetData);
@@ -3687,7 +3692,7 @@ function saveRecordWithWeight(weight, source) {
           if (w.type === "outsideRange") return escHtml(t("validate.outsideRange").replace("{min}", w.min).replace("{max}", w.max));
           return "";
         }).filter(Boolean);
-        container.innerHTML = `<div class="validate-warning-box"><p class="validate-warning-title">${escHtml(t("validate.title"))}</p>${msgs.map((m) => `<p class="validate-warning-msg">${m}</p>`).join("")}<button type="button" class="btn ghost validate-confirm" data-action="confirm-save">${escHtml(t("entry.save"))}</button></div>`;
+        container.innerHTML = `<div class="validate-warning-box"><p class="validate-warning-title">${escHtml(t("validate.title"))}</p>${msgs.map((m) => `<p class="validate-warning-msg">${m}</p>`).join("")}<div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="btn ghost validate-confirm" data-action="confirm-save">${escHtml(t("entry.save"))}</button><button type="button" class="btn ghost" data-action="dismiss-warning">${escHtml(t("camera.cancel"))}</button></div></div>`;
         container.style.display = "block";
         validationBypass = true;
         return;

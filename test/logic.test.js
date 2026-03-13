@@ -115,6 +115,7 @@ import {
   calcBodyFatTrend,
   calcDailyTarget,
   calcMonthPhaseAvg,
+  calcStreakFreezeInfo,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -2385,12 +2386,14 @@ describe("calcTagImpact", () => {
 
   it("sorts tags by avgChange ascending", () => {
     const records = [
-      { wt: 70, note: "#diet" },
-      { wt: 71, note: "#cheatday" },
-      { wt: 70.5, note: "#diet" },
-      { wt: 71.5, note: "#cheatday" },
-      { wt: 70, note: "#diet" },
-      { wt: 71, note: "" },
+      { wt: 70, note: "" },
+      { wt: 69.5, note: "#diet" },
+      { wt: 70, note: "#cheatday" },
+      { wt: 69.5, note: "#diet" },
+      { wt: 70.5, note: "#cheatday" },
+      { wt: 69.8, note: "#diet" },
+      { wt: 70.5, note: "#cheatday" },
+      { wt: 70, note: "" },
     ];
     const result = calcTagImpact(records);
     expect(result).not.toBeNull();
@@ -8660,5 +8663,67 @@ describe("calcMonthPhaseAvg", () => {
     const result = calcMonthPhaseAvg(records);
     expect(result.phases[0].change).toBe(0);
     expect(result.phases[1].change).toBe(2);
+  });
+});
+
+describe("calcStreakFreezeInfo", () => {
+  const makeDailyRecords = (startDate, count) =>
+    Array.from({ length: count }, (_, i) => {
+      const d = new Date(startDate + "T00:00:00");
+      d.setDate(d.getDate() + i);
+      return {
+        dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+        wt: 70,
+      };
+    });
+
+  it("returns zeros for empty/null records", () => {
+    const r1 = calcStreakFreezeInfo([]);
+    expect(r1.freezesEarned).toBe(0);
+    expect(r1.freezesAvailable).toBe(0);
+    const r2 = calcStreakFreezeInfo(null);
+    expect(r2.freezesEarned).toBe(0);
+  });
+
+  it("returns correct streak for single record", () => {
+    const result = calcStreakFreezeInfo([{ dt: "2025-01-01", wt: 70 }]);
+    expect(result.currentStreak).toBe(1);
+    expect(result.freezesEarned).toBe(0);
+  });
+
+  it("earns 1 freeze per 7 consecutive days", () => {
+    const records = makeDailyRecords("2025-01-01", 7);
+    const result = calcStreakFreezeInfo(records);
+    expect(result.freezesEarned).toBe(1);
+    expect(result.currentStreak).toBe(7);
+  });
+
+  it("earns 2 freezes for 14 consecutive days", () => {
+    const records = makeDailyRecords("2025-01-01", 14);
+    const result = calcStreakFreezeInfo(records);
+    expect(result.freezesEarned).toBe(2);
+    expect(result.currentStreak).toBe(14);
+  });
+
+  it("tracks longest streak separately", () => {
+    // 10 days, gap, 3 days
+    const records = [
+      ...makeDailyRecords("2025-01-01", 10),
+      ...makeDailyRecords("2025-01-15", 3),
+    ];
+    const result = calcStreakFreezeInfo(records);
+    expect(result.longestStreak).toBe(10);
+    expect(result.currentStreak).toBe(3);
+  });
+
+  it("handles non-consecutive records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-05", wt: 70 },
+      { dt: "2025-01-10", wt: 70 },
+    ];
+    const result = calcStreakFreezeInfo(records);
+    expect(result.currentStreak).toBe(1);
+    expect(result.freezesEarned).toBe(0);
   });
 });
