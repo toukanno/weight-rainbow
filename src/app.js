@@ -25,6 +25,7 @@ import {
   validateProfile,
   validateBodyFat,
   validateWeight,
+  normalizeNumericInput,
   THEME_LIST,
   buildCalendarMonth,
   calcWeeklyRate,
@@ -68,6 +69,8 @@ import {
   calcNextMilestones,
   calcSeasonality,
   calcWeightDistribution,
+  calcDayOfWeekChange,
+  calcPersonalRecords,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -691,6 +694,8 @@ function render() {
                 ${renderRecordGaps()}
                 ${renderSeasonality()}
                 ${renderWeightDistribution()}
+                ${renderDayOfWeekChange()}
+                ${renderPersonalRecords()}
               </div>
               ` : ""}
             </div>
@@ -1467,6 +1472,61 @@ function renderWeightDistribution() {
       <div class="dist-chart">${bars}</div>
       <div class="dist-info">${t("dist.mode").replace("{range}", d.modeRange).replace("{count}", d.buckets[d.modeBucket].count)}</div>
       <div class="helper hint-small">${t("dist.hint")}</div>
+    </div>
+  `;
+}
+
+function renderDayOfWeekChange() {
+  const d = calcDayOfWeekChange(state.records);
+  if (!d) return "";
+  const dayKeys = [0, 1, 2, 3, 4, 5, 6];
+  const maxAbs = Math.max(...d.avgs.filter((a) => a !== null).map((a) => Math.abs(a)), 0.1);
+  const bars = dayKeys.map((i) => {
+    const avg = d.avgs[i];
+    if (avg === null) return `<div class="dow-change-col"><div class="dow-change-label">${t("day." + i)}</div></div>`;
+    const pct = Math.round((Math.abs(avg) / maxAbs) * 50);
+    const isGain = avg > 0.01;
+    const isLoss = avg < -0.01;
+    const color = isLoss ? "var(--ok, #10b981)" : isGain ? "var(--warn, #f59e0b)" : "var(--text)";
+    const isBest = i === d.bestDay;
+    const isWorst = i === d.worstDay;
+    return `<div class="dow-change-col ${isBest ? "best" : ""} ${isWorst ? "worst" : ""}">
+      <div class="dow-change-val" style="color:${color};">${avg > 0 ? "+" : ""}${avg}</div>
+      <div class="dow-change-bar-track"><div class="dow-change-bar" style="height:${pct}%;background:${color};"></div></div>
+      <div class="dow-change-label">${t("day." + i)}</div>
+    </div>`;
+  }).join("");
+  return `
+    <div class="dow-change-section">
+      <div class="helper">${t("dowChange.title")}</div>
+      <div class="dow-change-chart">${bars}</div>
+      <div class="dow-change-info">
+        ${d.bestDay !== null ? `<div>${t("dowChange.best").replace("{day}", t("day." + d.bestDay)).replace("{avg}", d.avgs[d.bestDay])}</div>` : ""}
+        ${d.worstDay !== null ? `<div>${t("dowChange.worst").replace("{day}", t("day." + d.worstDay)).replace("{avg}", d.avgs[d.worstDay])}</div>` : ""}
+      </div>
+      <div class="helper hint-small">${t("dowChange.hint")}</div>
+    </div>
+  `;
+}
+
+function renderPersonalRecords() {
+  const pr = calcPersonalRecords(state.records);
+  if (!pr) return "";
+  const items = [];
+  items.push(`<div class="pr-item">🏆 ${t("pr.allTimeLow").replace("{weight}", pr.allTimeLow).replace("{date}", pr.allTimeLowDate)}</div>`);
+  if (pr.biggestDrop > 0) {
+    items.push(`<div class="pr-item">⬇️ ${t("pr.biggestDrop").replace("{drop}", pr.biggestDrop).replace("{date}", pr.biggestDropDate)}</div>`);
+  }
+  if (pr.best7DayChange !== null) {
+    items.push(`<div class="pr-item">📅 ${t("pr.best7").replace("{change}", pr.best7DayChange).replace("{from}", pr.best7DayFrom)}</div>`);
+  }
+  items.push(`<div class="pr-item">📊 ${t("pr.totalChange").replace("{change}", pr.totalChange > 0 ? "+" + pr.totalChange : pr.totalChange)}</div>`);
+  items.push(`<div class="pr-item">📝 ${t("pr.totalRecords").replace("{count}", pr.totalRecords)}</div>`);
+  return `
+    <div class="pr-section">
+      <div class="helper">${t("pr.title")}</div>
+      ${items.join("")}
+      <div class="helper hint-small">${t("pr.hint")}</div>
     </div>
   `;
 }
@@ -2993,7 +3053,7 @@ function saveGoal() {
   if (!raw.trim()) {
     state.settings.goalWeight = null;
   } else {
-    const val = parseFloat(raw);
+    const val = parseFloat(normalizeNumericInput(raw));
     if (!Number.isFinite(val) || val < 20 || val > 300) {
       setStatus(t("weight.range"), "error");
       return;

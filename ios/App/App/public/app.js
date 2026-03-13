@@ -2006,6 +2006,47 @@ function calcDayOfWeekChange(records) {
   const bestDay = avgs.reduce((best, a, i) => a !== null && (best === null || a < avgs[best]) ? i : best, null);
   return { avgs, counts, worstDay, bestDay };
 }
+function calcPersonalRecords(records) {
+  if (records.length < 3) return null;
+  const weights = records.map((r) => r.wt);
+  const allTimeLow = Math.min(...weights);
+  const allTimeLowDate = records.find((r) => r.wt === allTimeLow)?.dt ?? null;
+  let biggestDrop = 0;
+  let biggestDropDate = null;
+  for (let i = 1; i < records.length; i++) {
+    const drop = records[i - 1].wt - records[i].wt;
+    if (drop > biggestDrop) {
+      biggestDrop = drop;
+      biggestDropDate = records[i].dt;
+    }
+  }
+  biggestDrop = Math.round(biggestDrop * 10) / 10;
+  let best7 = Infinity;
+  let best7From = null;
+  if (records.length >= 7) {
+    for (let i = 0; i <= records.length - 7; i++) {
+      const change = records[i + 6].wt - records[i].wt;
+      if (change < best7) {
+        best7 = change;
+        best7From = records[i].dt;
+      }
+    }
+  }
+  best7 = best7 === Infinity ? null : Math.round(best7 * 10) / 10;
+  const totalChange = Math.round((weights[weights.length - 1] - weights[0]) * 10) / 10;
+  return {
+    allTimeLow,
+    allTimeLowDate,
+    biggestDrop,
+    biggestDropDate,
+    best7DayChange: best7,
+    best7DayFrom: best7From,
+    totalChange,
+    totalRecords: records.length,
+    firstDate: records[0].dt,
+    latestDate: records[records.length - 1].dt
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -2528,7 +2569,14 @@ var translations = {
     "dowChange.title": "\u66DC\u65E5\u5225 \u4F53\u91CD\u5909\u5316",
     "dowChange.best": "\u6700\u3082\u6E1B\u308B\u66DC\u65E5: {day}\uFF08\u5E73\u5747 {avg}kg\uFF09",
     "dowChange.worst": "\u6700\u3082\u5897\u3048\u308B\u66DC\u65E5: {day}\uFF08\u5E73\u5747 +{avg}kg\uFF09",
-    "dowChange.hint": "\u9023\u7D9A\u3057\u305F\u65E5\u306E\u4F53\u91CD\u5909\u5316\u3092\u66DC\u65E5\u5225\u306B\u96C6\u8A08"
+    "dowChange.hint": "\u9023\u7D9A\u3057\u305F\u65E5\u306E\u4F53\u91CD\u5909\u5316\u3092\u66DC\u65E5\u5225\u306B\u96C6\u8A08",
+    "pr.title": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u8A18\u9332",
+    "pr.allTimeLow": "\u904E\u53BB\u6700\u8EFD\u91CF: {weight}kg\uFF08{date}\uFF09",
+    "pr.biggestDrop": "\u6700\u5927\u65E5\u6B21\u6E1B\u5C11: -{drop}kg\uFF08{date}\uFF09",
+    "pr.best7": "\u6700\u826F7\u65E5\u9593: {change}kg\uFF08{from}\u301C\uFF09",
+    "pr.totalChange": "\u521D\u56DE\u304B\u3089\u306E\u5909\u5316: {change}kg",
+    "pr.totalRecords": "\u7DCF\u8A18\u9332\u6570: {count}\u4EF6",
+    "pr.hint": "\u3042\u306A\u305F\u306E\u8A18\u9332\u306E\u30CF\u30A4\u30E9\u30A4\u30C8"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3049,7 +3097,14 @@ var translations = {
     "dowChange.title": "Weight Change by Day",
     "dowChange.best": "Best day: {day} (avg {avg}kg)",
     "dowChange.worst": "Worst day: {day} (avg +{avg}kg)",
-    "dowChange.hint": "Average daily weight change by day of week"
+    "dowChange.hint": "Average daily weight change by day of week",
+    "pr.title": "Personal Records",
+    "pr.allTimeLow": "All-time low: {weight}kg ({date})",
+    "pr.biggestDrop": "Biggest daily drop: -{drop}kg ({date})",
+    "pr.best7": "Best 7 days: {change}kg (from {from})",
+    "pr.totalChange": "Total change: {change}kg",
+    "pr.totalRecords": "Total records: {count}",
+    "pr.hint": "Your record highlights"
   }
 };
 function createTranslator(language) {
@@ -24133,6 +24188,7 @@ function render() {
                 ${renderSeasonality()}
                 ${renderWeightDistribution()}
                 ${renderDayOfWeekChange()}
+                ${renderPersonalRecords()}
               </div>
               ` : ""}
             </div>
@@ -24911,6 +24967,27 @@ function renderDayOfWeekChange() {
         ${d.worstDay !== null ? `<div>${t("dowChange.worst").replace("{day}", t("day." + d.worstDay)).replace("{avg}", d.avgs[d.worstDay])}</div>` : ""}
       </div>
       <div class="helper hint-small">${t("dowChange.hint")}</div>
+    </div>
+  `;
+}
+function renderPersonalRecords() {
+  const pr = calcPersonalRecords(state.records);
+  if (!pr) return "";
+  const items = [];
+  items.push(`<div class="pr-item">\u{1F3C6} ${t("pr.allTimeLow").replace("{weight}", pr.allTimeLow).replace("{date}", pr.allTimeLowDate)}</div>`);
+  if (pr.biggestDrop > 0) {
+    items.push(`<div class="pr-item">\u2B07\uFE0F ${t("pr.biggestDrop").replace("{drop}", pr.biggestDrop).replace("{date}", pr.biggestDropDate)}</div>`);
+  }
+  if (pr.best7DayChange !== null) {
+    items.push(`<div class="pr-item">\u{1F4C5} ${t("pr.best7").replace("{change}", pr.best7DayChange).replace("{from}", pr.best7DayFrom)}</div>`);
+  }
+  items.push(`<div class="pr-item">\u{1F4CA} ${t("pr.totalChange").replace("{change}", pr.totalChange > 0 ? "+" + pr.totalChange : pr.totalChange)}</div>`);
+  items.push(`<div class="pr-item">\u{1F4DD} ${t("pr.totalRecords").replace("{count}", pr.totalRecords)}</div>`);
+  return `
+    <div class="pr-section">
+      <div class="helper">${t("pr.title")}</div>
+      ${items.join("")}
+      <div class="helper hint-small">${t("pr.hint")}</div>
     </div>
   `;
 }
@@ -26281,7 +26358,7 @@ function saveGoal() {
   if (!raw.trim()) {
     state.settings.goalWeight = null;
   } else {
-    const val = parseFloat(raw);
+    const val = parseFloat(normalizeNumericInput(raw));
     if (!Number.isFinite(val) || val < 20 || val > 300) {
       setStatus(t("weight.range"), "error");
       return;

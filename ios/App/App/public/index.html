@@ -461,6 +461,7 @@
       input,
       select {
         width: 100%;
+        min-height: 44px;
         border: 1px solid var(--border);
         background: var(--surface-strong);
         color: var(--text);
@@ -514,6 +515,7 @@
       }
 
       .tab {
+        min-height: 44px;
         background: var(--surface);
         color: var(--muted);
         border: 1px solid var(--border);
@@ -708,6 +710,7 @@
       .record-search input[type="search"] {
         flex: 1;
         padding: 8px 12px;
+        min-height: 44px;
         border-radius: 12px;
         border: 1px solid var(--border);
         background: var(--surface);
@@ -1492,6 +1495,21 @@
       }
       .dow-change-info > div {
         padding: 2px 0;
+      }
+
+      .pr-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .pr-item {
+        font-size: 0.82rem;
+        color: var(--text);
+        padding: 4px 0;
+        border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+      }
+      .pr-item:last-of-type {
+        border-bottom: none;
       }
 
       .analytics-toggle-section {
