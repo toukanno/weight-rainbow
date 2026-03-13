@@ -2101,6 +2101,61 @@
         font-size: 0.85rem;
       }
 
+      .weekly-avg-section {
+        margin-top: 14px;
+      }
+      .weekly-avg-chart {
+        display: flex;
+        align-items: flex-end;
+        gap: 6px;
+        height: 120px;
+        padding: 8px 0;
+      }
+      .weekly-avg-bar-wrap {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        height: 100%;
+        justify-content: flex-end;
+        position: relative;
+      }
+      .weekly-avg-value {
+        font-size: 0.7rem;
+        color: var(--text);
+        margin-bottom: 2px;
+      }
+      .weekly-avg-bar {
+        width: 100%;
+        max-width: 32px;
+        border-radius: 4px 4px 0 0;
+        background: color-mix(in srgb, var(--accent) 50%, transparent);
+        transition: height 0.3s;
+      }
+      .weekly-avg-bar.down {
+        background: color-mix(in srgb, var(--accent-3) 60%, transparent);
+      }
+      .weekly-avg-bar.up {
+        background: color-mix(in srgb, var(--accent-2) 50%, transparent);
+      }
+      .weekly-avg-bar.empty {
+        background: color-mix(in srgb, var(--border) 30%, transparent);
+        height: 10% !important;
+      }
+      .weekly-avg-label {
+        font-size: 0.65rem;
+        color: var(--muted);
+        margin-top: 4px;
+        white-space: nowrap;
+      }
+      .weekly-avg-change {
+        font-size: 0.65rem;
+        margin-top: 1px;
+      }
+      .weekly-avg-change.down { color: var(--accent-3); }
+      .weekly-avg-change.up { color: var(--accent-2); }
+      .weekly-avg-change.flat { color: var(--muted); }
+
       .analytics-toggle-section {
         margin-top: 14px;
         padding-top: 12px;

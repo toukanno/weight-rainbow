@@ -6487,3 +6487,53 @@ describe("calcMilestoneTimeline edge cases", () => {
     expect(typeof result.total).toBe("number");
   });
 });
+
+describe("calcWeeklyAverages", () => {
+  it("returns empty array for no records", () => {
+    expect(calcWeeklyAverages([])).toEqual([]);
+  });
+
+  it("returns 8 weeks by default", () => {
+    const now = new Date();
+    const dt = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const records = [{ dt, wt: 70 }];
+    const result = calcWeeklyAverages(records);
+    expect(result).toHaveLength(8);
+    const current = result[result.length - 1];
+    expect(current.avg).toBe(70);
+    expect(current.count).toBe(1);
+  });
+
+  it("calculates correct averages for multiple records in a week", () => {
+    const now = new Date();
+    const d1 = new Date(now);
+    d1.setDate(d1.getDate() - 1);
+    const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const records = [
+      { dt: fmt(d1), wt: 68 },
+      { dt: fmt(now), wt: 72 },
+    ];
+    const result = calcWeeklyAverages(records);
+    const current = result[result.length - 1];
+    expect(current.avg).toBe(70);
+    expect(current.count).toBe(2);
+    expect(current.min).toBe(68);
+    expect(current.max).toBe(72);
+  });
+
+  it("respects numWeeks parameter", () => {
+    const now = new Date();
+    const dt = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const result = calcWeeklyAverages([{ dt, wt: 70 }], 4);
+    expect(result).toHaveLength(4);
+  });
+
+  it("marks weeks without data as null avg", () => {
+    const old = new Date();
+    old.setDate(old.getDate() - 60);
+    const dt = `${old.getFullYear()}-${String(old.getMonth() + 1).padStart(2, "0")}-${String(old.getDate()).padStart(2, "0")}`;
+    const result = calcWeeklyAverages([{ dt, wt: 70 }], 4);
+    const nullWeeks = result.filter((w) => w.avg === null);
+    expect(nullWeeks.length).toBeGreaterThanOrEqual(1);
+  });
+});

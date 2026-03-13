@@ -637,6 +637,12 @@ export const translations = {
     "validate.largeDiff": "前回（{previous}kg、{date}）から{diff}kg以上の変動です。入力値を確認してください。",
     "validate.outsideRange": "入力値が過去の記録範囲（{min}〜{max}kg）を大きく超えています。",
     "validate.title": "入力確認",
+    "weeklyAvg.title": "週間平均推移",
+    "weeklyAvg.week": "{start}〜",
+    "weeklyAvg.avg": "平均 {avg}kg",
+    "weeklyAvg.noData": "データなし",
+    "weeklyAvg.count": "{count}件",
+    "weeklyAvg.change": "先週比 {change}kg",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1276,6 +1282,12 @@ export const translations = {
     "validate.largeDiff": "Weight changed by {diff}kg or more from last entry ({previous}kg on {date}). Please verify.",
     "validate.outsideRange": "Weight is well outside your historical range ({min} – {max}kg).",
     "validate.title": "Entry Validation",
+    "weeklyAvg.title": "Weekly Averages",
+    "weeklyAvg.week": "{start}–",
+    "weeklyAvg.avg": "Avg {avg}kg",
+    "weeklyAvg.noData": "No data",
+    "weeklyAvg.count": "{count} entries",
+    "weeklyAvg.change": "{change}kg vs prev week",
   },
 };
 

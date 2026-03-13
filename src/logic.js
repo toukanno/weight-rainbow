@@ -2042,3 +2042,181 @@ export function calcBodyComposition(records) {
     dataPoints: sorted.length,
   };
 }
+
+/**
+ * Generates a shareable text summary of weight journey statistics.
+ */
+export function generateWeightSummary(records, profile = {}) {
+  if (records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const first = sorted[0];
+  const latest = sorted[sorted.length - 1];
+  const weights = sorted.map((r) => r.wt);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  const avg = Math.round((weights.reduce((s, w) => s + w, 0) / weights.length) * 10) / 10;
+  const totalChange = Math.round((latest.wt - first.wt) * 10) / 10;
+  const days = Math.max(1, Math.round((new Date(latest.dt) - new Date(first.dt)) / 86400000));
+
+  // BMI if height available
+  let bmiInfo = null;
+  if (profile.heightCm) {
+    const h = profile.heightCm / 100;
+    const latestBmi = Math.round((latest.wt / (h * h)) * 10) / 10;
+    const zone = latestBmi < 18.5 ? "underweight" : latestBmi < 25 ? "normal" : latestBmi < 30 ? "overweight" : "obese";
+    bmiInfo = { bmi: latestBmi, zone };
+  }
+
+  return {
+    period: { from: first.dt, to: latest.dt, days },
+    weight: { first: first.wt, latest: latest.wt, min, max, avg, totalChange },
+    records: sorted.length,
+    bmi: bmiInfo,
+  };
+}
+
+/**
+ * Returns commonly used note templates based on user's past notes.
+ * Analyzes existing records to find frequently used note texts.
+ */
+export function getFrequentNotes(records, maxResults = 5) {
+  const counts = new Map();
+  for (const r of records) {
+    if (r.note && r.note.trim()) {
+      const note = r.note.trim();
+      counts.set(note, (counts.get(note) || 0) + 1);
+    }
+  }
+  // Sort by frequency, then alphabetically
+  const sorted = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, maxResults);
+  return sorted.map(([text, count]) => ({ text, count }));
+}
+
+/**
+ * Detects potential duplicate or suspicious records.
+ * Finds same-date entries and near-identical consecutive records.
+ */
+export function detectDuplicates(records) {
+  if (records.length < 2) return { duplicates: [], suspicious: [] };
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+
+  // Same-date entries (true duplicates)
+  const dateGroups = new Map();
+  for (const r of sorted) {
+    if (!dateGroups.has(r.dt)) dateGroups.set(r.dt, []);
+    dateGroups.get(r.dt).push(r);
+  }
+  const duplicates = [];
+  for (const [date, recs] of dateGroups) {
+    if (recs.length > 1) {
+      duplicates.push({ date, count: recs.length, weights: recs.map((r) => r.wt) });
+    }
+  }
+
+  // Suspicious: identical weight on consecutive days (3+ in a row)
+  const suspicious = [];
+  let run = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].wt === sorted[i - 1].wt) {
+      run++;
+    } else {
+      if (run >= 3) {
+        suspicious.push({
+          weight: sorted[i - 1].wt,
+          from: sorted[i - run].dt,
+          to: sorted[i - 1].dt,
+          count: run,
+        });
+      }
+      run = 1;
+    }
+  }
+  if (run >= 3) {
+    suspicious.push({
+      weight: sorted[sorted.length - 1].wt,
+      from: sorted[sorted.length - run].dt,
+      to: sorted[sorted.length - 1].dt,
+      count: run,
+    });
+  }
+
+  return { duplicates, suspicious };
+}
+
+/**
+ * Validates a new weight entry against recent records.
+ * Returns warnings for suspicious changes (potential typos).
+ */
+export function validateWeightEntry(newWeight, records, threshold = 3) {
+  const warnings = [];
+  if (!Number.isFinite(newWeight) || records.length === 0) return warnings;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1];
+  const diff = Math.abs(newWeight - latest.wt);
+
+  if (diff >= threshold) {
+    warnings.push({
+      type: "largeDiff",
+      diff: Math.round(diff * 10) / 10,
+      previous: latest.wt,
+      date: latest.dt,
+    });
+  }
+
+  // Check if outside historical range (with 2kg buffer)
+  const weights = sorted.map((r) => r.wt);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  if (newWeight < min - 2 || newWeight > max + 2) {
+    warnings.push({
+      type: "outsideRange",
+      min,
+      max,
+    });
+  }
+
+  return warnings;
+}
+
+/**
+ * Calculate weekly averages for the last N weeks.
+ * Returns array of { weekStart, weekEnd, avg, count, min, max } sorted oldest→newest.
+ */
+export function calcWeeklyAverages(records, numWeeks = 8) {
+  if (records.length === 0) return [];
+  const now = new Date();
+  const todayDay = now.getDay(); // 0=Sun
+  // Start of current week (Monday)
+  const currentWeekStart = new Date(now);
+  currentWeekStart.setDate(now.getDate() - ((todayDay + 6) % 7));
+  currentWeekStart.setHours(0, 0, 0, 0);
+
+  const weeks = [];
+  for (let i = numWeeks - 1; i >= 0; i--) {
+    const start = new Date(currentWeekStart);
+    start.setDate(start.getDate() - i * 7);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    const startStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+    const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+    const inWeek = records.filter((r) => r.dt >= startStr && r.dt <= endStr);
+    if (inWeek.length === 0) {
+      weeks.push({ weekStart: startStr, weekEnd: endStr, avg: null, count: 0, min: null, max: null });
+    } else {
+      const weights = inWeek.map((r) => r.wt);
+      const sum = weights.reduce((s, w) => s + w, 0);
+      weeks.push({
+        weekStart: startStr,
+        weekEnd: endStr,
+        avg: Math.round((sum / weights.length) * 10) / 10,
+        count: weights.length,
+        min: Math.round(Math.min(...weights) * 10) / 10,
+        max: Math.round(Math.max(...weights) * 10) / 10,
+      });
+    }
+  }
+  return weeks;
+}

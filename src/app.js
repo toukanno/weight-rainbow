@@ -86,6 +86,7 @@ import {
   getFrequentNotes,
   detectDuplicates,
   validateWeightEntry,
+  calcWeeklyAverages,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -712,6 +713,7 @@ function render() {
             ${renderCalorieEstimate()}
             ${renderWeightConfidence()}
             ${renderBodyFatStats()}
+            ${renderWeeklyAverages()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -1937,6 +1939,38 @@ function renderDuplicateCheck() {
   `;
 }
 
+function renderWeeklyAverages() {
+  const weeks = calcWeeklyAverages(state.records, 8);
+  const withData = weeks.filter((w) => w.avg !== null);
+  if (withData.length < 2) return "";
+  const allAvgs = withData.map((w) => w.avg);
+  const minAvg = Math.min(...allAvgs);
+  const maxAvg = Math.max(...allAvgs);
+  const range = maxAvg - minAvg || 1;
+  const bars = weeks.map((w, i) => {
+    if (w.avg === null) {
+      return `<div class="weekly-avg-bar-wrap"><div class="weekly-avg-bar empty"></div><div class="weekly-avg-label">${t("weeklyAvg.noData")}</div></div>`;
+    }
+    const pct = Math.max(10, ((w.avg - minAvg) / range) * 80 + 10);
+    const prev = i > 0 ? weeks[i - 1] : null;
+    const change = prev && prev.avg !== null ? Math.round((w.avg - prev.avg) * 10) / 10 : null;
+    const changeClass = change !== null ? (change < 0 ? "down" : change > 0 ? "up" : "flat") : "";
+    const startLabel = w.weekStart.slice(5).replace("-", "/");
+    return `<div class="weekly-avg-bar-wrap">
+      <div class="weekly-avg-value">${w.avg}</div>
+      <div class="weekly-avg-bar ${changeClass}" style="height:${pct}%"></div>
+      <div class="weekly-avg-label">${startLabel}</div>
+      ${change !== null ? `<div class="weekly-avg-change ${changeClass}">${change > 0 ? "+" : ""}${change}</div>` : ""}
+    </div>`;
+  });
+  return `
+    <div class="weekly-avg-section">
+      <div class="helper">${t("weeklyAvg.title")}</div>
+      <div class="weekly-avg-chart">${bars.join("")}</div>
+    </div>
+  `;
+}
+
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -2513,6 +2547,7 @@ let validationBypass = false;
 function saveRecordWithWeight(weight, source) {
   const weightResult = validateWeight(String(weight));
   if (!weightResult.valid) {
+    validationBypass = false;
     setStatus(t(weightResult.error || "entry.noWeight"), "error");
     return;
   }
@@ -2539,6 +2574,7 @@ function saveRecordWithWeight(weight, source) {
 
   const bfResult = validateBodyFat(state.form.bodyFat);
   if (!bfResult.valid) {
+    validationBypass = false;
     setStatus(t(bfResult.error), "error");
     return;
   }
@@ -2587,6 +2623,7 @@ function saveRecordWithWeight(weight, source) {
     note: "",
   };
   if (!persist()) {
+    validationBypass = false;
     setStatus(t("status.storageError"), "error");
     return;
   }
