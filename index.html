@@ -519,7 +519,7 @@
         background: var(--surface);
         color: var(--muted);
         border: 1px solid var(--border);
-        transition: all 0.25s ease;
+        transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease;
       }
 
       .tab.active {
@@ -754,7 +754,7 @@
         color: var(--muted);
         font-weight: 600;
         cursor: pointer;
-        transition: all 0.15s;
+        transition: color 0.15s, border-color 0.15s, background 0.15s;
       }
       .note-tag:hover {
         color: var(--accent);
@@ -3106,7 +3106,7 @@
         font-weight: 600;
         font-size: 14px;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
       }
 
       .summary-tab.active {
