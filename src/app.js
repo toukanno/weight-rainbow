@@ -121,6 +121,7 @@ let statusKind = "ok";
 let showAllRecords = false;
 let quickWeight = 65.0;
 let rainbowVisible = false;
+let activeTab = "input"; // "input" | "graph" | "calendar" | "settings"
 let rainbowDetail = "";
 let summaryPeriod = "week";
 let chartPeriod = "all"; // "7", "30", "90", "all"
@@ -358,600 +359,449 @@ function render() {
   const existingRecord = state.records.find((r) => r.dt === selectedDate);
 
   app.innerHTML = `
-    <main class="app-shell">
-      <section class="hero">
-        <div class="hero-top">
-          <div>
-            <div class="eyebrow">${t("status.ready")}</div>
-            <h1>${t("app.title")}</h1>
-            <p class="hero-copy">${t("app.subtitle")}</p>
-            <p class="hero-copy">${t("hero.copy")}</p>
-            <div class="pill-row">
-              <span class="pill">${t("badge.local")}</span>
-              <span class="pill">${t("badge.free")}</span>
-              <span class="pill">${t("badge.safe")}</span>
-              ${state.records.length ? `<span class="pill">${t("summary.count")}: ${state.records.length}</span>` : ""}
-              ${streak > 0 ? `<span class="streak-badge${streak >= 7 ? " rainbow" : ""}" title="${t("streak.title")}">${streak >= 7 ? "🌈" : "🔥"} ${streak}${t("streak.days")} ${streak >= 7 ? t("streak.fire") : ""}</span>` : ""}
-              ${trend ? `<span class="trend-indicator ${trend}">${trend === "down" ? "📉" : trend === "up" ? "📈" : "➡️"} ${t("trend." + trend)}</span>` : ""}
-            </div>
-            ${daysSinceLast !== null ? `<div class="freshness-indicator${daysSinceLast === 0 ? " fresh" : daysSinceLast >= 3 ? " stale" : ""}">
-              ${daysSinceLast === 0 ? t("freshness.today") : daysSinceLast === 1 ? t("freshness.yesterday") : t("freshness.days").replace("{days}", daysSinceLast)}
-              ${daysSinceLast >= 1 ? ` <span class="freshness-nudge">${t("freshness.nudge")}</span>` : ""}
-            </div>` : ""}
-            ${longestStreak >= 3 && longestStreak > streak ? `<div class="helper hint-small">${t("streak.longest").replace("{days}", longestStreak)}</div>` : ""}
-            ${motivation ? `<p class="motivation-msg">${motivation}</p>` : ""}
-            ${achievements.length ? `<div class="achievement-row">${achievements.map((a) => `<span class="achievement-badge ${a.tier}" title="${t("achievement." + a.id)}" aria-label="${escapeAttr(t("achievement." + a.id))}">${a.icon}</span>`).join("")}</div>` : ""}
+    <main class="app-shell tab-layout">
+      <!-- Tab Content -->
+      ${activeTab === "input" ? `
+      <div class="tab-page tab-input">
+        <!-- Mini status header -->
+        <div class="input-header">
+          <h1 class="input-title">${t("app.title")}</h1>
+          ${stats ? `<div class="input-current-weight">${formatWeight(stats.latestWeight)}</div>` : ""}
+          ${dailyDiff ? `<div class="input-diff ${dailyDiff.diff > 0 ? "positive" : dailyDiff.diff < 0 ? "negative" : "zero"}">${dailyDiff.diff > 0 ? "+" : ""}${dailyDiff.diff.toFixed(1)} kg</div>` : ""}
+          <div class="input-meta-row">
+            ${streak > 0 ? `<span class="streak-badge-sm${streak >= 7 ? " rainbow" : ""}">${streak >= 7 ? "🌈" : "🔥"} ${streak}${t("streak.days")}</span>` : ""}
+            ${trend ? `<span class="trend-sm ${trend}">${trend === "down" ? "📉" : trend === "up" ? "📈" : "➡️"}</span>` : ""}
+            ${daysSinceLast !== null && daysSinceLast >= 1 ? `<span class="freshness-sm">${daysSinceLast === 1 ? t("freshness.yesterday") : t("freshness.days").replace("{days}", daysSinceLast)}</span>` : ""}
           </div>
-          <div class="hero-card">
-            <div class="eyebrow">${t("bmi.title")}</div>
-            <div class="bmi-score">${stats?.latestBMI ? stats.latestBMI.toFixed(1) : "--"}</div>
-            <p class="bmi-label">${bmiStatus}</p>
-            <p class="bmi-label">${t("hero.disclaimer")}</p>
-          </div>
-        </div>
-        <div class="hero-bottom">
-          ${renderMetric(t("chart.latest"), stats ? formatWeight(stats.latestWeight) : "--")}
-          ${renderMetric(t("chart.change"), stats ? signedWeight(stats.change) : "--")}
-          ${renderMetric(t("chart.avg"), stats ? formatWeight(stats.avgWeight) : "--")}
-          ${renderMetric(t("chart.bmi"), stats?.latestBMI ? stats.latestBMI.toFixed(1) : "--")}
-          ${smoothedWeight ? renderMetric(t("smoothed.value"), `${formatWeight(smoothedWeight.smoothed)} <span class="${smoothedWeight.trend < 0 ? "negative" : smoothedWeight.trend > 0 ? "positive" : ""}" style="font-size:0.7em">${smoothedWeight.trend > 0 ? "+" : ""}${smoothedWeight.trend.toFixed(1)}</span>`) : ""}
+          ${motivation ? `<p class="motivation-sm">${motivation}</p>` : ""}
         </div>
 
-        <!-- Daily Diff & Goal Progress -->
-        <div class="hero-bottom hero-sub-2col">
-          <div class="diff-box">
-            <div class="label">${t("diff.title")}</div>
-            ${dailyDiff
-              ? `<div class="diff-value ${dailyDiff.diff > 0 ? "positive" : dailyDiff.diff < 0 ? "negative" : "zero"}">
-                  ${dailyDiff.diff > 0 ? "+" : ""}${dailyDiff.diff.toFixed(1)} kg
-                </div>
-                <div class="diff-detail">
-                  ${t("diff.yesterday")}: ${dailyDiff.yesterday.toFixed(1)}kg → ${t("diff.today")}: ${dailyDiff.today.toFixed(1)}kg
-                  (${dailyDiff.diff > 0 ? t("diff.up") : dailyDiff.diff < 0 ? t("diff.down") : t("diff.same")})
-                </div>`
-              : `<div class="diff-value zero">--</div>
-                <div class="diff-detail">${t("diff.noData")}</div>`}
+        <!-- Entry section -->
+        <section class="panel">
+          <div class="tab-row" role="tablist" aria-label="${t("section.entry")}">
+            ${renderTab("manual", "✏️ " + t("entry.manual"))}
+            ${renderTab("voice", "🎤 " + t("entry.voice"))}
+            ${renderTab("photo", "📷 " + t("entry.photo"))}
           </div>
-          <div class="goal-box">
-            <div class="label">${t("goal.title")}: ${Number.isFinite(goalWeight) ? formatWeight(goalWeight) : t("goal.notSet")}</div>
-            ${goalProgress
-              ? `<div class="progress-percent">${goalProgress.percent}%</div>
-                <div class="progress-bar-track" role="progressbar" aria-valuenow="${goalProgress.percent}" aria-valuemin="0" aria-valuemax="100" aria-label="${t("goal.title")}">
-                  <div class="progress-bar-fill" style="width: ${goalProgress.percent}%"></div>
-                  ${goalMilestones ? goalMilestones.filter((m) => m.pct < 100).map((m) => `<div class="goal-milestone-marker${m.reached ? " reached" : ""}" style="left:${m.pct}%" title="${t("goal.milestone").replace("{pct}", m.pct)}"></div>`).join("") : ""}
-                </div>
-                <div class="progress-text">
-                  <span>${t("goal.progress")}</span>
-                  <span>${goalProgress.remaining <= 0 ? t("goal.achieved") : `${t("goal.remaining")}: ${goalProgress.remaining.toFixed(1)}kg`}</span>
-                </div>
-                ${goalMilestones ? `<div class="goal-milestones">${goalMilestones.map((m) => `<span class="goal-ms${m.reached ? " reached" : ""}">${m.reached ? "✅" : "⬜"} ${t("goal.milestone").replace("{pct}", m.pct)} <span class="hint-small">(${m.targetWeight}kg)</span></span>`).join("")}</div>` : ""}
-                ${goalPrediction ? `<div class="prediction-text">${t("goal.prediction")}: ${
-                  goalPrediction.achieved ? t("goal.predictionAchieved")
-                  : goalPrediction.insufficient ? t("goal.predictionInsufficient")
-                  : goalPrediction.noTrend ? t("goal.predictionNoTrend")
-                  : `${t("goal.predictionDays").replace("{days}", goalPrediction.days)} (${goalPrediction.predictedDate})`
-                }</div>` : ""}`
-              : `<div class="diff-value zero">--</div>
-                <div class="diff-detail">${t("goal.notSet")}</div>`}
-          </div>
-        </div>
-        ${weightComp ? `
-        <div class="hero-bottom hero-sub-3col">
-          ${["week", "month", "quarter"].map((key) => {
-            const c = weightComp[key];
-            if (!c) return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value zero compact">--</div></div>`;
-            const cls = c.diff > 0 ? "positive" : c.diff < 0 ? "negative" : "zero";
-            return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value ${cls} compact">${c.diff > 0 ? "+" : ""}${c.diff.toFixed(1)}kg</div></div>`;
-          }).join("")}
-        </div>` : ""}
-      </section>
 
-      <div class="content-grid">
-        <div class="column">
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("section.profile")}</h2>
-                <p>${t("profile.helper")}</p>
+          <div class="entry-layout">
+            <div class="field weight-field-main">
+              <label>${t("entry.weight")}</label>
+              <div class="weight-picker">
+                <select id="pickerInt" name="pickerInt" aria-label="${t("picker.integer")}">
+                  ${renderPickerIntOptions(state.form.pickerInt)}
+                </select>
+                <span class="picker-dot" aria-hidden="true">.</span>
+                <select id="pickerDec" name="pickerDec" aria-label="${t("picker.decimal")}">
+                  ${renderPickerDecOptions(state.form.pickerDec)}
+                </select>
+                <span class="picker-unit">${t("picker.kg")}</span>
               </div>
-              <button type="button" class="btn secondary" data-action="save-profile">${t("profile.save")}</button>
             </div>
             <div class="input-grid">
               <div class="field">
-                <label for="name">${t("profile.name")}</label>
-                <input id="name" name="name" maxlength="40" value="${escapeAttr(state.profile.name)}" />
-              </div>
-              <div class="field">
-                <label for="gender">${t("profile.gender")}</label>
-                <select id="gender" name="gender">
-                  ${renderOption("female", state.profile.gender, t("gender.female"))}
-                  ${renderOption("male", state.profile.gender, t("gender.male"))}
-                  ${renderOption("nonbinary", state.profile.gender, t("gender.nonbinary"))}
-                  ${renderOption("unspecified", state.profile.gender, t("gender.unspecified"))}
-                </select>
-              </div>
-              <div class="field">
-                <label for="heightCm">${t("profile.height")}</label>
-                <input id="heightCm" name="heightCm" inputmode="decimal" value="${escapeAttr(state.profile.heightCm)}" />
-              </div>
-              <div class="field">
-                <label for="age">${t("profile.age")}</label>
-                <input id="age" name="age" inputmode="numeric" value="${escapeAttr(state.profile.age)}" />
-              </div>
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("section.entry")}</h2>
-                <p>${t("review.permissions")}</p>
-              </div>
-              <div class="eyebrow">${t(`entry.source.${activeEntryMode}`)}</div>
-            </div>
-
-            <div class="tab-row" role="tablist" aria-label="${t("section.entry")}">
-              ${renderTab("manual", "✏️ " + t("entry.manual"))}
-              ${renderTab("voice", "🎤 " + t("entry.voice"))}
-              ${renderTab("photo", "📷 " + t("entry.photo"))}
-            </div>
-
-            <div class="entry-layout">
-              <div class="input-grid">
-                <div class="field">
-                  <label>${t("entry.weight")}</label>
-                  <div class="weight-picker">
-                    <select id="pickerInt" name="pickerInt" aria-label="${t("picker.integer")}">
-                      ${renderPickerIntOptions(state.form.pickerInt)}
-                    </select>
-                    <span class="picker-dot" aria-hidden="true">.</span>
-                    <select id="pickerDec" name="pickerDec" aria-label="${t("picker.decimal")}">
-                      ${renderPickerDecOptions(state.form.pickerDec)}
-                    </select>
-                    <span class="picker-unit">${t("picker.kg")}</span>
-                  </div>
-                </div>
-                <div class="field">
-                  <label for="recordDate">${t("entry.date")}</label>
-                  <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" max="${todayLocal()}" />
-                  <div class="date-shortcuts">
-                    <button type="button" class="date-shortcut" data-date-shortcut="today">${t("diff.today")}</button>
-                    <button type="button" class="date-shortcut" data-date-shortcut="yesterday">${t("diff.yesterday")}</button>
-                  </div>
-                </div>
-                <div class="field">
-                  <label for="bodyFat">${t("bodyFat.label")}</label>
-                  <input id="bodyFat" name="bodyFat" inputmode="decimal" autocomplete="off" placeholder="${escapeAttr(t("bodyFat.hint"))}" value="${escapeAttr(state.form.bodyFat)}" />
+                <label for="recordDate">${t("entry.date")}</label>
+                <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" max="${todayLocal()}" />
+                <div class="date-shortcuts">
+                  <button type="button" class="date-shortcut" data-date-shortcut="today">${t("diff.today")}</button>
+                  <button type="button" class="date-shortcut" data-date-shortcut="yesterday">${t("diff.yesterday")}</button>
                 </div>
               </div>
               <div class="field">
-                <label for="entryNote">${t("entry.note")}</label>
-                <input id="entryNote" name="note" type="text" maxlength="100" placeholder="${escapeAttr(t("entry.noteHint"))}" value="${escapeAttr(state.form.note)}" />
-                ${(state.form.note || "").length > 50 ? `<div class="hint-small" style="text-align:right;">${(state.form.note || "").length}/100</div>` : ""}
-                <div class="note-tags-row" role="group" aria-label="${t("note.tags")}">
-                  ${NOTE_TAGS.map((tag) => {
-                    const active = (state.form.note || "").includes(`#${tag}`);
-                    return `<button type="button" class="note-tag${active ? " active" : ""}" data-note-tag="${tag}">${t("note.tag." + tag)}</button>`;
-                  }).join("")}
-                </div>
+                <label for="bodyFat">${t("bodyFat.label")}</label>
+                <input id="bodyFat" name="bodyFat" inputmode="decimal" autocomplete="off" placeholder="${escapeAttr(t("bodyFat.hint"))}" value="${escapeAttr(state.form.bodyFat)}" />
               </div>
-
-              <!-- Quick Record Section -->
-              <div class="quick-section">
-                <h3>${t("quick.title")}</h3>
-                <p class="helper">${t("quick.hint")}</p>
-                <div class="quick-display" id="quickDisplay">${quickWeight.toFixed(1)} kg</div>
-                <div class="quick-buttons" role="group" aria-label="${t("quick.title")}">
-                  <button type="button" data-quick-adj="-1.0" aria-label="-1.0 kg">-1.0</button>
-                  <button type="button" data-quick-adj="-0.5" aria-label="-0.5 kg">-0.5</button>
-                  <button type="button" data-quick-adj="-0.1" aria-label="-0.1 kg">-0.1</button>
-                  <button type="button" data-quick-adj="+0.1" aria-label="+0.1 kg">+0.1</button>
-                  <button type="button" data-quick-adj="+0.5" aria-label="+0.5 kg">+0.5</button>
-                  <button type="button" data-quick-adj="+1.0" aria-label="+1.0 kg">+1.0</button>
-                </div>
-                <div class="quick-buttons" style="margin-top:10px;">
-                  <button type="button" class="quick-save" data-action="quick-save">${t("quick.save")}</button>
-                </div>
-              </div>
-
-              <div class="voice-box ${activeEntryMode === "voice" ? "" : "hidden"}">
-                <h3>${t("entry.voice")}</h3>
-                <p>${supportsSpeech ? t("entry.voiceHint") : t("entry.voiceUnsupported")}</p>
-                <div class="row" style="margin-top: 12px;">
-                  <button type="button" class="btn secondary" data-action="toggle-voice" ${supportsSpeech ? "" : "disabled"}>
-                    ${voiceActive ? t("entry.voiceStop") : t("entry.voiceStart")}
-                  </button>
-                  ${voiceActive ? `<span class="voice-active-indicator">${t("status.listening")}</span>` : ""}
-                </div>
-                <div class="voice-transcript">${voiceTranscript || t("entry.lastVoice")}</div>
-              </div>
-
-              <div class="photo-box ${activeEntryMode === "photo" ? "" : "hidden"}">
-                <h3>${t("entry.photo")}</h3>
-                <p>${t("entry.photoHint")}</p>
-                <div class="row" style="margin-top: 12px;">
-                  ${isNativePlatform
-                    ? `<button type="button" class="btn secondary" data-action="pick-native-photo">${t("entry.photoSelect")}</button>`
-                    : `<label class="btn secondary" for="photoInput">${t("entry.photoSelect")}</label>
-                  <input id="photoInput" type="file" accept="image/*" capture="environment" class="hidden" />`}
-                </div>
-                ${imagePreviewUrl ? `
-                  <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" data-action="zoom-photo" />
-                  <p class="helper hint-small" style="margin-top: 4px; text-align: center;">${t("photo.zoomHint")}</p>
-                  ${!supportsTextDetection && !detectedWeights.length ? `<p class="helper" style="margin-top: 8px; text-align: center;">${t("photo.manualHint")}</p>` : ""}
-                ` : ""}
-                ${detectedWeights.length ? `<div style="margin-top: 12px;"><div class="helper">${t("entry.photoDetected")}</div><div class="chip-row" style="margin-top: 8px;">${detectedWeights.map((weight) => `<button type="button" class="chip" data-pick-weight="${weight}">${formatWeight(weight)}</button>`).join("")}</div></div>` : ""}
-                ${!supportsTextDetection && !imagePreviewUrl ? `<span class="helper">${t("entry.photoFallback")}</span>` : ""}
-              </div>
-
-              ${previewDiff !== null ? `<div class="entry-preview">
-                <span class="entry-preview-diff ${previewDiff < 0 ? "negative" : previewDiff > 0 ? "positive" : "zero"}">${previewDiff > 0 ? "+" : ""}${previewDiff.toFixed(1)}kg ${t("entry.preview.vsLast")}</span>
-                ${previewLarge ? `<span class="entry-preview-warn">${t("entry.preview.large")}</span>` : ""}
-              </div>` : ""}
-              ${existingRecord ? `<div class="duplicate-warn">
-                <span>${t("entry.duplicate.warn")} ${existingRecord.wt.toFixed(1)}kg</span>
-                <span class="hint-small">${t("entry.duplicate.overwrite")}</span>
-              </div>` : ""}
-              <div class="row">
-                <button type="button" class="btn" data-action="save-record">${t("entry.save")}</button>
-                <div>
-                  <div class="helper">${state.profile.heightCm ? `${t("entry.bmiReady")}: ${formatBMI(currentBMI)}` : t("bmi.unknown")}</div>
-                  <div class="helper hint-small">${t("record.dailyLimit")}</div>
-                  <div class="helper hint-small desktop-only">⌘+Enter</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="status ${statusKind === "error" ? "warn" : ""}" role="status" aria-live="polite">
-              ${escapeAttr(statusMessage)}
-              ${lastUndoState ? `<button type="button" class="undo-btn" data-action="undo">${t("undo.button")}</button>` : ""}
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("section.chart")}</h2>
-                <p>${stats?.latestDate ?? t("chart.empty")}</p>
-              </div>
-              ${state.records.length ? `<button type="button" class="btn secondary" data-action="share-chart">${t("share.chart")}</button>` : ""}
-            </div>
-            <div class="summary-tabs" style="margin-bottom:10px;" role="tablist" aria-label="${t("section.chart")}">
-              <button type="button" class="summary-tab ${chartPeriod === "7" ? "active" : ""}" data-chart-period="7" role="tab" aria-selected="${chartPeriod === "7"}">${t("chart.period.7")}</button>
-              <button type="button" class="summary-tab ${chartPeriod === "30" ? "active" : ""}" data-chart-period="30" role="tab" aria-selected="${chartPeriod === "30"}">${t("chart.period.30")}</button>
-              <button type="button" class="summary-tab ${chartPeriod === "90" ? "active" : ""}" data-chart-period="90" role="tab" aria-selected="${chartPeriod === "90"}">${t("chart.period.90")}</button>
-              <button type="button" class="summary-tab ${chartPeriod === "all" ? "active" : ""}" data-chart-period="all" role="tab" aria-selected="${chartPeriod === "all"}">${t("chart.period.all")}</button>
-            </div>
-            <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}${stats ? ` — ${stats.latestWeight.toFixed(1)}kg, ${t("chart.change")}: ${stats.change > 0 ? "+" : ""}${stats.change.toFixed(1)}kg, ${state.records.length} ${t("chart.records")}` : ""}"></canvas>
-            <div id="chartTooltip" class="chart-tooltip" role="tooltip" aria-live="polite" style="display:none;"></div>
-            ${state.records.length >= 3 ? `<div class="chart-legend">
-              <span class="chart-legend-item"><span class="chart-legend-line gradient"></span>${t("chart.legend.weight")}</span>
-              <span class="chart-legend-item"><span class="chart-legend-line dashed accent3"></span>${t("chart.legend.movingAvg")}</span>
-              ${Number.isFinite(goalWeight) ? `<span class="chart-legend-item"><span class="chart-legend-line dashed ok"></span>${t("chart.legend.goal")}</span>` : ""}
-              <span class="chart-legend-item"><span class="chart-legend-line dashed accent2"></span>${t("chart.legend.forecast")}</span>
-            </div>` : ""}
-            ${state.profile.heightCm ? `<div class="hint-small" style="margin-top:4px;">${t("chart.bmiZones")}</div>` : ""}
-            <div class="stat-grid">
-              ${renderStat(t("chart.latest"), stats ? formatWeight(stats.latestWeight) : "--")}
-              ${renderStat(t("chart.min"), stats ? formatWeight(stats.minWeight) : "--")}
-              ${renderStat(t("chart.max"), stats ? formatWeight(stats.maxWeight) : "--")}
-              ${renderStat(t("chart.avg"), stats ? formatWeight(stats.avgWeight) : "--")}
-            </div>
-          </section>
-
-          <!-- Summary Panel -->
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("summary.title")}</h2>
-              </div>
-            </div>
-            <div class="summary-tabs" role="tablist" aria-label="${t("summary.title")}">
-              <button type="button" class="summary-tab ${summaryPeriod === "week" ? "active" : ""}" data-summary="week" role="tab" aria-selected="${summaryPeriod === "week"}">${t("summary.week")}</button>
-              <button type="button" class="summary-tab ${summaryPeriod === "month" ? "active" : ""}" data-summary="month" role="tab" aria-selected="${summaryPeriod === "month"}">${t("summary.month")}</button>
-            </div>
-            ${periodSummary
-              ? `<div class="stat-grid">
-                  ${renderStat(t("summary.avg"), formatWeight(periodSummary.avg))}
-                  ${renderStat(t("summary.min"), formatWeight(periodSummary.min))}
-                  ${renderStat(t("summary.max"), formatWeight(periodSummary.max))}
-                  ${renderStat(t("summary.change"), signedWeight(periodSummary.change))}
-                </div>
-                <div class="helper" style="margin-top: 10px;">${t("summary.count")}: ${periodSummary.count}</div>`
-              : `<div class="helper">${t("summary.noData")}</div>`}
-            <div class="rate-box">
-              <div class="label">${t("rate.title")}</div>
-              ${weeklyRate
-                ? `<div class="rate-value ${weeklyRate.weeklyRate < 0 ? "loss" : weeklyRate.weeklyRate > 0 ? "gain" : "neutral"}">${weeklyRate.weeklyRate > 0 ? "+" : ""}${t("rate.value").replace("{rate}", weeklyRate.weeklyRate.toFixed(2))}</div>
-                  <div class="helper">${t("rate.period").replace("{days}", weeklyRate.totalDays).replace("{change}", (weeklyRate.totalChange > 0 ? "+" : "") + weeklyRate.totalChange.toFixed(1))}</div>`
-                : `<div class="helper">${t("rate.insufficient")}</div>`}
-            </div>
-            ${insight ? `<div class="insight-box">
-              <div class="helper">${t("insight.bestDay").replace("{day}", t("day." + insight.bestDay))}</div>
-              ${insight.weekComparison !== null ? `<div class="helper">${
-                insight.weekComparison > 0.05 ? t("insight.weekUp").replace("{diff}", insight.weekComparison.toFixed(1))
-                : insight.weekComparison < -0.05 ? t("insight.weekDown").replace("{diff}", insight.weekComparison.toFixed(1))
-                : t("insight.weekSame")
-              }</div>` : ""}
-            </div>` : ""}
-            ${renderMomentumScore()}
-            ${renderStreakRewards()}
-            ${renderNextMilestones()}
-            ${renderDayOfWeekAvg()}
-            ${renderStability()}
-            ${renderBMIDistribution()}
-            ${renderWeightVelocity()}
-            ${renderCalorieEstimate()}
-            ${renderBodyFatStats()}
-            ${state.records.length >= 3 ? `
-            <div class="analytics-toggle-section">
-              <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
-                ${showAdvancedAnalytics ? t("analytics.showLess") : t("analytics.showMore")}
-              </button>
-              ${showAdvancedAnalytics ? `
-              <div class="advanced-analytics">
-                ${renderWeekdayWeekend()}
-                ${renderConsistencyStreak()}
-                ${renderWeightPercentile()}
-                ${renderMovingAverages()}
-                ${renderWeightRange()}
-                ${renderTagImpact()}
-                ${renderBestPeriod()}
-                ${renderWeeklyFrequency()}
-                ${renderWeightVariance()}
-                ${renderWeightPlateau()}
-                ${renderRecordGaps()}
-                ${renderSeasonality()}
-                ${renderWeightDistribution()}
-                ${renderDayOfWeekChange()}
-                ${renderPersonalRecords()}
-                ${renderWeightRegression()}
-                ${renderBMIHistory()}
-                ${renderWeightHeatmap()}
-              </div>
-              ` : ""}
-            </div>
-            ` : ""}
-          </section>
-
-          <!-- Monthly Stats Panel -->
-          ${renderMonthlyStats()}
-
-          <!-- Calendar Panel -->
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("calendar.title")}</h2>
-                <p>${t("calendar.hint")}</p>
-              </div>
-            </div>
-            ${renderCalendar()}
-          </section>
-
-          <!-- Records List Panel -->
-          <section class="panel records-panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("section.records")}</h2>
-                <p>${state.records.length} ${t("chart.records")}</p>
-              </div>
-              ${state.records.length > 5 ? `<button type="button" class="btn secondary" data-action="toggle-records">${showAllRecords ? t("records.showLess") : t("records.showAll")}</button>` : ""}
-            </div>
-            ${state.records.length > 3 ? `
-            <div class="record-search">
-              <input id="recordSearch" type="search" placeholder="${escapeAttr(t("records.search"))}" value="${escapeAttr(recordSearchQuery)}" autocomplete="off" aria-label="${t("records.search")}" />
-              ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : `<span class="helper hint-small desktop-only">⌘K</span>`}
-            </div>
-            <div class="record-date-range">
-              <div class="helper hint-small">${t("records.dateRange")}</div>
-              <div class="date-range-fields">
-                <label>${t("records.from")}<input id="dateRangeFrom" type="date" value="${escapeAttr(recordDateFrom)}" max="${todayLocal()}" /></label>
-                <label>${t("records.to")}<input id="dateRangeTo" type="date" value="${escapeAttr(recordDateTo)}" max="${todayLocal()}" /></label>
-                ${recordDateFrom || recordDateTo ? `<button type="button" class="btn ghost" data-action="clear-date-range">${t("records.clearRange")}</button>` : ""}
-              </div>
-            </div>` : ""}
-            ${state.records.length ? `<div class="export-row"><button type="button" class="btn ghost" data-action="export-csv">📥 ${t("export.csv")}</button><button type="button" class="btn ghost" data-action="import-csv">📤 ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>` : `<div class="export-row"><button type="button" class="btn ghost" data-action="import-csv">📤 ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>`}
-            <div class="record-list">
-              ${state.records.length ? renderRecordList() : `<div class="empty-state">
-                <div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">📊</div>
-                <div class="helper">${t("records.empty")}</div>
-                <div class="empty-state-actions">
-                  <button type="button" class="btn secondary" data-mode="manual" aria-label="${t("entry.manual")}">✏️ ${t("entry.manual")}</button>
-                  <button type="button" class="btn secondary" data-mode="voice" aria-label="${t("entry.voice")}">🎤 ${t("entry.voice")}</button>
-                  <button type="button" class="btn secondary" data-mode="photo" aria-label="${t("entry.photo")}">📷 ${t("entry.photo")}</button>
-                </div>
-              </div>`}
-            </div>
-            ${renderSourceBreakdown()}
-            ${renderRecordingTime()}
-            ${renderDataHealth()}
-            <div class="export-grid">
-              <button type="button" class="btn secondary" data-action="export-excel">📊 ${t("export.excel")}</button>
-              <button type="button" class="btn secondary" data-action="export-csv">📄 ${t("export.csv")}</button>
-              <button type="button" class="btn secondary" data-action="export-text">📝 ${t("export.text")}</button>
-            </div>
-          </section>
-        </div>
-
-        <div class="column">
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("section.settings")}</h2>
-                <p>v${APP_VERSION}</p>
-              </div>
-              <button type="button" class="btn secondary" data-action="save-settings">${t("settings.save")}</button>
-            </div>
-            <div class="settings-grid">
-              <div class="field">
-                <label for="language">${t("settings.language")}</label>
-                <select id="language" name="language">
-                  ${renderOption("ja", state.settings.language, t("lang.ja"))}
-                  ${renderOption("en", state.settings.language, t("lang.en"))}
-                </select>
-              </div>
-              <div class="field span-2">
-                <label>${t("settings.theme")}</label>
-                <div class="theme-grid" role="radiogroup" aria-label="${t("settings.theme")}">
-                  ${THEME_LIST.map((theme) => `
-                    <button type="button" class="theme-swatch ${state.settings.theme === theme.id ? "active" : ""}" data-theme-pick="${theme.id}" role="radio" aria-checked="${state.settings.theme === theme.id}" aria-label="${t("settings.theme." + theme.id)}">
-                      <span class="swatch-color" style="background: ${theme.color};"></span>
-                      <span class="swatch-label">${t("settings.theme." + theme.id)}</span>
-                    </button>
-                  `).join("")}
-                </div>
-              </div>
-              <div class="field">
-                <label for="chartStyle">${t("settings.chartStyle")}</label>
-                <select id="chartStyle" name="chartStyle">
-                  ${renderOption("detailed", state.settings.chartStyle, t("settings.chartStyle.detailed"))}
-                  ${renderOption("compact", state.settings.chartStyle, t("settings.chartStyle.compact"))}
-                </select>
-              </div>
-              <div class="field">
-                <label for="adPreviewEnabled">${t("settings.adPreview")}</label>
-                <select id="adPreviewEnabled" name="adPreviewEnabled">
-                  ${renderOption("true", String(state.settings.adPreviewEnabled), t("settings.on"))}
-                  ${renderOption("false", String(state.settings.adPreviewEnabled), t("settings.off"))}
-                </select>
-              </div>
-              <div class="field">
-                <label for="autoTheme">${t("settings.autoTheme")}</label>
-                <select id="autoTheme" name="autoTheme">
-                  ${renderOption("true", String(state.settings.autoTheme), t("settings.autoTheme.on"))}
-                  ${renderOption("false", String(state.settings.autoTheme), t("settings.autoTheme.off"))}
-                </select>
-                <div class="helper hint-small">${t("settings.autoTheme.hint")}</div>
-              </div>
-              <div class="field">
-                <label>${t("settings.platforms")}</label>
-                <input value="${t("settings.platformsValue")}" readonly />
-              </div>
-              <div class="field">
-                <label>${t("settings.storage")}</label>
-                <input value="${t("settings.storageValue")}" readonly />
-              </div>
-              <div class="field span-2">
-                <label>${t("settings.version")}</label>
-                <input value="${APP_VERSION}" readonly />
-              </div>
-            </div>
-            <div class="data-actions">
-              <button type="button" class="btn secondary" data-action="export-data">💾 ${t("settings.export")}</button>
-              <label class="btn secondary" for="importInput">📥 ${t("import.button")}</label>
-              <input id="importInput" type="file" accept=".json" class="hidden" />
-              <button type="button" class="btn ghost" data-action="reset-data">🗑️ ${t("settings.reset")}</button>
-            </div>
-          </section>
-
-          <!-- Google Drive Sync -->
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("google.title")}</h2>
-                <p>${t("google.hint")}</p>
-              </div>
-            </div>
-            <div class="google-actions">
-              <button type="button" class="google-btn" data-action="google-backup" ${isGoogleReady() ? "" : "disabled"}>
-                <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                ${t("google.backup")}
-              </button>
-              <button type="button" class="google-btn" data-action="google-restore" ${isGoogleReady() ? "" : "disabled"}>
-                <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                ${t("google.restore")}
-              </button>
-            </div>
-          </section>
-
-          <!-- Goal Weight -->
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("goal.title")}</h2>
-              </div>
-              <button type="button" class="btn secondary" data-action="save-goal">${t("goal.save")}</button>
             </div>
             <div class="field">
-              <label for="goalWeight">${t("goal.set")}</label>
-              <input id="goalWeight" name="goalWeight" inputmode="decimal" autocomplete="off" value="${escapeAttr(state.settings.goalWeight ?? "")}" />
+              <label for="entryNote">${t("entry.note")}</label>
+              <input id="entryNote" name="note" type="text" maxlength="100" placeholder="${escapeAttr(t("entry.noteHint"))}" value="${escapeAttr(state.form.note)}" />
+              <div class="note-tags-row" role="group" aria-label="${t("note.tags")}">
+                ${NOTE_TAGS.map((tag) => {
+                  const active = (state.form.note || "").includes(`#${tag}`);
+                  return `<button type="button" class="note-tag${active ? " active" : ""}" data-note-tag="${tag}">${t("note.tag." + tag)}</button>`;
+                }).join("")}
+              </div>
             </div>
-          </section>
 
-          <!-- Reminder -->
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("reminder.title")}</h2>
+            <div class="voice-box ${activeEntryMode === "voice" ? "" : "hidden"}">
+              <h3>${t("entry.voice")}</h3>
+              <p>${supportsSpeech ? t("entry.voiceHint") : t("entry.voiceUnsupported")}</p>
+              <div class="row" style="margin-top: 12px;">
+                <button type="button" class="btn secondary" data-action="toggle-voice" ${supportsSpeech ? "" : "disabled"}>
+                  ${voiceActive ? t("entry.voiceStop") : t("entry.voiceStart")}
+                </button>
+                ${voiceActive ? `<span class="voice-active-indicator">${t("status.listening")}</span>` : ""}
               </div>
+              <div class="voice-transcript">${voiceTranscript || t("entry.lastVoice")}</div>
             </div>
-            <div class="reminder-grid">
-              <div class="field">
-                <label for="reminderEnabled">${t("reminder.enable")}</label>
-                <select id="reminderEnabled" name="reminderEnabled">
-                  ${renderOption("true", String(state.settings.reminderEnabled), t("reminder.on"))}
-                  ${renderOption("false", String(state.settings.reminderEnabled), t("reminder.off"))}
-                </select>
-              </div>
-              <div class="field">
-                <label for="reminderTime">${t("reminder.time")}</label>
-                <input id="reminderTime" name="reminderTime" type="time" value="${escapeAttr(state.settings.reminderTime || "21:00")}" />
-              </div>
-            </div>
-            <div style="margin-top: 12px;">
-              <button type="button" class="btn secondary" data-action="save-reminder">${t("reminder.save")}</button>
-            </div>
-          </section>
 
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("section.review")}</h2>
-                <p>${t("review.note")}</p>
+            <div class="photo-box ${activeEntryMode === "photo" ? "" : "hidden"}">
+              <h3>${t("entry.photo")}</h3>
+              <p>${t("entry.photoHint")}</p>
+              <div class="row" style="margin-top: 12px;">
+                ${isNativePlatform
+                  ? `<button type="button" class="btn secondary" data-action="pick-native-photo">${t("entry.photoSelect")}</button>`
+                  : `<label class="btn secondary" for="photoInput">${t("entry.photoSelect")}</label>
+                <input id="photoInput" type="file" accept="image/*" capture="environment" class="hidden" />`}
               </div>
+              ${imagePreviewUrl ? `
+                <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" data-action="zoom-photo" />
+                <p class="helper hint-small" style="margin-top: 4px; text-align: center;">${t("photo.zoomHint")}</p>
+                ${!supportsTextDetection && !detectedWeights.length ? `<p class="helper" style="margin-top: 8px; text-align: center;">${t("photo.manualHint")}</p>` : ""}
+              ` : ""}
+              ${detectedWeights.length ? `<div style="margin-top: 12px;"><div class="helper">${t("entry.photoDetected")}</div><div class="chip-row" style="margin-top: 8px;">${detectedWeights.map((weight) => `<button type="button" class="chip" data-pick-weight="${weight}">${formatWeight(weight)}</button>`).join("")}</div></div>` : ""}
+              ${!supportsTextDetection && !imagePreviewUrl ? `<span class="helper">${t("entry.photoFallback")}</span>` : ""}
             </div>
-            <div class="privacy-box">
-              <h3>${t("privacy.title")}</h3>
-              <p>${t("privacy.body")}</p>
-            </div>
-            <div class="note-grid" style="margin-top: 12px;">
-              <article class="review-card">
-                <h3>${t("review.permissionsTitle")}</h3>
-                <p>${t("review.permissions")}</p>
-              </article>
-              <article class="review-card">
-                <h3>${t("review.medicalTitle")}</h3>
-                <p>${t("review.medical")}</p>
-              </article>
-              <article class="review-card">
-                <h3>${t("review.adsTitle")}</h3>
-                <p>${t("review.ads")}</p>
-              </article>
-            </div>
-            <div class="review-card" style="margin-top: 12px;">
-              <h3>${t("review.checklistTitle")}</h3>
-              <ul class="checklist">
-                <li>${t("review.checklist.permissions")}</li>
-                <li>${t("review.checklist.privacy")}</li>
-                <li>${t("review.checklist.medical")}</li>
-                <li>${t("review.checklist.ads")}</li>
-              </ul>
-            </div>
-          </section>
 
-          ${state.settings.adPreviewEnabled ? `
-            <section class="panel">
-              <div class="ad-slot">
-                <div class="ad-badge">AD</div>
-                <div>
-                  <h3>${t("settings.adPreview")}</h3>
-                  <p class="helper">${t("review.ads")}</p>
-                </div>
+            ${previewDiff !== null ? `<div class="entry-preview">
+              <span class="entry-preview-diff ${previewDiff < 0 ? "negative" : previewDiff > 0 ? "positive" : "zero"}">${previewDiff > 0 ? "+" : ""}${previewDiff.toFixed(1)}kg ${t("entry.preview.vsLast")}</span>
+              ${previewLarge ? `<span class="entry-preview-warn">${t("entry.preview.large")}</span>` : ""}
+            </div>` : ""}
+            ${existingRecord ? `<div class="duplicate-warn">
+              <span>${t("entry.duplicate.warn")} ${existingRecord.wt.toFixed(1)}kg</span>
+              <span class="hint-small">${t("entry.duplicate.overwrite")}</span>
+            </div>` : ""}
+            <button type="button" class="btn save-btn-main" data-action="save-record">${t("entry.save")}</button>
+            <div class="save-meta">
+              <div class="helper">${state.profile.heightCm ? `${t("entry.bmiReady")}: ${formatBMI(currentBMI)}` : ""}</div>
+            </div>
+
+            <!-- Quick Record Section -->
+            <div class="quick-section">
+              <h3>${t("quick.title")}</h3>
+              <p class="helper">${t("quick.hint")}</p>
+              <div class="quick-display" id="quickDisplay">${quickWeight.toFixed(1)} kg</div>
+              <div class="quick-buttons" role="group" aria-label="${t("quick.title")}">
+                <button type="button" data-quick-adj="-1.0" aria-label="-1.0 kg">-1.0</button>
+                <button type="button" data-quick-adj="-0.5" aria-label="-0.5 kg">-0.5</button>
+                <button type="button" data-quick-adj="-0.1" aria-label="-0.1 kg">-0.1</button>
+                <button type="button" data-quick-adj="+0.1" aria-label="+0.1 kg">+0.1</button>
+                <button type="button" data-quick-adj="+0.5" aria-label="+0.5 kg">+0.5</button>
+                <button type="button" data-quick-adj="+1.0" aria-label="+1.0 kg">+1.0</button>
               </div>
-            </section>
-          ` : ""}
+              <div class="quick-buttons" style="margin-top:10px;">
+                <button type="button" class="quick-save" data-action="quick-save">${t("quick.save")}</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="status ${statusKind === "error" ? "warn" : ""}" role="status" aria-live="polite">
+            ${escapeAttr(statusMessage)}
+            ${lastUndoState ? `<button type="button" class="undo-btn" data-action="undo">${t("undo.button")}</button>` : ""}
+          </div>
+        </section>
+
+        <!-- Goal progress on input tab -->
+        ${goalProgress ? `
+        <div class="goal-mini">
+          <div class="goal-mini-label">${t("goal.title")}: ${Number.isFinite(goalWeight) ? formatWeight(goalWeight) : ""}</div>
+          <div class="progress-bar-track" role="progressbar" aria-valuenow="${goalProgress.percent}" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-bar-fill" style="width: ${goalProgress.percent}%"></div>
+          </div>
+          <div class="goal-mini-text">${goalProgress.remaining <= 0 ? t("goal.achieved") : `${t("goal.remaining")}: ${goalProgress.remaining.toFixed(1)}kg (${goalProgress.percent}%)`}</div>
         </div>
+        ` : ""}
       </div>
+      ` : ""}
+
+      ${activeTab === "graph" ? `
+      <div class="tab-page tab-graph">
+        <section class="panel">
+          <div class="section-header">
+            <div>
+              <h2>${t("section.chart")}</h2>
+              <p>${stats?.latestDate ?? t("chart.empty")}</p>
+            </div>
+            ${state.records.length ? `<button type="button" class="btn secondary" data-action="share-chart">${t("share.chart")}</button>` : ""}
+          </div>
+          <div class="summary-tabs" style="margin-bottom:10px;" role="tablist" aria-label="${t("section.chart")}">
+            <button type="button" class="summary-tab ${chartPeriod === "7" ? "active" : ""}" data-chart-period="7" role="tab" aria-selected="${chartPeriod === "7"}">${t("chart.period.7")}</button>
+            <button type="button" class="summary-tab ${chartPeriod === "30" ? "active" : ""}" data-chart-period="30" role="tab" aria-selected="${chartPeriod === "30"}">${t("chart.period.30")}</button>
+            <button type="button" class="summary-tab ${chartPeriod === "90" ? "active" : ""}" data-chart-period="90" role="tab" aria-selected="${chartPeriod === "90"}">${t("chart.period.90")}</button>
+            <button type="button" class="summary-tab ${chartPeriod === "all" ? "active" : ""}" data-chart-period="all" role="tab" aria-selected="${chartPeriod === "all"}">${t("chart.period.all")}</button>
+          </div>
+          <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}${stats ? ` — ${stats.latestWeight.toFixed(1)}kg, ${t("chart.change")}: ${stats.change > 0 ? "+" : ""}${stats.change.toFixed(1)}kg, ${state.records.length} ${t("chart.records")}` : ""}"></canvas>
+          <div id="chartTooltip" class="chart-tooltip" role="tooltip" aria-live="polite" style="display:none;"></div>
+          ${state.records.length >= 3 ? `<div class="chart-legend">
+            <span class="chart-legend-item"><span class="chart-legend-line gradient"></span>${t("chart.legend.weight")}</span>
+            <span class="chart-legend-item"><span class="chart-legend-line dashed accent3"></span>${t("chart.legend.movingAvg")}</span>
+            ${Number.isFinite(goalWeight) ? `<span class="chart-legend-item"><span class="chart-legend-line dashed ok"></span>${t("chart.legend.goal")}</span>` : ""}
+            <span class="chart-legend-item"><span class="chart-legend-line dashed accent2"></span>${t("chart.legend.forecast")}</span>
+          </div>` : ""}
+          <div class="stat-grid">
+            ${renderStat(t("chart.latest"), stats ? formatWeight(stats.latestWeight) : "--")}
+            ${renderStat(t("chart.min"), stats ? formatWeight(stats.minWeight) : "--")}
+            ${renderStat(t("chart.max"), stats ? formatWeight(stats.maxWeight) : "--")}
+            ${renderStat(t("chart.avg"), stats ? formatWeight(stats.avgWeight) : "--")}
+          </div>
+        </section>
+
+        <!-- Summary Panel -->
+        <section class="panel">
+          <div class="summary-tabs" role="tablist" aria-label="${t("summary.title")}">
+            <button type="button" class="summary-tab ${summaryPeriod === "week" ? "active" : ""}" data-summary="week" role="tab" aria-selected="${summaryPeriod === "week"}">${t("summary.week")}</button>
+            <button type="button" class="summary-tab ${summaryPeriod === "month" ? "active" : ""}" data-summary="month" role="tab" aria-selected="${summaryPeriod === "month"}">${t("summary.month")}</button>
+          </div>
+          ${periodSummary
+            ? `<div class="stat-grid">
+                ${renderStat(t("summary.avg"), formatWeight(periodSummary.avg))}
+                ${renderStat(t("summary.min"), formatWeight(periodSummary.min))}
+                ${renderStat(t("summary.max"), formatWeight(periodSummary.max))}
+                ${renderStat(t("summary.change"), signedWeight(periodSummary.change))}
+              </div>
+              <div class="helper" style="margin-top: 10px;">${t("summary.count")}: ${periodSummary.count}</div>`
+            : `<div class="helper">${t("summary.noData")}</div>`}
+          <div class="rate-box">
+            <div class="label">${t("rate.title")}</div>
+            ${weeklyRate
+              ? `<div class="rate-value ${weeklyRate.weeklyRate < 0 ? "loss" : weeklyRate.weeklyRate > 0 ? "gain" : "neutral"}">${weeklyRate.weeklyRate > 0 ? "+" : ""}${t("rate.value").replace("{rate}", weeklyRate.weeklyRate.toFixed(2))}</div>
+                <div class="helper">${t("rate.period").replace("{days}", weeklyRate.totalDays).replace("{change}", (weeklyRate.totalChange > 0 ? "+" : "") + weeklyRate.totalChange.toFixed(1))}</div>`
+              : `<div class="helper">${t("rate.insufficient")}</div>`}
+          </div>
+          ${renderMomentumScore()}
+          ${renderStreakRewards()}
+          ${renderWeightVelocity()}
+          ${renderCalorieEstimate()}
+          ${renderBodyFatStats()}
+          ${state.records.length >= 3 ? `
+          <div class="analytics-toggle-section">
+            <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
+              ${showAdvancedAnalytics ? t("analytics.showLess") : t("analytics.showMore")}
+            </button>
+            ${showAdvancedAnalytics ? `
+            <div class="advanced-analytics">
+              ${renderDayOfWeekAvg()}
+              ${renderStability()}
+              ${renderBMIDistribution()}
+              ${renderNextMilestones()}
+              ${renderWeekdayWeekend()}
+              ${renderConsistencyStreak()}
+              ${renderWeightPercentile()}
+              ${renderMovingAverages()}
+              ${renderWeightRange()}
+              ${renderTagImpact()}
+              ${renderBestPeriod()}
+              ${renderWeeklyFrequency()}
+              ${renderWeightVariance()}
+              ${renderWeightPlateau()}
+              ${renderRecordGaps()}
+              ${renderSeasonality()}
+              ${renderWeightDistribution()}
+              ${renderDayOfWeekChange()}
+              ${renderPersonalRecords()}
+              ${renderWeightRegression()}
+              ${renderBMIHistory()}
+              ${renderWeightHeatmap()}
+            </div>
+            ` : ""}
+          </div>
+          ` : ""}
+        </section>
+      </div>
+      ` : ""}
+
+      ${activeTab === "calendar" ? `
+      <div class="tab-page tab-calendar">
+        <section class="panel">
+          <div class="section-header">
+            <div>
+              <h2>${t("calendar.title")}</h2>
+              <p>${t("calendar.hint")}</p>
+            </div>
+          </div>
+          ${renderCalendar()}
+        </section>
+        ${renderMonthlyStats()}
+      </div>
+      ` : ""}
+
+      ${activeTab === "settings" ? `
+      <div class="tab-page tab-settings">
+        <!-- Profile -->
+        <section class="panel">
+          <div class="section-header">
+            <div><h2>${t("section.profile")}</h2></div>
+            <button type="button" class="btn secondary" data-action="save-profile">${t("profile.save")}</button>
+          </div>
+          <div class="input-grid">
+            <div class="field">
+              <label for="name">${t("profile.name")}</label>
+              <input id="name" name="name" maxlength="40" value="${escapeAttr(state.profile.name)}" />
+            </div>
+            <div class="field">
+              <label for="gender">${t("profile.gender")}</label>
+              <select id="gender" name="gender">
+                ${renderOption("female", state.profile.gender, t("gender.female"))}
+                ${renderOption("male", state.profile.gender, t("gender.male"))}
+                ${renderOption("nonbinary", state.profile.gender, t("gender.nonbinary"))}
+                ${renderOption("unspecified", state.profile.gender, t("gender.unspecified"))}
+              </select>
+            </div>
+            <div class="field">
+              <label for="heightCm">${t("profile.height")}</label>
+              <input id="heightCm" name="heightCm" inputmode="decimal" value="${escapeAttr(state.profile.heightCm)}" />
+            </div>
+            <div class="field">
+              <label for="age">${t("profile.age")}</label>
+              <input id="age" name="age" inputmode="numeric" value="${escapeAttr(state.profile.age)}" />
+            </div>
+          </div>
+        </section>
+
+        <!-- Goal Weight -->
+        <section class="panel">
+          <div class="section-header">
+            <div><h2>${t("goal.title")}</h2></div>
+            <button type="button" class="btn secondary" data-action="save-goal">${t("goal.save")}</button>
+          </div>
+          <div class="field">
+            <label for="goalWeight">${t("goal.set")}</label>
+            <input id="goalWeight" name="goalWeight" inputmode="decimal" autocomplete="off" value="${escapeAttr(state.settings.goalWeight ?? "")}" />
+          </div>
+          ${goalProgress ? `
+          <div class="goal-detail" style="margin-top:12px;">
+            <div class="progress-bar-track" role="progressbar" aria-valuenow="${goalProgress.percent}" aria-valuemin="0" aria-valuemax="100">
+              <div class="progress-bar-fill" style="width: ${goalProgress.percent}%"></div>
+              ${goalMilestones ? goalMilestones.filter((m) => m.pct < 100).map((m) => `<div class="goal-milestone-marker${m.reached ? " reached" : ""}" style="left:${m.pct}%" title="${t("goal.milestone").replace("{pct}", m.pct)}"></div>`).join("") : ""}
+            </div>
+            <div class="progress-text">
+              <span>${t("goal.progress")}</span>
+              <span>${goalProgress.remaining <= 0 ? t("goal.achieved") : `${t("goal.remaining")}: ${goalProgress.remaining.toFixed(1)}kg`}</span>
+            </div>
+            ${goalPrediction ? `<div class="prediction-text">${t("goal.prediction")}: ${
+              goalPrediction.achieved ? t("goal.predictionAchieved")
+              : goalPrediction.insufficient ? t("goal.predictionInsufficient")
+              : goalPrediction.noTrend ? t("goal.predictionNoTrend")
+              : `${t("goal.predictionDays").replace("{days}", goalPrediction.days)} (${goalPrediction.predictedDate})`
+            }</div>` : ""}
+          </div>
+          ` : ""}
+        </section>
+
+        <!-- Settings -->
+        <section class="panel">
+          <div class="section-header">
+            <div><h2>${t("section.settings")}</h2><p>v${APP_VERSION}</p></div>
+            <button type="button" class="btn secondary" data-action="save-settings">${t("settings.save")}</button>
+          </div>
+          <div class="settings-grid">
+            <div class="field">
+              <label for="language">${t("settings.language")}</label>
+              <select id="language" name="language">
+                ${renderOption("ja", state.settings.language, t("lang.ja"))}
+                ${renderOption("en", state.settings.language, t("lang.en"))}
+              </select>
+            </div>
+            <div class="field span-2">
+              <label>${t("settings.theme")}</label>
+              <div class="theme-grid" role="radiogroup" aria-label="${t("settings.theme")}">
+                ${THEME_LIST.map((theme) => `
+                  <button type="button" class="theme-swatch ${state.settings.theme === theme.id ? "active" : ""}" data-theme-pick="${theme.id}" role="radio" aria-checked="${state.settings.theme === theme.id}" aria-label="${t("settings.theme." + theme.id)}">
+                    <span class="swatch-color" style="background: ${theme.color};"></span>
+                    <span class="swatch-label">${t("settings.theme." + theme.id)}</span>
+                  </button>
+                `).join("")}
+              </div>
+            </div>
+            <div class="field">
+              <label for="chartStyle">${t("settings.chartStyle")}</label>
+              <select id="chartStyle" name="chartStyle">
+                ${renderOption("detailed", state.settings.chartStyle, t("settings.chartStyle.detailed"))}
+                ${renderOption("compact", state.settings.chartStyle, t("settings.chartStyle.compact"))}
+              </select>
+            </div>
+            <div class="field">
+              <label for="autoTheme">${t("settings.autoTheme")}</label>
+              <select id="autoTheme" name="autoTheme">
+                ${renderOption("true", String(state.settings.autoTheme), t("settings.autoTheme.on"))}
+                ${renderOption("false", String(state.settings.autoTheme), t("settings.autoTheme.off"))}
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <!-- Reminder -->
+        <section class="panel">
+          <div class="section-header">
+            <div><h2>${t("reminder.title")}</h2></div>
+          </div>
+          <div class="reminder-grid">
+            <div class="field">
+              <label for="reminderEnabled">${t("reminder.enable")}</label>
+              <select id="reminderEnabled" name="reminderEnabled">
+                ${renderOption("true", String(state.settings.reminderEnabled), t("reminder.on"))}
+                ${renderOption("false", String(state.settings.reminderEnabled), t("reminder.off"))}
+              </select>
+            </div>
+            <div class="field">
+              <label for="reminderTime">${t("reminder.time")}</label>
+              <input id="reminderTime" name="reminderTime" type="time" value="${escapeAttr(state.settings.reminderTime || "21:00")}" />
+            </div>
+          </div>
+          <div style="margin-top: 12px;">
+            <button type="button" class="btn secondary" data-action="save-reminder">${t("reminder.save")}</button>
+          </div>
+        </section>
+
+        <!-- Records List -->
+        <section class="panel records-panel">
+          <div class="section-header">
+            <div>
+              <h2>${t("section.records")}</h2>
+              <p>${state.records.length} ${t("chart.records")}</p>
+            </div>
+            ${state.records.length > 5 ? `<button type="button" class="btn secondary" data-action="toggle-records">${showAllRecords ? t("records.showLess") : t("records.showAll")}</button>` : ""}
+          </div>
+          ${state.records.length > 3 ? `
+          <div class="record-search">
+            <input id="recordSearch" type="search" placeholder="${escapeAttr(t("records.search"))}" value="${escapeAttr(recordSearchQuery)}" autocomplete="off" aria-label="${t("records.search")}" />
+          </div>` : ""}
+          <div class="record-list">
+            ${state.records.length ? renderRecordList() : `<div class="empty-state">
+              <div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">📊</div>
+              <div class="helper">${t("records.empty")}</div>
+            </div>`}
+          </div>
+          ${renderSourceBreakdown()}
+          <div class="export-grid">
+            <button type="button" class="btn secondary" data-action="export-excel">📊 ${t("export.excel")}</button>
+            <button type="button" class="btn secondary" data-action="export-csv">📄 ${t("export.csv")}</button>
+            <button type="button" class="btn ghost" data-action="import-csv">📤 ${t("import.csv")}</button>
+            <input type="file" id="csvImportInput" accept=".csv" style="display:none" />
+          </div>
+        </section>
+
+        <!-- Data management -->
+        <section class="panel">
+          <div class="data-actions">
+            <button type="button" class="btn secondary" data-action="export-data">💾 ${t("settings.export")}</button>
+            <label class="btn secondary" for="importInput">📥 ${t("import.button")}</label>
+            <input id="importInput" type="file" accept=".json" class="hidden" />
+            <button type="button" class="btn ghost" data-action="reset-data">🗑️ ${t("settings.reset")}</button>
+          </div>
+        </section>
+      </div>
+      ` : ""}
+
+      <!-- Bottom Tab Bar -->
+      <nav class="bottom-tabs" role="tablist" aria-label="Navigation">
+        <button type="button" class="bottom-tab ${activeTab === "input" ? "active" : ""}" data-tab="input" role="tab" aria-selected="${activeTab === "input"}">
+          <span class="bottom-tab-icon">✏️</span>
+          <span class="bottom-tab-label">${t("tab.input")}</span>
+        </button>
+        <button type="button" class="bottom-tab ${activeTab === "graph" ? "active" : ""}" data-tab="graph" role="tab" aria-selected="${activeTab === "graph"}">
+          <span class="bottom-tab-icon">📊</span>
+          <span class="bottom-tab-label">${t("tab.graph")}</span>
+        </button>
+        <button type="button" class="bottom-tab ${activeTab === "calendar" ? "active" : ""}" data-tab="calendar" role="tab" aria-selected="${activeTab === "calendar"}">
+          <span class="bottom-tab-icon">📅</span>
+          <span class="bottom-tab-label">${t("tab.calendar")}</span>
+        </button>
+        <button type="button" class="bottom-tab ${activeTab === "settings" ? "active" : ""}" data-tab="settings" role="tab" aria-selected="${activeTab === "settings"}">
+          <span class="bottom-tab-icon">⚙️</span>
+          <span class="bottom-tab-label">${t("tab.settings")}</span>
+        </button>
+      </nav>
     </main>
     ${rainbowVisible ? `
     <div class="rainbow-overlay" id="rainbowOverlay" role="alert" aria-live="assertive">
@@ -1870,6 +1720,15 @@ function renderPickerDecOptions(selected) {
 }
 
 function bindEvents() {
+  // Bottom tab navigation
+  app.querySelectorAll("[data-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeTab = button.dataset.tab;
+      render();
+      window.scrollTo(0, 0);
+    });
+  });
+
   app.querySelectorAll("[data-mode]").forEach((button) => {
     button.addEventListener("click", () => {
       activeEntryMode = button.dataset.mode;
@@ -2248,10 +2107,6 @@ function saveRecordWithWeight(weight, source) {
   }
   if (navigator.vibrate) navigator.vibrate(50);
   showUndoSnackbar(`${t("entry.saved")} · ${record.wt.toFixed(1)}kg`);
-  // Scroll to chart after save
-  setTimeout(() => {
-    document.getElementById("chart")?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, 100);
 }
 
 function showUndoSnackbar(message) {
