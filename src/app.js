@@ -2148,4 +2148,9 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     void toggleVoiceInput();
   }
+
+  if (event.key === "Escape" && rainbowVisible) {
+    rainbowVisible = false;
+    document.getElementById("rainbowOverlay")?.remove();
+  }
 });

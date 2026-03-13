@@ -279,6 +279,10 @@ export const translations = {
     "rate.value": "{rate}kg/週",
     "rate.period": "{days}日間で{change}kg",
     "rate.insufficient": "1週間以上のデータが必要です",
+    "monthly.title": "月別統計",
+    "monthly.hint": "月ごとの体重推移を確認できます",
+    "monthly.records": "{count}件",
+    "monthly.showAll": "全{count}ヶ月を表示",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -560,6 +564,10 @@ export const translations = {
     "rate.value": "{rate}kg/week",
     "rate.period": "{change}kg over {days} days",
     "rate.insufficient": "Need 1+ week of data",
+    "monthly.title": "Monthly Stats",
+    "monthly.hint": "Track your weight progress by month",
+    "monthly.records": "{count} records",
+    "monthly.showAll": "Show all {count} months",
   },
 };
 

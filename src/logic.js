@@ -438,3 +438,22 @@ export function calcAchievements(records, streak, goalWeight) {
 
   return achievements;
 }
+
+export function calcMonthlyStats(records) {
+  if (!records.length) return [];
+  const byMonth = {};
+  for (const r of records) {
+    const key = r.dt.slice(0, 7); // "YYYY-MM"
+    if (!byMonth[key]) byMonth[key] = [];
+    byMonth[key].push(r.wt);
+  }
+  const months = Object.keys(byMonth).sort().reverse();
+  return months.map((key) => {
+    const weights = byMonth[key];
+    const avg = Math.round((weights.reduce((a, b) => a + b, 0) / weights.length) * 10) / 10;
+    const min = Math.round(Math.min(...weights) * 10) / 10;
+    const max = Math.round(Math.max(...weights) * 10) / 10;
+    const change = Math.round((weights[weights.length - 1] - weights[0]) * 10) / 10;
+    return { month: key, count: weights.length, avg, min, max, change };
+  });
+}

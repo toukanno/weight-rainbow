@@ -1421,7 +1421,11 @@ var translations = {
     "rate.title": "\u9031\u9593\u30DA\u30FC\u30B9",
     "rate.value": "{rate}kg/\u9031",
     "rate.period": "{days}\u65E5\u9593\u3067{change}kg",
-    "rate.insufficient": "1\u9031\u9593\u4EE5\u4E0A\u306E\u30C7\u30FC\u30BF\u304C\u5FC5\u8981\u3067\u3059"
+    "rate.insufficient": "1\u9031\u9593\u4EE5\u4E0A\u306E\u30C7\u30FC\u30BF\u304C\u5FC5\u8981\u3067\u3059",
+    "monthly.title": "\u6708\u5225\u7D71\u8A08",
+    "monthly.hint": "\u6708\u3054\u3068\u306E\u4F53\u91CD\u63A8\u79FB\u3092\u78BA\u8A8D\u3067\u304D\u307E\u3059",
+    "monthly.records": "{count}\u4EF6",
+    "monthly.showAll": "\u5168{count}\u30F6\u6708\u3092\u8868\u793A"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1702,7 +1706,11 @@ var translations = {
     "rate.title": "Weekly Rate",
     "rate.value": "{rate}kg/week",
     "rate.period": "{change}kg over {days} days",
-    "rate.insufficient": "Need 1+ week of data"
+    "rate.insufficient": "Need 1+ week of data",
+    "monthly.title": "Monthly Stats",
+    "monthly.hint": "Track your weight progress by month",
+    "monthly.records": "{count} records",
+    "monthly.showAll": "Show all {count} months"
   }
 };
 function createTranslator(language) {
@@ -24154,6 +24162,10 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && voiceActive) {
     event.preventDefault();
     void toggleVoiceInput();
+  }
+  if (event.key === "Escape" && rainbowVisible) {
+    rainbowVisible = false;
+    document.getElementById("rainbowOverlay")?.remove();
   }
 });
 /*! Bundled license information:

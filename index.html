@@ -1448,6 +1448,39 @@
         border: 1px solid var(--border);
       }
 
+      /* Monthly Stats */
+      .monthly-stats-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .monthly-stats-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 12px;
+        border-radius: 10px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+      }
+      .monthly-label {
+        font-weight: 700;
+        font-size: 0.88rem;
+        min-width: 72px;
+        color: var(--accent);
+      }
+      .monthly-values {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        font-size: 0.82rem;
+        color: var(--text);
+      }
+      .monthly-values .helper {
+        font-size: 0.72rem;
+        opacity: 0.6;
+      }
+
       /* Reminder */
       .reminder-grid {
         display: grid;

@@ -21,6 +21,7 @@ import {
   validateWeight,
   buildCalendarMonth,
   calcWeeklyRate,
+  calcMonthlyStats,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -543,5 +544,46 @@ describe("i18n ARIA keys", () => {
       expect(translations.en[key], `Missing en key: ${key}`).toBeDefined();
       expect(translations.en[key]).not.toBe("");
     }
+  });
+});
+
+describe("calcMonthlyStats", () => {
+  it("returns empty array for no records", () => {
+    expect(calcMonthlyStats([])).toEqual([]);
+  });
+
+  it("groups records by month with correct stats", () => {
+    const records = [
+      { dt: "2026-01-05", wt: 70 },
+      { dt: "2026-01-15", wt: 68 },
+      { dt: "2026-01-25", wt: 66 },
+      { dt: "2026-02-10", wt: 65 },
+      { dt: "2026-02-20", wt: 64 },
+    ];
+    const result = calcMonthlyStats(records);
+    expect(result).toHaveLength(2);
+    // Sorted newest first
+    expect(result[0].month).toBe("2026-02");
+    expect(result[0].count).toBe(2);
+    expect(result[0].avg).toBe(64.5);
+    expect(result[0].min).toBe(64);
+    expect(result[0].max).toBe(65);
+    expect(result[0].change).toBe(-1);
+
+    expect(result[1].month).toBe("2026-01");
+    expect(result[1].count).toBe(3);
+    expect(result[1].avg).toBeCloseTo(68, 0);
+    expect(result[1].min).toBe(66);
+    expect(result[1].max).toBe(70);
+    expect(result[1].change).toBe(-4);
+  });
+
+  it("handles single record in a month", () => {
+    const records = [{ dt: "2026-03-10", wt: 72 }];
+    const result = calcMonthlyStats(records);
+    expect(result).toHaveLength(1);
+    expect(result[0].month).toBe("2026-03");
+    expect(result[0].count).toBe(1);
+    expect(result[0].change).toBe(0);
   });
 });
