@@ -522,7 +522,7 @@ function render() {
               ${state.records.length > 5 ? `<button type="button" class="btn secondary" data-action="toggle-records">${showAllRecords ? t("records.showLess") : t("records.showAll")}</button>` : ""}
             </div>
             <div class="record-list">
-              ${state.records.length ? renderRecordList() : `<div class="helper">${t("records.empty")}</div>`}
+              ${state.records.length ? renderRecordList() : `<div class="empty-state"><div style="font-size:2.4rem;margin-bottom:8px;">📊</div><div class="helper">${t("records.empty")}</div></div>`}
             </div>
             <div class="export-grid">
               <button type="button" class="btn secondary" data-action="export-excel">${t("export.excel")}</button>

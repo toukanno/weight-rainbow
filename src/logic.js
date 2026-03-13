@@ -349,6 +349,17 @@ export function calcPeriodSummary(records, days) {
   };
 }
 
+export function calcWeeklyRate(records) {
+  if (records.length < 2) return null;
+  const first = records[0];
+  const last = records[records.length - 1];
+  const daySpan = (new Date(last.dt) - new Date(first.dt)) / 86400000;
+  if (daySpan < 7) return null;
+  const totalChange = last.wt - first.wt;
+  const weeklyRate = Math.round((totalChange / daySpan) * 7 * 100) / 100;
+  return { weeklyRate, totalDays: Math.round(daySpan), totalChange: Math.round(totalChange * 10) / 10 };
+}
+
 export function buildCalendarMonth(records, year, month) {
   const firstDay = new Date(year, month, 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();

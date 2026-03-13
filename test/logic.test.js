@@ -20,6 +20,7 @@ import {
   validateBodyFat,
   validateWeight,
   buildCalendarMonth,
+  calcWeeklyRate,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -465,5 +466,44 @@ describe("buildRecord with bodyFat", () => {
       note: longNote,
     });
     expect(record.note).toHaveLength(100);
+  });
+});
+
+describe("calcWeeklyRate", () => {
+  it("returns null with fewer than 2 records", () => {
+    expect(calcWeeklyRate([])).toBeNull();
+    expect(calcWeeklyRate([{ dt: "2026-03-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns null when span is less than 7 days", () => {
+    const records = [
+      { dt: "2026-03-10", wt: 70 },
+      { dt: "2026-03-13", wt: 69 },
+    ];
+    expect(calcWeeklyRate(records)).toBeNull();
+  });
+
+  it("calculates weekly rate for weight loss", () => {
+    const records = [
+      { dt: "2026-03-01", wt: 70 },
+      { dt: "2026-03-15", wt: 68 },
+    ];
+    const result = calcWeeklyRate(records);
+    expect(result).not.toBeNull();
+    expect(result.weeklyRate).toBeLessThan(0);
+    expect(result.totalDays).toBe(14);
+    expect(result.totalChange).toBe(-2);
+    // -2kg over 14 days = -1kg/week
+    expect(result.weeklyRate).toBe(-1);
+  });
+
+  it("calculates weekly rate for weight gain", () => {
+    const records = [
+      { dt: "2026-03-01", wt: 65 },
+      { dt: "2026-03-22", wt: 68 },
+    ];
+    const result = calcWeeklyRate(records);
+    expect(result.weeklyRate).toBe(1);
+    expect(result.totalChange).toBe(3);
   });
 });
