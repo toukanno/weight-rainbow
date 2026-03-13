@@ -552,6 +552,21 @@ export function calcSourceBreakdown(records) {
   return counts;
 }
 
+export function calcWeightStability(records, days = 7) {
+  if (records.length < 3) return null;
+  const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const recent = records.filter((r) => r.dt >= cutoff);
+  if (recent.length < 3) return null;
+  const weights = recent.map((r) => r.wt);
+  const avg = weights.reduce((s, w) => s + w, 0) / weights.length;
+  const variance = weights.reduce((s, w) => s + (w - avg) ** 2, 0) / weights.length;
+  const stdDev = Math.round(Math.sqrt(variance) * 100) / 100;
+  // Score: 0-100, lower stdDev = higher score
+  // stdDev of 0 = 100, stdDev of 2+ = 0
+  const score = Math.max(0, Math.min(100, Math.round((1 - stdDev / 2) * 100)));
+  return { stdDev, score, count: recent.length, avg: Math.round(avg * 10) / 10 };
+}
+
 export function filterRecordsByDateRange(records, fromDate, toDate) {
   if (!fromDate && !toDate) return records;
   return records.filter((r) => {

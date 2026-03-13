@@ -36,6 +36,7 @@ import {
   filterRecordsByDateRange,
   calcSourceBreakdown,
   calcDayOfWeekAvg,
+  calcWeightStability,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -557,6 +558,7 @@ function render() {
               }</div>` : ""}
             </div>` : ""}
             ${renderDayOfWeekAvg()}
+            ${renderStability()}
           </section>
 
           <!-- Monthly Stats Panel -->
@@ -953,6 +955,27 @@ function renderSourceBreakdown() {
           const pct = Math.round((count / state.records.length) * 100);
           return `<span class="source-chip"><span class="source-icon">${icon}</span> ${t("entry.source." + src)} <strong>${count}</strong> (${pct}%)</span>`;
         }).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderStability() {
+  const stability = calcWeightStability(state.records);
+  if (!stability) return "";
+  const level = stability.score >= 70 ? "high" : stability.score >= 40 ? "medium" : "low";
+  return `
+    <div class="stability-section">
+      <div class="helper">${t("stability.title")}</div>
+      <div class="stability-display">
+        <div class="stability-score-ring ${level}">
+          <span class="stability-score-value">${stability.score}</span>
+        </div>
+        <div class="stability-details">
+          <div class="stability-label ${level}">${t("stability." + level)}</div>
+          <div class="helper">${t("stability.stddev")}: ${stability.stdDev.toFixed(2)}kg</div>
+          <div class="helper">${t("chart.avg")}: ${stability.avg.toFixed(1)}kg (${stability.count} ${t("chart.records")})</div>
+        </div>
       </div>
     </div>
   `;
