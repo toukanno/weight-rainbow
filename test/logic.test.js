@@ -5691,3 +5691,65 @@ describe("calcWeightPlateau with previousRate", () => {
     expect(result.previousRate).not.toBeNull();
   });
 });
+
+// ── upsertRecord edge cases ──
+describe("upsertRecord edge cases", () => {
+  it("inserts new record and sorts by date", () => {
+    const records = [{ dt: "2024-01-01", wt: 70 }, { dt: "2024-01-03", wt: 72 }];
+    const result = upsertRecord(records, { dt: "2024-01-02", wt: 71 });
+    expect(result).toHaveLength(3);
+    expect(result[1].dt).toBe("2024-01-02");
+    expect(result[1].wt).toBe(71);
+  });
+  it("updates existing record by date", () => {
+    const records = [{ dt: "2024-01-01", wt: 70, note: "old" }];
+    const result = upsertRecord(records, { dt: "2024-01-01", wt: 69, note: "new" });
+    expect(result).toHaveLength(1);
+    expect(result[0].wt).toBe(69);
+    expect(result[0].note).toBe("new");
+  });
+  it("does not mutate original array", () => {
+    const records = [{ dt: "2024-01-01", wt: 70 }];
+    const result = upsertRecord(records, { dt: "2024-01-02", wt: 71 });
+    expect(records).toHaveLength(1);
+    expect(result).toHaveLength(2);
+  });
+});
+
+// ── buildRecord edge cases ──
+describe("buildRecord edge cases", () => {
+  it("calculates BMI when heightCm provided", () => {
+    const r = buildRecord({ date: "2024-01-01", weight: 70, profile: { heightCm: 170 }, source: "manual" });
+    expect(r.bmi).toBeCloseTo(24.2, 1);
+    expect(r.dt).toBe("2024-01-01");
+    expect(r.wt).toBe(70);
+    expect(r.source).toBe("manual");
+  });
+  it("BMI is null when heightCm is null", () => {
+    const r = buildRecord({ date: "2024-01-01", weight: 70, profile: { heightCm: null }, source: "voice" });
+    expect(r.bmi).toBeNull();
+  });
+  it("handles empty note gracefully", () => {
+    const r = buildRecord({ date: "2024-01-01", weight: 70, profile: { heightCm: 170 }, source: "manual", note: null });
+    expect(r.note).toBe("");
+  });
+  it("includes createdAt timestamp", () => {
+    const r = buildRecord({ date: "2024-01-01", weight: 70, profile: { heightCm: 170 }, source: "manual" });
+    expect(r.createdAt).toBeDefined();
+    expect(r.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
+// ── pickWeightCandidate edge cases ──
+describe("pickWeightCandidate edge cases", () => {
+  it("returns null for empty candidates", () => {
+    expect(pickWeightCandidate([], 70)).toBeNull();
+  });
+  it("returns first candidate when no fallback", () => {
+    expect(pickWeightCandidate([65, 70, 75])).toBe(65);
+  });
+  it("returns closest to fallback weight", () => {
+    expect(pickWeightCandidate([65, 70, 75], 72)).toBe(70);
+    expect(pickWeightCandidate([65, 70, 75], 74)).toBe(75);
+  });
+});
