@@ -2985,6 +2985,81 @@ function getRecentEntries(records, count = 5) {
     };
   });
 }
+function calcMonthlyAverages(records, numMonths = 6) {
+  if (records.length === 0) return [];
+  const now = /* @__PURE__ */ new Date();
+  const months2 = [];
+  for (let i = numMonths - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const y = d.getFullYear();
+    const m = d.getMonth();
+    const prefix = `${y}-${String(m + 1).padStart(2, "0")}`;
+    const inMonth = records.filter((r) => r.dt.startsWith(prefix));
+    if (inMonth.length === 0) {
+      months2.push({ year: y, month: m, label: prefix, avg: null, count: 0, min: null, max: null });
+    } else {
+      const weights = inMonth.map((r) => r.wt);
+      const sum = weights.reduce((s, w) => s + w, 0);
+      months2.push({
+        year: y,
+        month: m,
+        label: prefix,
+        avg: Math.round(sum / weights.length * 10) / 10,
+        count: weights.length,
+        min: Math.round(Math.min(...weights) * 10) / 10,
+        max: Math.round(Math.max(...weights) * 10) / 10
+      });
+    }
+  }
+  return months2;
+}
+function calcLongTermProgress(records) {
+  if (records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1];
+  const latestDate = /* @__PURE__ */ new Date(latest.dt + "T00:00:00");
+  const periods = [
+    { label: "1m", days: 30 },
+    { label: "3m", days: 90 },
+    { label: "6m", days: 180 },
+    { label: "1y", days: 365 },
+    { label: "all", days: null }
+  ];
+  const result = periods.map((p) => {
+    let target;
+    if (p.days === null) {
+      target = sorted[0];
+    } else {
+      const cutoff = new Date(latestDate);
+      cutoff.setDate(cutoff.getDate() - p.days);
+      const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+      let closest = null;
+      let closestDiff = Infinity;
+      for (const r of sorted) {
+        const diff = Math.abs(/* @__PURE__ */ new Date(r.dt + "T00:00:00") - cutoff);
+        if (diff < closestDiff) {
+          closestDiff = diff;
+          closest = r;
+        }
+      }
+      if (closestDiff > 15 * 864e5) {
+        return { label: p.label, days: p.days, pastWeight: null, change: null, pctChange: null, hasData: false };
+      }
+      target = closest;
+    }
+    const change = Math.round((latest.wt - target.wt) * 10) / 10;
+    const pctChange = Math.round(change / target.wt * 1e3) / 10;
+    return {
+      label: p.label,
+      days: p.days,
+      pastWeight: target.wt,
+      change,
+      pctChange,
+      hasData: true
+    };
+  });
+  return { current: latest.wt, date: latest.dt, periods: result };
+}
 
 // src/i18n.js
 var translations = {
@@ -3732,7 +3807,15 @@ var translations = {
     "dash.noRecord": "\u672A\u8A18\u9332",
     "recent.title": "\u76F4\u8FD1\u306E\u8A18\u9332",
     "monthAvg.title": "\u6708\u5225\u5E73\u5747\u4F53\u91CD",
-    "monthAvg.noData": "\u30C7\u30FC\u30BF\u306A\u3057"
+    "monthAvg.noData": "\u30C7\u30FC\u30BF\u306A\u3057",
+    "ltp.title": "\u9577\u671F\u30D7\u30ED\u30B0\u30EC\u30B9",
+    "progress.1m": "1\u30F6\u6708\u524D",
+    "progress.3m": "3\u30F6\u6708\u524D",
+    "progress.6m": "6\u30F6\u6708\u524D",
+    "progress.1y": "1\u5E74\u524D",
+    "progress.all": "\u958B\u59CB\u6642",
+    "progress.noData": "\u30C7\u30FC\u30BF\u306A\u3057",
+    "progress.vs": "\u6BD4\u8F03"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4478,7 +4561,15 @@ var translations = {
     "dash.noRecord": "No record",
     "recent.title": "Recent Entries",
     "monthAvg.title": "Monthly Averages",
-    "monthAvg.noData": "No data"
+    "monthAvg.noData": "No data",
+    "ltp.title": "Long-term Progress",
+    "progress.1m": "1 month ago",
+    "progress.3m": "3 months ago",
+    "progress.6m": "6 months ago",
+    "progress.1y": "1 year ago",
+    "progress.all": "Start",
+    "progress.noData": "No data",
+    "progress.vs": "vs"
   }
 };
 function createTranslator(language) {
@@ -25585,6 +25676,7 @@ function render() {
             ${renderBodyFatStats()}
             ${renderWeeklyAverages()}
             ${renderRecordingCalendar()}
+            ${renderLongTermProgress()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -25626,6 +25718,9 @@ function render() {
 
           <!-- Monthly Stats Panel -->
           ${renderMonthlyStats()}
+
+          <!-- Monthly Averages Chart -->
+          ${renderMonthlyAverages()}
 
           <!-- Calendar Panel -->
           <section class="panel">
@@ -26884,6 +26979,57 @@ function renderIdealWeight() {
     </div>
   `;
 }
+function renderMonthlyAverages() {
+  const months2 = calcMonthlyAverages(state.records, 6);
+  const withData = months2.filter((m) => m.avg !== null);
+  if (withData.length < 2) return "";
+  const allAvgs = withData.map((m) => m.avg);
+  const minAvg = Math.min(...allAvgs);
+  const maxAvg = Math.max(...allAvgs);
+  const range = maxAvg - minAvg || 1;
+  const bars = months2.map((m, i) => {
+    if (m.avg === null) {
+      return `<div class="mavg-bar-wrap"><div class="mavg-bar empty"></div><div class="mavg-label">${m.label.slice(5)}\u6708</div></div>`;
+    }
+    const pct = Math.max(10, (m.avg - minAvg) / range * 80 + 10);
+    const prev = i > 0 ? months2[i - 1] : null;
+    const cls = prev && prev.avg !== null ? m.avg < prev.avg ? "down" : m.avg > prev.avg ? "up" : "" : "";
+    return `<div class="mavg-bar-wrap">
+      <div class="mavg-value">${m.avg.toFixed(1)}</div>
+      <div class="mavg-bar ${cls}" style="height:${pct}%"></div>
+      <div class="mavg-label">${m.label.slice(5)}\u6708</div>
+      <div class="mavg-count">${m.count}</div>
+    </div>`;
+  }).join("");
+  return `
+    <div class="mavg-section">
+      <div class="helper">${t("monthAvg.title")}</div>
+      <div class="mavg-chart">${bars}</div>
+    </div>
+  `;
+}
+function renderLongTermProgress() {
+  const progress = calcLongTermProgress(state.records);
+  if (!progress || progress.periods.every((p) => !p.hasData)) return "";
+  const labelMap = { "1m": "progress.1m", "3m": "progress.3m", "6m": "progress.6m", "1y": "progress.1y", "all": "progress.all" };
+  const rows = progress.periods.filter((p) => p.hasData).map((p) => {
+    const sign = p.change > 0 ? "+" : "";
+    const cls = p.change < 0 ? "down" : p.change > 0 ? "up" : "";
+    return `<div class="ltp-row">
+        <span class="ltp-label">${t(labelMap[p.label])}</span>
+        <span class="ltp-past">${p.pastWeight.toFixed(1)}</span>
+        <span class="ltp-arrow">\u2192</span>
+        <span class="ltp-current">${progress.current.toFixed(1)}</span>
+        <span class="ltp-change ${cls}">${sign}${p.change.toFixed(1)}kg (${sign}${p.pctChange}%)</span>
+      </div>`;
+  }).join("");
+  return `
+    <div class="ltp-section">
+      <div class="helper">${t("ltp.title")}</div>
+      ${rows}
+    </div>
+  `;
+}
 function renderRecentEntries() {
   const entries = getRecentEntries(state.records, 5);
   if (entries.length === 0) return "";
@@ -27787,20 +27933,27 @@ async function handlePhotoSelection(event) {
   if (photoBtn) photoBtn.classList.add("loading");
   setStatus(t("status.photoAnalyzing"));
   render();
-  const candidates = await detectWeightsFromImage(file);
-  detectedWeights = candidates;
-  const picked = pickWeightCandidate(candidates, state.records.at(-1)?.wt ?? null);
-  if (picked) {
-    state.form.weight = picked.toFixed(1);
-    state.form.pickerInt = Math.floor(picked);
-    state.form.pickerDec = Math.round((picked - Math.floor(picked)) * 10);
-  }
-  if (candidates.length > 0) {
-    setStatus(t("status.photoReady"));
-  } else if (supportsTextDetection) {
-    setStatus(t("status.photoNoDetection"));
-  } else {
-    setStatus(t("entry.photoFallback"));
+  try {
+    const candidates = await detectWeightsFromImage(file);
+    detectedWeights = candidates;
+    const picked = pickWeightCandidate(candidates, state.records.at(-1)?.wt ?? null);
+    if (picked) {
+      state.form.weight = picked.toFixed(1);
+      state.form.pickerInt = Math.floor(picked);
+      state.form.pickerDec = Math.round((picked - Math.floor(picked)) * 10);
+    }
+    if (candidates.length > 0) {
+      setStatus(t("status.photoReady"));
+    } else if (supportsTextDetection) {
+      setStatus(t("status.photoNoDetection"));
+    } else {
+      setStatus(t("entry.photoFallback"));
+    }
+  } catch {
+    detectedWeights = [];
+    setStatus(t("status.photoNoDetection"), "error");
+  } finally {
+    if (photoBtn) photoBtn.classList.remove("loading");
   }
   render();
 }

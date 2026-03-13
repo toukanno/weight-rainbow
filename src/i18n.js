@@ -731,6 +731,12 @@ export const translations = {
     "recent.title": "直近の記録",
     "monthAvg.title": "月別平均体重",
     "monthAvg.noData": "データなし",
+    "ltp.title": "長期プログレス",
+    "ltp.1m": "1ヶ月前",
+    "ltp.3m": "3ヶ月前",
+    "ltp.6m": "6ヶ月前",
+    "ltp.1y": "1年前",
+    "ltp.all": "開始時",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1464,6 +1470,14 @@ export const translations = {
     "recent.title": "Recent Entries",
     "monthAvg.title": "Monthly Averages",
     "monthAvg.noData": "No data",
+    "ltp.title": "Long-term Progress",
+    "progress.1m": "1 month ago",
+    "progress.3m": "3 months ago",
+    "progress.6m": "6 months ago",
+    "progress.1y": "1 year ago",
+    "progress.all": "Start",
+    "progress.noData": "No data",
+    "progress.vs": "vs",
   },
 };
 

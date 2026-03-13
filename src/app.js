@@ -98,6 +98,7 @@ import {
   calcDashboardSummary,
   getRecentEntries,
   calcMonthlyAverages,
+  calcLongTermProgress,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -748,6 +749,7 @@ function render() {
             ${renderBodyFatStats()}
             ${renderWeeklyAverages()}
             ${renderRecordingCalendar()}
+            ${renderLongTermProgress()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -2147,6 +2149,32 @@ function renderMonthlyAverages() {
   `;
 }
 
+function renderLongTermProgress() {
+  const progress = calcLongTermProgress(state.records);
+  if (!progress || progress.periods.every((p) => !p.hasData)) return "";
+  const labelMap = { "1m": "progress.1m", "3m": "progress.3m", "6m": "progress.6m", "1y": "progress.1y", "all": "progress.all" };
+  const rows = progress.periods
+    .filter((p) => p.hasData)
+    .map((p) => {
+      const sign = p.change > 0 ? "+" : "";
+      const cls = p.change < 0 ? "down" : p.change > 0 ? "up" : "";
+      return `<div class="ltp-row">
+        <span class="ltp-label">${t(labelMap[p.label])}</span>
+        <span class="ltp-past">${p.pastWeight.toFixed(1)}</span>
+        <span class="ltp-arrow">→</span>
+        <span class="ltp-current">${progress.current.toFixed(1)}</span>
+        <span class="ltp-change ${cls}">${sign}${p.change.toFixed(1)}kg (${sign}${p.pctChange}%)</span>
+      </div>`;
+    })
+    .join("");
+  return `
+    <div class="ltp-section">
+      <div class="helper">${t("ltp.title")}</div>
+      ${rows}
+    </div>
+  `;
+}
+
 function renderRecentEntries() {
   const entries = getRecentEntries(state.records, 5);
   if (entries.length === 0) return "";
@@ -3118,21 +3146,28 @@ async function handlePhotoSelection(event) {
   setStatus(t("status.photoAnalyzing"));
   render();
 
-  const candidates = await detectWeightsFromImage(file);
-  detectedWeights = candidates;
-  const picked = pickWeightCandidate(candidates, state.records.at(-1)?.wt ?? null);
-  if (picked) {
-    state.form.weight = picked.toFixed(1);
-    state.form.pickerInt = Math.floor(picked);
-    state.form.pickerDec = Math.round((picked - Math.floor(picked)) * 10);
-  }
+  try {
+    const candidates = await detectWeightsFromImage(file);
+    detectedWeights = candidates;
+    const picked = pickWeightCandidate(candidates, state.records.at(-1)?.wt ?? null);
+    if (picked) {
+      state.form.weight = picked.toFixed(1);
+      state.form.pickerInt = Math.floor(picked);
+      state.form.pickerDec = Math.round((picked - Math.floor(picked)) * 10);
+    }
 
-  if (candidates.length > 0) {
-    setStatus(t("status.photoReady"));
-  } else if (supportsTextDetection) {
-    setStatus(t("status.photoNoDetection"));
-  } else {
-    setStatus(t("entry.photoFallback"));
+    if (candidates.length > 0) {
+      setStatus(t("status.photoReady"));
+    } else if (supportsTextDetection) {
+      setStatus(t("status.photoNoDetection"));
+    } else {
+      setStatus(t("entry.photoFallback"));
+    }
+  } catch {
+    detectedWeights = [];
+    setStatus(t("status.photoNoDetection"), "error");
+  } finally {
+    if (photoBtn) photoBtn.classList.remove("loading");
   }
   render();
 }
