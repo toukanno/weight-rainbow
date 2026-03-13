@@ -587,6 +587,33 @@
         border-radius: 18px;
         border: 1px solid rgba(120, 130, 180, 0.14);
         background: rgba(255, 255, 255, 0.9);
+        cursor: zoom-in;
+      }
+
+      .record-note {
+        font-style: italic;
+      }
+
+      .google-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .monthly-change {
+        font-weight: 600;
+      }
+      .monthly-change.loss { color: var(--ok, #10b981); }
+      .monthly-change.gain { color: var(--warn, #f59e0b); }
+      .monthly-change.neutral { color: var(--muted); }
+
+      .hint-small {
+        font-size: 0.72rem;
+        opacity: 0.7;
+      }
+
+      .full-width-btn {
+        margin-top: 10px;
+        width: 100%;
       }
 
       .chip-row,
