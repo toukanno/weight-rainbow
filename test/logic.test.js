@@ -106,6 +106,7 @@ import {
   calcStreakCalendar,
   calcMovingAvgCrossover,
   calcPredictionAccuracy,
+  calcConsistencyScore,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -8104,5 +8105,67 @@ describe("calcPredictionAccuracy", () => {
   it("handles empty input", () => {
     expect(calcPredictionAccuracy([]).rating).toBe("insufficient");
     expect(calcPredictionAccuracy(null).rating).toBe("insufficient");
+  });
+});
+
+describe("calcConsistencyScore", () => {
+  it("returns null score for fewer than 7 records", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    const result = calcConsistencyScore(records, 65);
+    expect(result.score).toBeNull();
+    expect(result.grade).toBe("N/A");
+  });
+
+  it("returns score 0-100 for sufficient records", () => {
+    const today = new Date();
+    const records = Array.from({ length: 10 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      return { dt: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`, wt: 70 - i * 0.1 };
+    });
+    const result = calcConsistencyScore(records, 65);
+    expect(result.score).toBeGreaterThanOrEqual(0);
+    expect(result.score).toBeLessThanOrEqual(100);
+    expect(["S","A","B","C","D"]).toContain(result.grade);
+  });
+
+  it("gives high recording score for daily records", () => {
+    const today = new Date();
+    const records = Array.from({ length: 30 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      return { dt: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`, wt: 70 };
+    });
+    const result = calcConsistencyScore(records, 70);
+    expect(result.components.recording).toBeGreaterThanOrEqual(90);
+  });
+
+  it("gives high stability score for constant weight", () => {
+    const today = new Date();
+    const records = Array.from({ length: 10 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      return { dt: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`, wt: 70.0 };
+    });
+    const result = calcConsistencyScore(records, 65);
+    expect(result.components.stability).toBe(100);
+  });
+
+  it("handles null/empty input", () => {
+    expect(calcConsistencyScore(null, 65).score).toBeNull();
+    expect(calcConsistencyScore([], 65).score).toBeNull();
+  });
+
+  it("returns components object with all three fields", () => {
+    const today = new Date();
+    const records = Array.from({ length: 10 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      return { dt: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`, wt: 70 };
+    });
+    const result = calcConsistencyScore(records, 65);
+    expect(result.components).toHaveProperty("recording");
+    expect(result.components).toHaveProperty("stability");
+    expect(result.components).toHaveProperty("momentum");
   });
 });

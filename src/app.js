@@ -789,6 +789,7 @@ function render() {
             ${renderSuccessRate()}
             ${renderRecordingRate()}
             ${renderStreakCalendar()}
+            ${renderConsistencyScore()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">

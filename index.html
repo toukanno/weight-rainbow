@@ -2851,6 +2851,59 @@
       .pa-hit { color: var(--ok); font-weight: 600; }
       .pa-miss { color: var(--danger); }
 
+      .cs-section { margin-top: 14px; }
+      .cs-top {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin: 10px 0;
+      }
+      .cs-score-circle {
+        display: flex;
+        align-items: baseline;
+        gap: 2px;
+      }
+      .cs-score-num { font-size: 2rem; font-weight: 800; }
+      .cs-score-label { font-size: 0.85rem; color: var(--muted); }
+      .cs-grade {
+        font-size: 1.6rem;
+        font-weight: 800;
+        padding: 4px 14px;
+        border-radius: 10px;
+      }
+      .cs-s { color: var(--ok); }
+      .cs-a { color: var(--accent-3); }
+      .cs-b { color: var(--accent); }
+      .cs-c { color: var(--accent-2); }
+      .cs-d { color: var(--danger); }
+      .cs-grade.cs-s { background: color-mix(in srgb, var(--ok) 15%, transparent); }
+      .cs-grade.cs-a { background: color-mix(in srgb, var(--accent-3) 15%, transparent); }
+      .cs-grade.cs-b { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+      .cs-grade.cs-c { background: color-mix(in srgb, var(--accent-2) 15%, transparent); }
+      .cs-grade.cs-d { background: color-mix(in srgb, var(--danger) 15%, transparent); }
+      .cs-bars { display: flex; flex-direction: column; gap: 6px; }
+      .cs-bar-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.85rem;
+      }
+      .cs-bar-label { min-width: 100px; color: var(--sub); }
+      .cs-bar-track {
+        flex: 1;
+        height: 8px;
+        background: var(--border);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .cs-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        border-radius: 4px;
+        transition: width 0.3s ease;
+      }
+      .cs-bar-val { min-width: 28px; text-align: right; font-weight: 600; color: var(--sub); }
+
       .success-section {
         margin-top: 14px;
         text-align: center;

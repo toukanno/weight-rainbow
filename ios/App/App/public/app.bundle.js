@@ -3367,6 +3367,55 @@ function calcPredictionAccuracy(records) {
     rating
   };
 }
+function calcConsistencyScore(records, goalWeight) {
+  if (!records || records.length < 7) {
+    return { score: null, components: { recording: 0, stability: 0, momentum: 0 }, grade: "N/A" };
+  }
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const today = localDateStr();
+  const cutoff = /* @__PURE__ */ new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  const cutoffStr = localDateStr(cutoff);
+  const recent = sorted.filter((r) => r.dt >= cutoffStr && r.dt <= today);
+  const dateSet = new Set(recent.map((r) => r.dt));
+  const totalDays = Math.min(30, Math.max(
+    1,
+    Math.ceil((/* @__PURE__ */ new Date(today + "T00:00:00") - /* @__PURE__ */ new Date(cutoffStr + "T00:00:00")) / 864e5) + 1
+  ));
+  const recordingScore = Math.min(100, Math.round(dateSet.size / totalDays * 100));
+  let stabilityScore = 50;
+  if (recent.length >= 3) {
+    const weights = recent.map((r) => r.wt);
+    const mean = weights.reduce((s, w) => s + w, 0) / weights.length;
+    const variance = weights.reduce((s, w) => s + (w - mean) ** 2, 0) / weights.length;
+    const cv = mean > 0 ? Math.sqrt(variance) / mean : 0;
+    stabilityScore = Math.min(100, Math.max(0, Math.round((1 - cv / 0.03) * 100)));
+  }
+  let momentumScore = 50;
+  if (recent.length >= 2 && Number.isFinite(goalWeight) && goalWeight > 0) {
+    const first = recent[0].wt;
+    const last = recent[recent.length - 1].wt;
+    const needed = goalWeight - first;
+    const actual = last - first;
+    if (Math.abs(needed) > 0.1) {
+      const progress = actual / needed;
+      momentumScore = Math.min(100, Math.max(0, Math.round(progress * 100)));
+    } else {
+      momentumScore = 100;
+    }
+  }
+  const score = Math.round(recordingScore * 0.4 + stabilityScore * 0.3 + momentumScore * 0.3);
+  const grade = score >= 90 ? "S" : score >= 80 ? "A" : score >= 70 ? "B" : score >= 50 ? "C" : "D";
+  return {
+    score,
+    components: {
+      recording: recordingScore,
+      stability: stabilityScore,
+      momentum: momentumScore
+    },
+    grade
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -26144,6 +26193,7 @@ function render() {
             ${renderSuccessRate()}
             ${renderRecordingRate()}
             ${renderStreakCalendar()}
+            ${renderConsistencyScore()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -27728,6 +27778,31 @@ function renderPredictionAccuracy() {
         <div class="helper hint-small">${t("pred.recent")}</div>
         <div class="pa-header"><span>${""}</span><span>${t("pred.predicted")}</span><span></span><span>${t("pred.actual")}</span><span></span></div>
         ${recentRows}
+      </div>
+    </div>
+  `;
+}
+function renderConsistencyScore() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const data = calcConsistencyScore(state.records, goalWeight);
+  if (data.score === null) return "";
+  const gradeColors = { S: "cs-s", A: "cs-a", B: "cs-b", C: "cs-c", D: "cs-d" };
+  const gradeCls = gradeColors[data.grade] || "";
+  const bar = (label, value) => `<div class="cs-bar-row"><span class="cs-bar-label">${label}</span><div class="cs-bar-track"><div class="cs-bar-fill" style="width:${value}%"></div></div><span class="cs-bar-val">${value}</span></div>`;
+  return `
+    <div class="cs-section">
+      <div class="helper">${t("cscore.title")}</div>
+      <div class="cs-top">
+        <div class="cs-score-circle ${gradeCls}">
+          <span class="cs-score-num">${data.score}</span>
+          <span class="cs-score-label">/100</span>
+        </div>
+        <div class="cs-grade ${gradeCls}">${data.grade}</div>
+      </div>
+      <div class="cs-bars">
+        ${bar(t("cscore.recording"), data.components.recording)}
+        ${bar(t("cscore.stability"), data.components.stability)}
+        ${bar(t("cscore.momentum"), data.components.momentum)}
       </div>
     </div>
   `;
