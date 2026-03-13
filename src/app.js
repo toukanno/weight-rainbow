@@ -150,6 +150,7 @@ let statusKind = "ok";
 let showAllRecords = false;
 let quickWeight = 65.0;
 let rainbowVisible = false;
+let _rainbowDismissTimer = 0;
 let rainbowDetail = "";
 let summaryPeriod = "week";
 let chartPeriod = "all"; // "7", "30", "90", "all"
@@ -1078,7 +1079,8 @@ function render() {
     spawnConfetti();
     // Vibrate on supported devices for haptic feedback
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-    setTimeout(() => {
+    clearTimeout(_rainbowDismissTimer);
+    _rainbowDismissTimer = setTimeout(() => {
       const overlay = document.getElementById("rainbowOverlay");
       if (overlay) {
         overlay.classList.add("fade-out");
@@ -3567,13 +3569,14 @@ function handleCSVImport(e) {
       e.target.value = "";
       return;
     }
+    const prevRecords = [...state.records];
     let merged = [...state.records];
     for (const rec of records) {
       merged = upsertRecord(merged, rec);
     }
     merged = trimRecords(merged);
     state.records = merged;
-    if (!persist()) { setStatus(t("status.storageError"), "error"); e.target.value = ""; return; }
+    if (!persist()) { state.records = prevRecords; setStatus(t("status.storageError"), "error"); e.target.value = ""; return; }
     let msg = t("import.csv.success").replace("{count}", records.length);
     if (errors.length) {
       msg += " " + t("import.csv.errors").replace("{count}", errors.length);
@@ -3732,6 +3735,10 @@ function handleImportData(event) {
 
       if (!window.confirm(t("import.confirm").replace("{count}", validImportRecords.length))) return;
 
+      // Snapshot state before import so we can rollback on persist failure
+      const prevRecords = [...state.records];
+      const prevSettings = { ...state.settings };
+      const prevProfile = { ...state.profile };
       const beforeCount = state.records.length;
       // Merge records by date (imported records fill gaps, don't overwrite)
       for (const record of validImportRecords) {
@@ -3756,6 +3763,10 @@ function handleImportData(event) {
       }
 
       if (!persist()) {
+        // Rollback in-memory state to match localStorage
+        state.records = prevRecords;
+        state.settings = prevSettings;
+        state.profile = prevProfile;
         setStatus(t("status.storageError"), "error");
         return;
       }
@@ -4301,8 +4312,7 @@ function googleGetToken() {
 
 async function googleBackup() {
   if (!GOOGLE_CLIENT_ID) { setStatus(t("google.notConfigured"), "error"); return; }
-  const btn = app.querySelector('[data-action="google-backup"]');
-  btn?.classList.add("loading");
+  app.querySelector('[data-action="google-backup"]')?.classList.add("loading");
   try {
     const tk = await googleGetToken();
     const data = {
@@ -4346,14 +4356,13 @@ async function googleBackup() {
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
   } finally {
-    btn?.classList.remove("loading");
+    app.querySelector('[data-action="google-backup"]')?.classList.remove("loading");
   }
 }
 
 async function googleRestore() {
   if (!GOOGLE_CLIENT_ID) { setStatus(t("google.notConfigured"), "error"); return; }
-  const btn = app.querySelector('[data-action="google-restore"]');
-  btn?.classList.add("loading");
+  app.querySelector('[data-action="google-restore"]')?.classList.add("loading");
   try {
     const tk = await googleGetToken();
     const sr = await fetchWithTimeout(
@@ -4392,7 +4401,7 @@ async function googleRestore() {
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
   } finally {
-    btn?.classList.remove("loading");
+    app.querySelector('[data-action="google-restore"]')?.classList.remove("loading");
   }
 }
 

@@ -25288,6 +25288,7 @@ var statusKind = "ok";
 var showAllRecords = false;
 var quickWeight = 65;
 var rainbowVisible = false;
+var _rainbowDismissTimer = 0;
 var rainbowDetail = "";
 var summaryPeriod = "week";
 var chartPeriod = "all";
@@ -26166,7 +26167,8 @@ function render() {
     if (rainbowVisible) {
       spawnConfetti();
       if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-      setTimeout(() => {
+      clearTimeout(_rainbowDismissTimer);
+      _rainbowDismissTimer = setTimeout(() => {
         const overlay = document.getElementById("rainbowOverlay");
         if (overlay) {
           overlay.classList.add("fade-out");
@@ -28476,6 +28478,7 @@ function handleCSVImport(e) {
       e.target.value = "";
       return;
     }
+    const prevRecords = [...state.records];
     let merged = [...state.records];
     for (const rec of records) {
       merged = upsertRecord(merged, rec);
@@ -28483,6 +28486,7 @@ function handleCSVImport(e) {
     merged = trimRecords(merged);
     state.records = merged;
     if (!persist()) {
+      state.records = prevRecords;
       setStatus(t("status.storageError"), "error");
       e.target.value = "";
       return;
@@ -28640,6 +28644,9 @@ function handleImportData(event) {
         return;
       }
       if (!window.confirm(t("import.confirm").replace("{count}", validImportRecords.length))) return;
+      const prevRecords = [...state.records];
+      const prevSettings = { ...state.settings };
+      const prevProfile = { ...state.profile };
       const beforeCount = state.records.length;
       for (const record of validImportRecords) {
         state.records = upsertRecord(state.records, record);
@@ -28658,6 +28665,9 @@ function handleImportData(event) {
         state.profile = sanitizeProfile({ ...createDefaultProfile(), ...data.profile });
       }
       if (!persist()) {
+        state.records = prevRecords;
+        state.settings = prevSettings;
+        state.profile = prevProfile;
         setStatus(t("status.storageError"), "error");
         return;
       }
@@ -29144,8 +29154,7 @@ async function googleBackup() {
     setStatus(t("google.notConfigured"), "error");
     return;
   }
-  const btn = app.querySelector('[data-action="google-backup"]');
-  btn?.classList.add("loading");
+  app.querySelector('[data-action="google-backup"]')?.classList.add("loading");
   try {
     const tk = await googleGetToken();
     const data = {
@@ -29200,7 +29209,7 @@ ${bd}\r
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
   } finally {
-    btn?.classList.remove("loading");
+    app.querySelector('[data-action="google-backup"]')?.classList.remove("loading");
   }
 }
 async function googleRestore() {
@@ -29208,8 +29217,7 @@ async function googleRestore() {
     setStatus(t("google.notConfigured"), "error");
     return;
   }
-  const btn = app.querySelector('[data-action="google-restore"]');
-  btn?.classList.add("loading");
+  app.querySelector('[data-action="google-restore"]')?.classList.add("loading");
   try {
     const tk = await googleGetToken();
     const sr = await fetchWithTimeout(
@@ -29260,7 +29268,7 @@ async function googleRestore() {
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
   } finally {
-    btn?.classList.remove("loading");
+    app.querySelector('[data-action="google-restore"]')?.classList.remove("loading");
   }
 }
 if (GOOGLE_CLIENT_ID) {
