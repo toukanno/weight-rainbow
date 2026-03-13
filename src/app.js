@@ -109,6 +109,7 @@ let showMonthlyStats = false;
 let recordSearchQuery = "";
 let recordDateFrom = "";
 let recordDateTo = "";
+let searchDebounceTimer = null;
 
 // Initialize quick weight from last record
 {
@@ -323,6 +324,10 @@ function render() {
     ? Math.round((previewWeightResult.weight - lastRecord.wt) * 10) / 10
     : null;
   const previewLarge = previewDiff !== null && Math.abs(previewDiff) >= 2;
+
+  // Duplicate date warning
+  const selectedDate = state.form.date || todayLocal();
+  const existingRecord = state.records.find((r) => r.dt === selectedDate);
 
   app.innerHTML = `
     <main class="app-shell">
@@ -554,6 +559,10 @@ function render() {
               ${previewDiff !== null ? `<div class="entry-preview">
                 <span class="entry-preview-diff ${previewDiff < 0 ? "negative" : previewDiff > 0 ? "positive" : "zero"}">${previewDiff > 0 ? "+" : ""}${previewDiff.toFixed(1)}kg ${t("entry.preview.vsLast")}</span>
                 ${previewLarge ? `<span class="entry-preview-warn">${t("entry.preview.large")}</span>` : ""}
+              </div>` : ""}
+              ${existingRecord ? `<div class="duplicate-warn">
+                <span>${t("entry.duplicate.warn")} ${existingRecord.wt.toFixed(1)}kg</span>
+                <span class="hint-small">${t("entry.duplicate.overwrite")}</span>
               </div>` : ""}
               <div class="row">
                 <button type="button" class="btn" data-action="save-record">${t("entry.save")}</button>
@@ -1137,10 +1146,10 @@ function renderBMIDistribution() {
   const dist = calcBMIDistribution(state.records);
   if (!dist) return "";
   const zones = [
-    { key: "under", color: "var(--info, #3b82f6)" },
+    { key: "under", color: "var(--accent-3, #3b82f6)" },
     { key: "normal", color: "var(--ok, #10b981)" },
     { key: "over", color: "var(--warn, #f59e0b)" },
-    { key: "obese", color: "var(--danger, #ef4444)" },
+    { key: "obese", color: "var(--error, #ef4444)" },
   ];
   const bars = zones
     .filter((z) => dist[z.key].pct > 0)
@@ -1315,10 +1324,14 @@ function bindEvents() {
   });
   app.querySelector("#recordSearch")?.addEventListener("input", (e) => {
     recordSearchQuery = e.target.value;
-    render();
-    // Restore focus and cursor position after render
-    const input = document.getElementById("recordSearch");
-    if (input) { input.focus(); input.selectionStart = input.selectionEnd = input.value.length; }
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      const pos = e.target.selectionStart;
+      render();
+      // Restore focus and cursor position after render
+      const input = document.getElementById("recordSearch");
+      if (input) { input.focus(); input.selectionStart = input.selectionEnd = pos; }
+    }, 150);
   });
   app.querySelector("#dateRangeFrom")?.addEventListener("change", (e) => {
     recordDateFrom = e.target.value;
@@ -2797,8 +2810,11 @@ function handlePhotoZoom() {
   if (!imagePreviewUrl) return;
   const ov = document.createElement("div");
   ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
+  ov.setAttribute("role", "dialog");
+  ov.setAttribute("aria-label", t("photo.zoomHint"));
   const im = document.createElement("img");
   im.src = imagePreviewUrl;
+  im.alt = t("entry.photoPreview");
   im.style.cssText = "max-width:95vw;max-height:95vh;object-fit:contain;border-radius:12px";
   ov.appendChild(im);
   const dismiss = () => { ov.remove(); document.removeEventListener("keydown", onKey); };

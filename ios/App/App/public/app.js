@@ -1297,52 +1297,63 @@ function filterRecordsByDateRange(records, fromDate, toDate) {
 }
 function parseCSVImport(csvText) {
   if (!csvText || !csvText.trim()) return { records: [], errors: [] };
-  const lines = csvText.trim().split(/\r?\n/);
-  if (lines.length < 2) return { records: [], errors: ["No data rows found"] };
+  const text = csvText.trim();
+  const allRows = [];
+  let fields = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') {
+        field += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      fields.push(field);
+      field = "";
+    } else if (ch === "\r" && text[i + 1] === "\n") {
+      fields.push(field);
+      field = "";
+      allRows.push(fields);
+      fields = [];
+      i++;
+    } else if (ch === "\n") {
+      fields.push(field);
+      field = "";
+      allRows.push(fields);
+      fields = [];
+    } else {
+      field += ch;
+    }
+  }
+  fields.push(field);
+  allRows.push(fields);
+  if (allRows.length < 2) return { records: [], errors: ["No data rows found"] };
   const records = [];
   const errors = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    const fields = [];
-    let current = "";
-    let inQuotes = false;
-    for (let j = 0; j < line.length; j++) {
-      const ch = line[j];
-      if (inQuotes) {
-        if (ch === '"' && line[j + 1] === '"') {
-          current += '"';
-          j++;
-        } else if (ch === '"') {
-          inQuotes = false;
-        } else {
-          current += ch;
-        }
-      } else {
-        if (ch === '"') {
-          inQuotes = true;
-        } else if (ch === ",") {
-          fields.push(current);
-          current = "";
-        } else {
-          current += ch;
-        }
-      }
-    }
-    fields.push(current);
-    const dt = fields[0]?.trim();
-    const wt = Number(fields[1]?.trim());
+  for (let i = 1; i < allRows.length; i++) {
+    const row = allRows[i];
+    if (row.length === 1 && !row[0].trim()) continue;
+    const dt = row[0]?.trim();
+    const wt = Number(row[1]?.trim());
     if (!dt || !/^\d{4}-\d{2}-\d{2}$/.test(dt)) {
-      errors.push(`Row ${i + 1}: invalid date "${fields[0]}"`);
+      errors.push(`Row ${i + 1}: invalid date "${row[0]}"`);
       continue;
     }
     if (!Number.isFinite(wt) || wt < WEIGHT_RANGE.min || wt > WEIGHT_RANGE.max) {
-      errors.push(`Row ${i + 1}: invalid weight "${fields[1]}"`);
+      errors.push(`Row ${i + 1}: invalid weight "${row[1]}"`);
       continue;
     }
-    const bmi = fields[2]?.trim() ? Number(fields[2]) : null;
-    const bf = fields[3]?.trim() ? Number(fields[3]) : null;
-    const note = fields[5]?.trim() || "";
+    const bmi = row[2]?.trim() ? Number(row[2]) : null;
+    const bf = row[3]?.trim() ? Number(row[3]) : null;
+    const note = row[5]?.trim() || "";
     records.push({ dt, wt, bmi: Number.isFinite(bmi) ? bmi : null, bf: Number.isFinite(bf) ? bf : null, source: "import", note: note.slice(0, 100), createdAt: (/* @__PURE__ */ new Date()).toISOString() });
   }
   return { records, errors };
@@ -1480,6 +1491,30 @@ function calcWeightPercentile(records) {
     total: sorted.length
   };
 }
+function calcRecordingTimeStats(records) {
+  const withTime = records.filter((r) => r.createdAt);
+  if (withTime.length < 3) return null;
+  const hours = withTime.map((r) => new Date(r.createdAt).getHours());
+  const buckets = { morning: 0, afternoon: 0, evening: 0, night: 0 };
+  for (const h of hours) {
+    if (h >= 5 && h < 12) buckets.morning++;
+    else if (h >= 12 && h < 17) buckets.afternoon++;
+    else if (h >= 17 && h < 22) buckets.evening++;
+    else buckets.night++;
+  }
+  const total = withTime.length;
+  const avgHour = Math.round(hours.reduce((s, h) => s + h, 0) / total);
+  const most = Object.entries(buckets).sort((a, b) => b[1] - a[1])[0];
+  return {
+    morning: { count: buckets.morning, pct: Math.round(buckets.morning / total * 100) },
+    afternoon: { count: buckets.afternoon, pct: Math.round(buckets.afternoon / total * 100) },
+    evening: { count: buckets.evening, pct: Math.round(buckets.evening / total * 100) },
+    night: { count: buckets.night, pct: Math.round(buckets.night / total * 100) },
+    avgHour,
+    mostCommon: most[0],
+    total
+  };
+}
 function calcMovingAverages(records, shortWindow = 7, longWindow = 30) {
   if (records.length < longWindow) return null;
   const weights = records.map((r) => r.wt);
@@ -1501,6 +1536,31 @@ function calcMovingAverages(records, shortWindow = 7, longWindow = 30) {
     signal: diff < -0.3 ? "below" : diff > 0.3 ? "above" : "aligned",
     crossing: prevSignal
   };
+}
+function calcConsistencyStreak(records, tolerance = 0.5) {
+  if (records.length < 2) return null;
+  const latest = records[records.length - 1].wt;
+  let streak = 1;
+  for (let i = records.length - 2; i >= 0; i--) {
+    if (Math.abs(records[i].wt - latest) <= tolerance) streak++;
+    else break;
+  }
+  let best = 1;
+  let current = 1;
+  for (let i = 1; i < records.length; i++) {
+    if (Math.abs(records[i].wt - records[i - 1].wt) <= tolerance) {
+      current++;
+      if (current > best) best = current;
+    } else {
+      current = 1;
+    }
+  }
+  return { streak, best, tolerance, latest };
+}
+function csvEscape(val) {
+  const str = String(val ?? "");
+  if (/[,"\r\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
+  return str;
 }
 
 // src/i18n.js
@@ -1700,6 +1760,19 @@ var translations = {
     "ma.crossUp": "\u{1F4C8} \u5897\u52A0\u30B7\u30B0\u30CA\u30EB: \u77ED\u671F\u5E73\u5747\u304C\u9577\u671F\u5E73\u5747\u3092\u4E0A\u56DE\u308A\u307E\u3057\u305F",
     "goal.milestone": "{pct}% \u9054\u6210",
     "goal.milestoneTarget": "\u76EE\u6A19: {weight}kg",
+    "timeStats.title": "\u8A18\u9332\u6642\u9593\u5E2F",
+    "timeStats.morning": "\u671D (5-12\u6642)",
+    "timeStats.afternoon": "\u663C (12-17\u6642)",
+    "timeStats.evening": "\u591C (17-22\u6642)",
+    "timeStats.night": "\u6DF1\u591C (22-5\u6642)",
+    "timeStats.avg": "\u5E73\u5747\u8A18\u9332\u6642\u523B: {hour}\u6642",
+    "timeStats.most": "\u6700\u3082\u591A\u3044\u6642\u9593\u5E2F: {period}",
+    "consistency.title": "\u4F53\u91CD\u5B89\u5B9A\u30B9\u30C8\u30EA\u30FC\u30AF",
+    "consistency.current": "\u73FE\u5728: {days}\u56DE\u9023\u7D9A (\xB1{tol}kg\u4EE5\u5185)",
+    "consistency.best": "\u904E\u53BB\u6700\u9577: {days}\u56DE\u9023\u7D9A",
+    "consistency.great": "\u5B89\u5B9A\u3092\u7DAD\u6301\u3057\u3066\u3044\u307E\u3059\uFF01",
+    "entry.duplicate.warn": "\u26A0\uFE0F \u3053\u306E\u65E5\u4ED8\u306B\u306F\u65E2\u306B\u8A18\u9332\u304C\u3042\u308A\u307E\u3059:",
+    "entry.duplicate.overwrite": "\u4FDD\u5B58\u3059\u308B\u3068\u4E0A\u66F8\u304D\u3055\u308C\u307E\u3059",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
     "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01\uFF08-{diff}kg\uFF09",
     "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
@@ -2086,6 +2159,19 @@ var translations = {
     "ma.crossUp": "\u{1F4C8} Increase signal: short-term crossed above long-term",
     "goal.milestone": "{pct}% reached",
     "goal.milestoneTarget": "Target: {weight}kg",
+    "timeStats.title": "Recording Time",
+    "timeStats.morning": "Morning (5-12)",
+    "timeStats.afternoon": "Afternoon (12-17)",
+    "timeStats.evening": "Evening (17-22)",
+    "timeStats.night": "Night (22-5)",
+    "timeStats.avg": "Average recording time: {hour}:00",
+    "timeStats.most": "Most common: {period}",
+    "consistency.title": "Weight Consistency Streak",
+    "consistency.current": "Current: {days} in a row (within \xB1{tol}kg)",
+    "consistency.best": "Personal best: {days} in a row",
+    "consistency.great": "Maintaining consistency!",
+    "entry.duplicate.warn": "\u26A0\uFE0F A record already exists for this date:",
+    "entry.duplicate.overwrite": "Saving will overwrite the existing record",
     "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
@@ -22831,6 +22917,7 @@ var showMonthlyStats = false;
 var recordSearchQuery = "";
 var recordDateFrom = "";
 var recordDateTo = "";
+var searchDebounceTimer = null;
 {
   const lastRecord = state.records[state.records.length - 1];
   if (lastRecord) quickWeight = lastRecord.wt;
@@ -23021,6 +23108,8 @@ function render() {
     const lastRecord = state.records[state.records.length - 1];
     const previewDiff = previewWeightResult.valid && lastRecord ? Math.round((previewWeightResult.weight - lastRecord.wt) * 10) / 10 : null;
     const previewLarge = previewDiff !== null && Math.abs(previewDiff) >= 2;
+    const selectedDate = state.form.date || todayLocal();
+    const existingRecord = state.records.find((r) => r.dt === selectedDate);
     app.innerHTML = `
     <main class="app-shell">
       <section class="hero">
@@ -23241,6 +23330,10 @@ function render() {
                 <span class="entry-preview-diff ${previewDiff < 0 ? "negative" : previewDiff > 0 ? "positive" : "zero"}">${previewDiff > 0 ? "+" : ""}${previewDiff.toFixed(1)}kg ${t("entry.preview.vsLast")}</span>
                 ${previewLarge ? `<span class="entry-preview-warn">${t("entry.preview.large")}</span>` : ""}
               </div>` : ""}
+              ${existingRecord ? `<div class="duplicate-warn">
+                <span>${t("entry.duplicate.warn")} ${existingRecord.wt.toFixed(1)}kg</span>
+                <span class="hint-small">${t("entry.duplicate.overwrite")}</span>
+              </div>` : ""}
               <div class="row">
                 <button type="button" class="btn" data-action="save-record">${t("entry.save")}</button>
                 <div>
@@ -23317,6 +23410,7 @@ function render() {
             </div>` : ""}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
+            ${renderConsistencyStreak()}
             ${renderBMIDistribution()}
             ${renderWeightPercentile()}
             ${renderMovingAverages()}
@@ -23372,6 +23466,7 @@ function render() {
               </div>`}
             </div>
             ${renderSourceBreakdown()}
+            ${renderRecordingTime()}
             <div class="export-grid">
               <button type="button" class="btn secondary" data-action="export-excel">\u{1F4CA} ${t("export.excel")}</button>
               <button type="button" class="btn secondary" data-action="export-csv">\u{1F4C4} ${t("export.csv")}</button>
@@ -23742,6 +23837,24 @@ function renderSourceBreakdown() {
     </div>
   `;
 }
+function renderRecordingTime() {
+  const timeStats = calcRecordingTimeStats(state.records);
+  if (!timeStats) return "";
+  const periods = ["morning", "afternoon", "evening", "night"];
+  const icons = { morning: "\u{1F305}", afternoon: "\u2600\uFE0F", evening: "\u{1F306}", night: "\u{1F319}" };
+  return `
+    <div class="time-stats-section">
+      <div class="helper">${t("timeStats.title")}</div>
+      <div class="time-stats-bar">
+        ${periods.filter((p) => timeStats[p].pct > 0).map((p) => `<div class="time-stats-segment time-${p}" style="width:${timeStats[p].pct}%" title="${t("timeStats." + p)}: ${timeStats[p].count} (${timeStats[p].pct}%)"></div>`).join("")}
+      </div>
+      <div class="time-stats-legend">
+        ${periods.map((p) => `<span class="time-stats-item">${icons[p]} ${t("timeStats." + p)} ${timeStats[p].pct}%</span>`).join("")}
+      </div>
+      <div class="helper hint-small" style="margin-top:4px;">${t("timeStats.most").replace("{period}", t("timeStats." + timeStats.mostCommon))}</div>
+    </div>
+  `;
+}
 function renderStability() {
   const stability = calcWeightStability(state.records);
   if (!stability) return "";
@@ -23762,14 +23875,28 @@ function renderStability() {
     </div>
   `;
 }
+function renderConsistencyStreak() {
+  const cs = calcConsistencyStreak(state.records);
+  if (!cs || cs.streak < 2) return "";
+  return `
+    <div class="consistency-section">
+      <div class="helper">${t("consistency.title")}</div>
+      <div class="consistency-display">
+        <span class="consistency-badge${cs.streak >= 5 ? " great" : ""}">${cs.streak >= 5 ? "\u{1F3AF}" : "\u{1F4CA}"} ${t("consistency.current").replace("{days}", cs.streak).replace("{tol}", cs.tolerance)}</span>
+        ${cs.best > cs.streak ? `<span class="helper hint-small">${t("consistency.best").replace("{days}", cs.best)}</span>` : ""}
+        ${cs.streak >= 5 ? `<span class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("consistency.great")}</span>` : ""}
+      </div>
+    </div>
+  `;
+}
 function renderBMIDistribution() {
   const dist = calcBMIDistribution(state.records);
   if (!dist) return "";
   const zones = [
-    { key: "under", color: "var(--info, #3b82f6)" },
+    { key: "under", color: "var(--accent-3, #3b82f6)" },
     { key: "normal", color: "var(--ok, #10b981)" },
     { key: "over", color: "var(--warn, #f59e0b)" },
-    { key: "obese", color: "var(--danger, #ef4444)" }
+    { key: "obese", color: "var(--error, #ef4444)" }
   ];
   const bars = zones.filter((z) => dist[z.key].pct > 0).map((z) => `<div class="bmi-dist-segment" style="width:${dist[z.key].pct}%;background:${z.color}" title="${t("bmiDist." + z.key)}: ${dist[z.key].count} (${dist[z.key].pct}%)"></div>`).join("");
   const legend = zones.map((z) => `<span class="bmi-dist-legend-item"><span class="bmi-dist-dot" style="background:${z.color}"></span>${t("bmiDist." + z.key)} ${dist[z.key].pct}%</span>`).join("");
@@ -23932,12 +24059,16 @@ function bindEvents() {
   });
   app.querySelector("#recordSearch")?.addEventListener("input", (e) => {
     recordSearchQuery = e.target.value;
-    render();
-    const input = document.getElementById("recordSearch");
-    if (input) {
-      input.focus();
-      input.selectionStart = input.selectionEnd = input.value.length;
-    }
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      const pos = e.target.selectionStart;
+      render();
+      const input = document.getElementById("recordSearch");
+      if (input) {
+        input.focus();
+        input.selectionStart = input.selectionEnd = pos;
+      }
+    }, 150);
   });
   app.querySelector("#dateRangeFrom")?.addEventListener("change", (e) => {
     recordDateFrom = e.target.value;
@@ -24505,11 +24636,6 @@ function exportExcel() {
     setStatus(t("export.error"), "error");
   }
 }
-function csvEscape(value) {
-  const str = String(value ?? "");
-  if (/[,"\r\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
-  return str;
-}
 function exportCSV() {
   if (!state.records.length) {
     setStatus(t("records.empty"), "error");
@@ -24607,6 +24733,10 @@ async function shareChart() {
   if (!canvas) return;
   try {
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) {
+      setStatus(t("share.error"), "error");
+      return;
+    }
     if (navigator.share && navigator.canShare) {
       const file = new File([blob], "weight-chart.png", { type: "image/png" });
       const shareData = { files: [file] };
@@ -24756,6 +24886,7 @@ function drawChart() {
   context.scale(dpr, dpr);
   const width = rect.width;
   const height = rect.height;
+  if (width < 1 || height < 1) return;
   const cs = getComputedStyle(document.body);
   const isMidnight = state.settings.theme === "midnight";
   let chartRecords = state.records;
@@ -24784,9 +24915,9 @@ function drawChart() {
   const toX = (index) => padX + index / Math.max(chartRecords.length - 1, 1) * (width - padX * 2);
   const toY = (weight) => height - padY - (weight - min) / range * (height - padY * 2);
   const gradient = context.createLinearGradient(0, 0, width, height);
-  gradient.addColorStop(0, cs.getPropertyValue("--accent"));
-  gradient.addColorStop(0.5, cs.getPropertyValue("--accent-2"));
-  gradient.addColorStop(1, cs.getPropertyValue("--accent-3"));
+  gradient.addColorStop(0, cs.getPropertyValue("--accent").trim() || "#ff5f6d");
+  gradient.addColorStop(0.5, cs.getPropertyValue("--accent-2").trim() || "#7c3aed");
+  gradient.addColorStop(1, cs.getPropertyValue("--accent-3").trim() || "#0ea5e9");
   context.strokeStyle = isMidnight ? "rgba(139,146,176,0.14)" : "rgba(120,130,180,0.18)";
   context.lineWidth = 1;
   for (let index = 0; index < 5; index += 1) {
@@ -24840,7 +24971,7 @@ function drawChart() {
   });
   context.stroke();
   const fillGradient = context.createLinearGradient(0, 0, 0, height);
-  fillGradient.addColorStop(0, cs.getPropertyValue("--accent").trim() + "30");
+  fillGradient.addColorStop(0, (cs.getPropertyValue("--accent").trim() || "#ff5f6d") + "30");
   fillGradient.addColorStop(1, "transparent");
   context.fillStyle = fillGradient;
   context.beginPath();
@@ -25285,8 +25416,11 @@ function handlePhotoZoom() {
   if (!imagePreviewUrl) return;
   const ov = document.createElement("div");
   ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
+  ov.setAttribute("role", "dialog");
+  ov.setAttribute("aria-label", t("photo.zoomHint"));
   const im = document.createElement("img");
   im.src = imagePreviewUrl;
+  im.alt = t("entry.photoPreview");
   im.style.cssText = "max-width:95vw;max-height:95vh;object-fit:contain;border-radius:12px";
   ov.appendChild(im);
   const dismiss = () => {
