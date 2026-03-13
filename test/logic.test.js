@@ -8300,3 +8300,65 @@ describe("calcTrendStreak", () => {
     expect(result.endDate).toBe("2025-01-03");
   });
 });
+
+describe("calcBMITrend", () => {
+  it("returns empty for fewer than 2 records", () => {
+    expect(calcBMITrend([]).current).toBeNull();
+    expect(calcBMITrend(null).current).toBeNull();
+    expect(calcBMITrend([{ dt: "2025-01-01", wt: 70, bmi: 22.5 }]).current).toBeNull();
+  });
+
+  it("returns trend data for records with BMI", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bmi: 24.2 },
+      { dt: "2025-01-02", wt: 69, bmi: 23.9 },
+      { dt: "2025-01-03", wt: 68, bmi: 23.5 },
+    ];
+    const result = calcBMITrend(records);
+    expect(result.current).toBe(23.5);
+    expect(result.direction).toBe("down");
+    expect(result.change).toBeLessThan(0);
+    expect(result.points.length).toBe(3);
+  });
+
+  it("skips records without BMI data", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bmi: 24.2 },
+      { dt: "2025-01-02", wt: 69 }, // no BMI
+      { dt: "2025-01-03", wt: 68, bmi: 23.5 },
+    ];
+    const result = calcBMITrend(records);
+    expect(result.points.length).toBe(2);
+  });
+
+  it("returns min and max BMI", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bmi: 22.0 },
+      { dt: "2025-01-02", wt: 75, bmi: 25.0 },
+      { dt: "2025-01-03", wt: 72, bmi: 23.5 },
+    ];
+    const result = calcBMITrend(records);
+    expect(result.min).toBe(22.0);
+    expect(result.max).toBe(25.0);
+  });
+
+  it("limits points to last 30", () => {
+    const records = Array.from({ length: 50 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i * 0.1,
+      bmi: 22 + i * 0.05,
+    }));
+    const result = calcBMITrend(records);
+    expect(result.points.length).toBeLessThanOrEqual(30);
+  });
+
+  it("detects upward trend", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 65, bmi: 21.0 },
+      { dt: "2025-01-02", wt: 70, bmi: 23.0 },
+    ];
+    const result = calcBMITrend(records);
+    expect(result.direction).toBe("up");
+    expect(result.change).toBeGreaterThan(0);
+  });
+});

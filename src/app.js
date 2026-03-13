@@ -4803,6 +4803,14 @@ window.addEventListener("keydown", (event) => {
     document.getElementById("rainbowOverlay")?.remove();
   }
 
+  // Ctrl/Cmd+Z to undo last save
+  if ((event.metaKey || event.ctrlKey) && event.key === "z" && !event.shiftKey) {
+    if (lastUndoState) {
+      event.preventDefault();
+      undoLastSave();
+    }
+  }
+
   // Ctrl/Cmd+K to focus search
   if ((event.metaKey || event.ctrlKey) && event.key === "k") {
     event.preventDefault();

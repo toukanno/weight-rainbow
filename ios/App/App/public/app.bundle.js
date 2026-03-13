@@ -30089,6 +30089,12 @@ window.addEventListener("keydown", (event) => {
     rainbowVisible = false;
     document.getElementById("rainbowOverlay")?.remove();
   }
+  if ((event.metaKey || event.ctrlKey) && event.key === "z" && !event.shiftKey) {
+    if (lastUndoState) {
+      event.preventDefault();
+      undoLastSave();
+    }
+  }
   if ((event.metaKey || event.ctrlKey) && event.key === "k") {
     event.preventDefault();
     const searchInput = document.getElementById("recordSearch");
