@@ -784,6 +784,14 @@ var WEIGHT_RANGE = { min: 20, max: 300 };
 var HEIGHT_RANGE = { min: 80, max: 250 };
 var AGE_RANGE = { min: 1, max: 120 };
 var BODY_FAT_RANGE = { min: 1, max: 70 };
+function localDateStr(d = /* @__PURE__ */ new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function daysAgoStr(days2) {
+  const d = /* @__PURE__ */ new Date();
+  d.setDate(d.getDate() - days2);
+  return localDateStr(d);
+}
 function normalizeNumericInput(value) {
   return String(value ?? "").trim().replace(/[０-９]/g, (char) => String(char.charCodeAt(0) - 65296)).replace(/[．，]/g, ".").replace(/,/g, ".").replace(/\s+/g, "");
 }
@@ -955,7 +963,7 @@ function calcWeightComparison(records) {
   const latest = records[records.length - 1];
   const result = {};
   const findRecordNearDate = (targetDate) => {
-    const target = targetDate.toISOString().slice(0, 10);
+    const target = localDateStr(targetDate);
     let closest = null;
     for (const r of records) {
       if (r.dt <= target) closest = r;
@@ -979,8 +987,10 @@ function calcWeightComparison(records) {
 }
 function calcDailyDiff(records) {
   if (records.length < 2) return null;
-  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  const today = localDateStr();
+  const yd = /* @__PURE__ */ new Date();
+  yd.setDate(yd.getDate() - 1);
+  const yesterday = localDateStr(yd);
   const todayRecord = records.find((r) => r.dt === today);
   const yesterdayRecord = records.find((r) => r.dt === yesterday);
   if (!todayRecord || !yesterdayRecord) return null;
@@ -1006,7 +1016,7 @@ function calcStreak(records) {
   for (let i = 0; i < 365; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = localDateStr(d);
     if (dates.has(dateStr)) {
       streak++;
     } else {
@@ -1018,7 +1028,7 @@ function calcStreak(records) {
 }
 function calcWeightTrend(records, days2 = 7) {
   if (records.length < 2) return null;
-  const cutoff = new Date(Date.now() - days2 * 864e5).toISOString().slice(0, 10);
+  const cutoff = daysAgoStr(days2);
   const recent = records.filter((r) => r.dt >= cutoff);
   if (recent.length < 2) return null;
   const first = recent[0].wt;
@@ -1032,7 +1042,7 @@ function calcGoalPrediction(records, goalWeight) {
   if (!records.length || !Number.isFinite(goalWeight)) return null;
   const latestWeight = records[records.length - 1].wt;
   if (latestWeight <= goalWeight) return { achieved: true, days: 0 };
-  const cutoff = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
+  const cutoff = daysAgoStr(14);
   const recent = records.filter((r) => r.dt >= cutoff);
   if (recent.length < 2) return { achieved: false, insufficient: true };
   const firstRecent = recent[0].wt;
@@ -1042,11 +1052,13 @@ function calcGoalPrediction(records, goalWeight) {
   if (dailyChange >= 0) return { achieved: false, noTrend: true };
   const remaining = latestWeight - goalWeight;
   const days2 = Math.ceil(remaining / Math.abs(dailyChange));
-  const predictedDate = new Date(Date.now() + days2 * 864e5).toISOString().slice(0, 10);
+  const pd = /* @__PURE__ */ new Date();
+  pd.setDate(pd.getDate() + days2);
+  const predictedDate = localDateStr(pd);
   return { achieved: false, days: days2, predictedDate };
 }
 function calcPeriodSummary(records, days2) {
-  const cutoff = new Date(Date.now() - days2 * 864e5).toISOString().slice(0, 10);
+  const cutoff = daysAgoStr(days2);
   const filtered = records.filter((r) => r.dt >= cutoff);
   if (!filtered.length) return null;
   const weights = filtered.map((r) => r.wt);
@@ -1164,8 +1176,8 @@ function calcInsight(records) {
   thisWeekStart.setDate(now.getDate() - now.getDay());
   const lastWeekStart = new Date(thisWeekStart);
   lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-  const thisWeekStr = thisWeekStart.toISOString().slice(0, 10);
-  const lastWeekStr = lastWeekStart.toISOString().slice(0, 10);
+  const thisWeekStr = localDateStr(thisWeekStart);
+  const lastWeekStr = localDateStr(lastWeekStart);
   const thisWeek = records.filter((r) => r.dt >= thisWeekStr);
   const lastWeek = records.filter((r) => r.dt >= lastWeekStr && r.dt < thisWeekStr);
   let weekComparison = null;
@@ -1223,7 +1235,7 @@ function calcSourceBreakdown(records) {
 }
 function calcWeightStability(records, days2 = 7) {
   if (records.length < 3) return null;
-  const cutoff = new Date(Date.now() - days2 * 864e5).toISOString().slice(0, 10);
+  const cutoff = daysAgoStr(days2);
   const recent = records.filter((r) => r.dt >= cutoff);
   if (recent.length < 3) return null;
   const weights = recent.map((r) => r.wt);
@@ -1269,6 +1281,172 @@ function filterRecordsByDateRange(records, fromDate, toDate) {
     if (toDate && r.dt > toDate) return false;
     return true;
   });
+}
+function parseCSVImport(csvText) {
+  if (!csvText || !csvText.trim()) return { records: [], errors: [] };
+  const lines = csvText.trim().split(/\r?\n/);
+  if (lines.length < 2) return { records: [], errors: ["No data rows found"] };
+  const records = [];
+  const errors = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const fields = [];
+    let current = "";
+    let inQuotes = false;
+    for (let j = 0; j < line.length; j++) {
+      const ch = line[j];
+      if (inQuotes) {
+        if (ch === '"' && line[j + 1] === '"') {
+          current += '"';
+          j++;
+        } else if (ch === '"') {
+          inQuotes = false;
+        } else {
+          current += ch;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ",") {
+          fields.push(current);
+          current = "";
+        } else {
+          current += ch;
+        }
+      }
+    }
+    fields.push(current);
+    const dt = fields[0]?.trim();
+    const wt = Number(fields[1]?.trim());
+    if (!dt || !/^\d{4}-\d{2}-\d{2}$/.test(dt)) {
+      errors.push(`Row ${i + 1}: invalid date "${fields[0]}"`);
+      continue;
+    }
+    if (!Number.isFinite(wt) || wt < WEIGHT_RANGE.min || wt > WEIGHT_RANGE.max) {
+      errors.push(`Row ${i + 1}: invalid weight "${fields[1]}"`);
+      continue;
+    }
+    const bmi = fields[2]?.trim() ? Number(fields[2]) : null;
+    const bf = fields[3]?.trim() ? Number(fields[3]) : null;
+    const note = fields[5]?.trim() || "";
+    records.push({ dt, wt, bmi: Number.isFinite(bmi) ? bmi : null, bf: Number.isFinite(bf) ? bf : null, source: "import", note: note.slice(0, 100), createdAt: (/* @__PURE__ */ new Date()).toISOString() });
+  }
+  return { records, errors };
+}
+function calcBodyFatStats(records) {
+  const withBF = records.filter((r) => r.bf != null && Number.isFinite(Number(r.bf)));
+  if (withBF.length < 2) return null;
+  const values = withBF.map((r) => Number(r.bf));
+  const latest = values[values.length - 1];
+  const first = values[0];
+  const min = Math.round(Math.min(...values) * 10) / 10;
+  const max = Math.round(Math.max(...values) * 10) / 10;
+  const avg = Math.round(values.reduce((s, v) => s + v, 0) / values.length * 10) / 10;
+  const change = Math.round((latest - first) * 10) / 10;
+  return { latest, first, min, max, avg, change, count: withBF.length };
+}
+function calcDaysSinceLastRecord(records) {
+  if (!records.length) return null;
+  const lastDate = records[records.length - 1].dt;
+  const today = /* @__PURE__ */ new Date();
+  today.setHours(0, 0, 0, 0);
+  const last = /* @__PURE__ */ new Date(lastDate + "T00:00:00");
+  const diffMs = today - last;
+  return Math.max(0, Math.floor(diffMs / 864e5));
+}
+function calcLongestStreak(records) {
+  if (!records.length) return 0;
+  const dates = new Set(records.map((r) => r.dt));
+  const sorted = [...dates].sort();
+  let longest = 1;
+  let current = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = /* @__PURE__ */ new Date(sorted[i - 1] + "T00:00:00");
+    const curr = /* @__PURE__ */ new Date(sorted[i] + "T00:00:00");
+    const diffDays = (curr - prev) / 864e5;
+    if (diffDays === 1) {
+      current++;
+      if (current > longest) longest = current;
+    } else {
+      current = 1;
+    }
+  }
+  return longest;
+}
+function calcTrendForecast(records, forecastDays = 14) {
+  if (records.length < 7) return null;
+  const cutoff = daysAgoStr(14);
+  const recent = records.filter((r) => r.dt >= cutoff);
+  if (recent.length < 4) return null;
+  const startDate = /* @__PURE__ */ new Date(recent[0].dt + "T00:00:00");
+  const points = recent.map((r) => {
+    const dayIdx = (/* @__PURE__ */ new Date(r.dt + "T00:00:00") - startDate) / 864e5;
+    return { x: dayIdx, y: r.wt };
+  });
+  const n = points.length;
+  const sumX = points.reduce((s, p) => s + p.x, 0);
+  const sumY = points.reduce((s, p) => s + p.y, 0);
+  const sumXY = points.reduce((s, p) => s + p.x * p.y, 0);
+  const sumX2 = points.reduce((s, p) => s + p.x * p.x, 0);
+  const denom = n * sumX2 - sumX * sumX;
+  if (denom === 0) return null;
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  const lastDayIdx = points[points.length - 1].x;
+  const forecast = [];
+  for (let d = 0; d <= forecastDays; d++) {
+    const dayIdx = lastDayIdx + d;
+    const weight = Math.round((slope * dayIdx + intercept) * 10) / 10;
+    if (weight < 20 || weight > 300) break;
+    forecast.push({ dayOffset: d, weight });
+  }
+  return { slope: Math.round(slope * 100) / 100, forecast };
+}
+function calcSmoothedWeight(records, smoothing = 0.1) {
+  if (!records.length) return null;
+  if (records.length === 1) return { smoothed: records[0].wt, trend: 0 };
+  let ema = records[0].wt;
+  for (let i = 1; i < records.length; i++) {
+    ema = smoothing * records[i].wt + (1 - smoothing) * ema;
+  }
+  const smoothed = Math.round(ema * 10) / 10;
+  const lookback = Math.min(7, records.length - 1);
+  let emaOld = records[0].wt;
+  const targetIdx = records.length - 1 - lookback;
+  for (let i = 1; i <= targetIdx; i++) {
+    emaOld = smoothing * records[i].wt + (1 - smoothing) * emaOld;
+  }
+  const trend = lookback > 0 ? Math.round((smoothed - Math.round(emaOld * 10) / 10) * 10) / 10 : 0;
+  return { smoothed, trend };
+}
+function calcCalendarChangeMap(records) {
+  if (records.length < 2) return {};
+  const map = {};
+  for (let i = 1; i < records.length; i++) {
+    const diff = Math.round((records[i].wt - records[i - 1].wt) * 10) / 10;
+    map[records[i].dt] = diff;
+  }
+  return map;
+}
+function calcBMIDistribution(records) {
+  const withBMI = records.filter((r) => r.bmi != null && Number.isFinite(r.bmi));
+  if (!withBMI.length) return null;
+  const zones = { under: 0, normal: 0, over: 0, obese: 0 };
+  for (const r of withBMI) {
+    if (r.bmi < 18.5) zones.under++;
+    else if (r.bmi < 25) zones.normal++;
+    else if (r.bmi < 30) zones.over++;
+    else zones.obese++;
+  }
+  const total = withBMI.length;
+  return {
+    under: { count: zones.under, pct: Math.round(zones.under / total * 100) },
+    normal: { count: zones.normal, pct: Math.round(zones.normal / total * 100) },
+    over: { count: zones.over, pct: Math.round(zones.over / total * 100) },
+    obese: { count: zones.obese, pct: Math.round(zones.obese / total * 100) },
+    total
+  };
 }
 
 // src/i18n.js
@@ -1382,6 +1560,7 @@ var translations = {
     "review.checklist.medical": "BMI \u306F\u533B\u7642\u8A3A\u65AD\u3067\u306F\u306A\u3044\u3053\u3068\u3092\u753B\u9762\u4E0A\u3067\u660E\u793A",
     "review.checklist.ads": "\u5E83\u544A SDK \u672A\u5C0E\u5165\u3002\u5C0E\u5165\u6642\u306F ATT \u3068\u30D7\u30E9\u30A4\u30D0\u30B7\u30FC\u66F4\u65B0\u304C\u5FC5\u8981",
     "status.ready": "\u6E96\u5099\u5B8C\u4E86",
+    "status.loading": "\u8AAD\u307F\u8FBC\u307F\u4E2D\u2026",
     "status.listening": "\u805E\u304D\u53D6\u308A\u4E2D",
     "status.storageError": "\u7AEF\u672B\u5185\u4FDD\u5B58\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002\u30D6\u30E9\u30A6\u30B6\u306E\u4FDD\u5B58\u8A2D\u5B9A\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "status.photoReady": "\u5199\u771F\u3092\u8AAD\u307F\u8FBC\u307F\u307E\u3057\u305F\u3002\u5019\u88DC\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
@@ -1418,20 +1597,51 @@ var translations = {
     "export.csvDone": "CSV\u30D5\u30A1\u30A4\u30EB\u3092\u51FA\u529B\u3057\u307E\u3057\u305F",
     "export.textDone": "\u30C6\u30AD\u30B9\u30C8\u30D5\u30A1\u30A4\u30EB\u3092\u51FA\u529B\u3057\u307E\u3057\u305F",
     "export.error": "\u30A8\u30AF\u30B9\u30DD\u30FC\u30C8\u306B\u5931\u6557\u3057\u307E\u3057\u305F",
+    "import.csv": "CSV\u30A4\u30F3\u30DD\u30FC\u30C8",
+    "import.csv.success": "{count}\u4EF6\u306E\u30C7\u30FC\u30BF\u3092\u30A4\u30F3\u30DD\u30FC\u30C8\u3057\u307E\u3057\u305F",
+    "import.csv.errors": "{count}\u4EF6\u306E\u30A8\u30E9\u30FC\u304C\u3042\u308A\u307E\u3057\u305F",
+    "import.csv.empty": "\u30A4\u30F3\u30DD\u30FC\u30C8\u3067\u304D\u308B\u30C7\u30FC\u30BF\u304C\u3042\u308A\u307E\u305B\u3093\u3067\u3057\u305F",
+    "import.csv.confirm": "{count}\u4EF6\u306E\u30C7\u30FC\u30BF\u3092\u30A4\u30F3\u30DD\u30FC\u30C8\u3057\u307E\u3059\u304B\uFF1F\u65E2\u5B58\u306E\u540C\u3058\u65E5\u4ED8\u306E\u30C7\u30FC\u30BF\u306F\u4E0A\u66F8\u304D\u3055\u308C\u307E\u3059\u3002",
     "export.header.date": "\u65E5\u4ED8",
     "export.header.weight": "\u4F53\u91CD (kg)",
     "export.header.bmi": "BMI",
     "export.header.bodyFat": "\u4F53\u8102\u80AA\u7387 (%)",
     "export.header.source": "\u5165\u529B\u65B9\u6CD5",
     "export.header.note": "\u30E1\u30E2",
+    "bodyFat.stats": "\u4F53\u8102\u80AA\u7387\u306E\u63A8\u79FB",
+    "bodyFat.latest": "\u6700\u65B0",
+    "bodyFat.change": "\u5909\u5316",
+    "bodyFat.avg": "\u5E73\u5747",
+    "bodyFat.min": "\u6700\u4F4E",
+    "bodyFat.max": "\u6700\u9AD8",
+    "bodyFat.count": "{count}\u4EF6\u306E\u30C7\u30FC\u30BF",
+    "freshness.today": "\u4ECA\u65E5\u8A18\u9332\u6E08\u307F \u2713",
+    "freshness.yesterday": "\u6628\u65E5\u304B\u3089\u672A\u8A18\u9332",
+    "freshness.days": "{days}\u65E5\u9593 \u672A\u8A18\u9332",
+    "freshness.nudge": "\u4ECA\u65E5\u306E\u4F53\u91CD\u3092\u8A18\u9332\u3057\u307E\u3057\u3087\u3046\uFF01",
+    "streak.longest": "\u6700\u9577\u9023\u7D9A\u8A18\u9332: {days}\u65E5",
+    "smoothed.title": "\u5E73\u6ED1\u5316\u4F53\u91CD",
+    "smoothed.value": "\u30C8\u30EC\u30F3\u30C9\u4F53\u91CD",
+    "smoothed.trend": "7\u56DE\u5206\u306E\u5909\u5316",
+    "smoothed.hint": "\u65E5\u3005\u306E\u5909\u52D5\u3092\u9664\u3044\u305F\u672C\u5F53\u306E\u4F53\u91CD\u30C8\u30EC\u30F3\u30C9",
+    "bmiDist.title": "BMI\u30BE\u30FC\u30F3\u5206\u5E03",
+    "bmiDist.under": "\u4F4E\u4F53\u91CD",
+    "bmiDist.normal": "\u6A19\u6E96",
+    "bmiDist.over": "\u904E\u4F53\u91CD",
+    "bmiDist.obese": "\u80A5\u6E80",
+    "bmiDist.total": "BMI\u8A18\u9332\u6570: {count}\u4EF6",
+    "percentile.title": "\u4F53\u91CD\u30D1\u30FC\u30BB\u30F3\u30BF\u30A4\u30EB",
+    "percentile.value": "\u5168\u8A18\u9332\u306E{pct}%\u3088\u308A\u8EFD\u3044",
+    "percentile.rank": "{rank}\u4F4D / {total}\u4EF6\u4E2D\uFF08\u8EFD\u3044\u9806\uFF09",
+    "percentile.best": "\u904E\u53BB\u6700\u8EFD\u91CF\u306B\u8FD1\u3044\uFF01",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
-    "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01",
+    "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01\uFF08-{diff}kg\uFF09",
     "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
     "milestone.bmiCrossing": "BMI {threshold}\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
-    "export.csv": "CSV\u51FA\u529B",
     "export.csv.success": "CSV\u30D5\u30A1\u30A4\u30EB\u3092\u30C0\u30A6\u30F3\u30ED\u30FC\u30C9\u3057\u307E\u3057\u305F",
     "export.csv.empty": "\u51FA\u529B\u3059\u308B\u30C7\u30FC\u30BF\u304C\u3042\u308A\u307E\u305B\u3093",
     "entry.source.quick": "\u9023\u6253",
+    "entry.source.import": "\u30A4\u30F3\u30DD\u30FC\u30C8",
     "diff.title": "\u524D\u65E5\u6BD4",
     "diff.today": "\u4ECA\u65E5",
     "diff.yesterday": "\u6628\u65E5",
@@ -1518,6 +1728,11 @@ var translations = {
     "chart.period.90": "90\u65E5",
     "chart.period.all": "\u5168\u3066",
     "chart.bmiZones": "\u80CC\u666F\u8272\u306FBMI\u533A\u5206\u3092\u8868\u793A\uFF08\u8EAB\u9577\u8A2D\u5B9A\u6642\uFF09",
+    "chart.forecast": "\u4E88\u6E2C",
+    "chart.legend.weight": "\u4F53\u91CD",
+    "chart.legend.movingAvg": "7\u65E5\u79FB\u52D5\u5E73\u5747",
+    "chart.legend.goal": "\u76EE\u6A19",
+    "chart.legend.forecast": "\u30C8\u30EC\u30F3\u30C9\u4E88\u6E2C",
     "share.chart": "\u5171\u6709",
     "share.done": "\u30C1\u30E3\u30FC\u30C8\u3092\u5171\u6709\u3057\u307E\u3057\u305F",
     "share.error": "\u5171\u6709\u306B\u5931\u6557\u3057\u307E\u3057\u305F",
@@ -1533,6 +1748,8 @@ var translations = {
     "calendar.fri": "\u91D1",
     "calendar.sat": "\u571F",
     "calendar.records": "{count}\u4EF6\u306E\u8A18\u9332",
+    "calendar.decreased": "\u6E1B\u5C11",
+    "calendar.increased": "\u5897\u52A0",
     "achievement.records_1": "\u521D\u8A18\u9332",
     "achievement.records_10": "10\u56DE\u8A18\u9332\u9054\u6210",
     "achievement.records_30": "30\u56DE\u8A18\u9332\u9054\u6210",
@@ -1716,6 +1933,7 @@ var translations = {
     "review.checklist.medical": "BMI is clearly labeled as a wellness reference, not medical diagnosis",
     "review.checklist.ads": "No ad SDK yet. Add ATT and privacy updates before monetization",
     "status.ready": "Ready",
+    "status.loading": "Loading\u2026",
     "status.listening": "Listening",
     "status.storageError": "Saving on this device failed. Check browser storage settings.",
     "status.photoReady": "Photo loaded. Review detected candidates.",
@@ -1752,20 +1970,47 @@ var translations = {
     "export.csvDone": "CSV file exported",
     "export.textDone": "Text file exported",
     "export.error": "Export failed",
+    "import.csv": "Import CSV",
+    "import.csv.success": "Imported {count} records",
+    "import.csv.errors": "{count} errors occurred",
+    "import.csv.empty": "No importable data found",
+    "import.csv.confirm": "Import {count} records? Existing records on the same dates will be overwritten.",
     "export.header.date": "Date",
     "export.header.weight": "Weight (kg)",
     "export.header.bmi": "BMI",
     "export.header.bodyFat": "Body Fat (%)",
     "export.header.source": "Source",
     "export.header.note": "Note",
+    "bodyFat.stats": "Body Fat Trend",
+    "bodyFat.latest": "Latest",
+    "bodyFat.change": "Change",
+    "bodyFat.avg": "Average",
+    "bodyFat.min": "Min",
+    "bodyFat.max": "Max",
+    "bodyFat.count": "{count} records",
+    "freshness.today": "Recorded today \u2713",
+    "freshness.yesterday": "No record since yesterday",
+    "freshness.days": "No record for {days} days",
+    "freshness.nudge": "Time to record today's weight!",
+    "streak.longest": "Longest streak: {days} days",
     "rainbow.congrats": "Congrats! Weight decreased!",
-    "milestone.allTimeLow": "New all-time low!",
+    "smoothed.title": "Smoothed Weight",
+    "smoothed.value": "Trend Weight",
+    "smoothed.trend": "7-record change",
+    "smoothed.hint": "Your true weight trend, filtering daily fluctuations",
+    "bmiDist.title": "BMI Zone Distribution",
+    "bmiDist.under": "Underweight",
+    "bmiDist.normal": "Normal",
+    "bmiDist.over": "Overweight",
+    "bmiDist.obese": "Obese",
+    "bmiDist.total": "BMI records: {count}",
+    "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
-    "export.csv": "Export CSV",
     "export.csv.success": "CSV file downloaded",
     "export.csv.empty": "No data to export",
     "entry.source.quick": "Quick",
+    "entry.source.import": "Import",
     "diff.title": "Daily Diff",
     "diff.today": "Today",
     "diff.yesterday": "Yesterday",
@@ -1852,6 +2097,11 @@ var translations = {
     "chart.period.90": "90 days",
     "chart.period.all": "All",
     "chart.bmiZones": "Background colors show BMI zones (when height is set)",
+    "chart.forecast": "Forecast",
+    "chart.legend.weight": "Weight",
+    "chart.legend.movingAvg": "7-day moving avg",
+    "chart.legend.goal": "Goal",
+    "chart.legend.forecast": "Trend forecast",
     "share.chart": "Share",
     "share.done": "Chart shared",
     "share.error": "Sharing failed",
@@ -1867,6 +2117,8 @@ var translations = {
     "calendar.fri": "Fri",
     "calendar.sat": "Sat",
     "calendar.records": "{count} records",
+    "calendar.decreased": "Decreased",
+    "calendar.increased": "Increased",
     "achievement.records_1": "First record",
     "achievement.records_10": "10 records",
     "achievement.records_30": "30 records",
@@ -22452,14 +22704,17 @@ var version = XLSX.version;
 // src/app.js
 var app = document.getElementById("app");
 var APP_VERSION = "1.0.0";
+function escHtml(s) {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 window.onerror = function(msg, src, line, col, err) {
   console.error("[WeightRainbow] Uncaught error:", msg, "at", src, line, col, err);
   if (app && !app.innerHTML.trim()) {
     app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
-      <h2 style="color:#dc2626;">\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F</h2>
-      <p style="color:#666;margin:12px 0;">${String(msg)}</p>
+      <h2 style="color:#dc2626;">\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F / An error occurred</h2>
+      <p style="color:#666;margin:12px 0;">${escHtml(msg)}</p>
       <p style="color:#999;font-size:0.8rem;">Line ${line}:${col}</p>
-      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F</button>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
     </div>`;
   }
 };
@@ -22507,10 +22762,10 @@ try {
 } catch (e) {
   console.error("[WeightRainbow] Init error:", e);
   app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
-    <h2 style="color:#dc2626;">\u521D\u671F\u5316\u30A8\u30E9\u30FC</h2>
-    <p style="color:#666;margin:12px 0;">${e.message}</p>
-    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F</button>
-    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">\u30C7\u30FC\u30BF\u30EA\u30BB\u30C3\u30C8</button>
+    <h2 style="color:#dc2626;">\u521D\u671F\u5316\u30A8\u30E9\u30FC / Init Error</h2>
+    <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
+    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
+    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">\u30C7\u30FC\u30BF\u30EA\u30BB\u30C3\u30C8 / Reset Data</button>
   </div>`;
 }
 initReminder();
@@ -22539,7 +22794,7 @@ function loadState() {
     settings: { ...createDefaultSettings(), ...safeParse(STORAGE_KEYS.settings, {}) },
     form: {
       weight: "",
-      date: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
+      date: todayLocal(),
       imageName: "",
       pickerInt: 65,
       pickerDec: 0,
@@ -22613,6 +22868,10 @@ function updateLanguage(language) {
   persist();
   render();
 }
+function todayLocal() {
+  const d = /* @__PURE__ */ new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 function formatWeight(weight) {
   return `${Number(weight).toFixed(1)}kg`;
 }
@@ -22620,7 +22879,7 @@ function formatBMI(bmi) {
   return bmi ? bmi.toFixed(1) : t("chart.none");
 }
 function formatNote(note) {
-  return escapeAttr(note).replace(/#(\w+)/g, '<span class="note-hashtag">#$1</span>');
+  return escapeAttr(note).replace(/#([\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF66-\uFF9F]+)/g, '<span class="note-hashtag">#$1</span>');
 }
 function getMotivationalMessage(streak, trend, records, goalProgress) {
   if (records.length === 1) return t("motivation.firstRecord");
@@ -22665,9 +22924,12 @@ function render() {
     const motivation = getMotivationalMessage(streak, trend, state.records, goalProgress);
     const achievements = calcAchievements(state.records, streak, goalWeight);
     const insight = calcInsight(state.records);
+    const daysSinceLast = calcDaysSinceLastRecord(state.records);
+    const longestStreak = calcLongestStreak(state.records);
+    const smoothedWeight = calcSmoothedWeight(state.records);
     const previewWeightResult = validateWeight(state.form.weight);
     const currentBMI = previewWeightResult.valid && state.profile.heightCm ? buildRecord({
-      date: state.form.date || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
+      date: state.form.date || todayLocal(),
       weight: previewWeightResult.weight,
       profile: state.profile,
       source: activeEntryMode,
@@ -22690,6 +22952,11 @@ function render() {
               ${streak > 0 ? `<span class="streak-badge${streak >= 7 ? " rainbow" : ""}" title="${t("streak.title")}">${streak >= 7 ? "\u{1F308}" : "\u{1F525}"} ${streak}${t("streak.days")} ${streak >= 7 ? t("streak.fire") : ""}</span>` : ""}
               ${trend ? `<span class="trend-indicator ${trend}">${trend === "down" ? "\u{1F4C9}" : trend === "up" ? "\u{1F4C8}" : "\u27A1\uFE0F"} ${t("trend." + trend)}</span>` : ""}
             </div>
+            ${daysSinceLast !== null ? `<div class="freshness-indicator${daysSinceLast === 0 ? " fresh" : daysSinceLast >= 3 ? " stale" : ""}">
+              ${daysSinceLast === 0 ? t("freshness.today") : daysSinceLast === 1 ? t("freshness.yesterday") : t("freshness.days").replace("{days}", daysSinceLast)}
+              ${daysSinceLast >= 1 ? ` <span class="freshness-nudge">${t("freshness.nudge")}</span>` : ""}
+            </div>` : ""}
+            ${longestStreak >= 3 && longestStreak > streak ? `<div class="helper hint-small">${t("streak.longest").replace("{days}", longestStreak)}</div>` : ""}
             ${motivation ? `<p class="motivation-msg">${motivation}</p>` : ""}
             ${achievements.length ? `<div class="achievement-row">${achievements.map((a) => `<span class="achievement-badge ${a.tier}" title="${t("achievement." + a.id)}" aria-label="${escapeAttr(t("achievement." + a.id))}">${a.icon}</span>`).join("")}</div>` : ""}
           </div>
@@ -22705,6 +22972,7 @@ function render() {
           ${renderMetric(t("chart.change"), stats ? signedWeight(stats.change) : "--")}
           ${renderMetric(t("chart.avg"), stats ? formatWeight(stats.avgWeight) : "--")}
           ${renderMetric(t("chart.bmi"), stats?.latestBMI ? stats.latestBMI.toFixed(1) : "--")}
+          ${smoothedWeight ? renderMetric(t("smoothed.value"), `${formatWeight(smoothedWeight.smoothed)} <span class="${smoothedWeight.trend < 0 ? "negative" : smoothedWeight.trend > 0 ? "positive" : ""}" style="font-size:0.7em">${smoothedWeight.trend > 0 ? "+" : ""}${smoothedWeight.trend.toFixed(1)}</span>`) : ""}
         </div>
 
         <!-- Daily Diff & Goal Progress -->
@@ -22723,7 +22991,7 @@ function render() {
           <div class="goal-box">
             <div class="label">${t("goal.title")}: ${Number.isFinite(goalWeight) ? formatWeight(goalWeight) : t("goal.notSet")}</div>
             ${goalProgress ? `<div class="progress-percent">${goalProgress.percent}%</div>
-                <div class="progress-bar-track">
+                <div class="progress-bar-track" role="progressbar" aria-valuenow="${goalProgress.percent}" aria-valuemin="0" aria-valuemax="100" aria-label="${t("goal.title")}">
                   <div class="progress-bar-fill" style="width: ${goalProgress.percent}%"></div>
                 </div>
                 <div class="progress-text">
@@ -22892,7 +23160,7 @@ function render() {
             </div>
 
             <div class="status ${statusKind === "error" ? "warn" : ""}" role="status" aria-live="polite">
-              ${statusMessage}
+              ${escapeAttr(statusMessage)}
               ${lastUndoState ? `<button type="button" class="undo-btn" data-action="undo">${t("undo.button")}</button>` : ""}
             </div>
           </section>
@@ -22913,6 +23181,12 @@ function render() {
             </div>
             <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}"></canvas>
             <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
+            ${state.records.length >= 3 ? `<div class="chart-legend">
+              <span class="chart-legend-item"><span class="chart-legend-line gradient"></span>${t("chart.legend.weight")}</span>
+              <span class="chart-legend-item"><span class="chart-legend-line dashed accent3"></span>${t("chart.legend.movingAvg")}</span>
+              ${Number.isFinite(goalWeight) ? `<span class="chart-legend-item"><span class="chart-legend-line dashed ok"></span>${t("chart.legend.goal")}</span>` : ""}
+              <span class="chart-legend-item"><span class="chart-legend-line dashed accent2"></span>${t("chart.legend.forecast")}</span>
+            </div>` : ""}
             ${state.profile.heightCm ? `<div class="hint-small" style="margin-top:4px;">${t("chart.bmiZones")}</div>` : ""}
             <div class="stat-grid">
               ${renderStat(t("chart.latest"), stats ? formatWeight(stats.latestWeight) : "--")}
@@ -22951,6 +23225,8 @@ function render() {
             </div>` : ""}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
+            ${renderBMIDistribution()}
+            ${renderBodyFatStats()}
           </section>
 
           <!-- Monthly Stats Panel -->
@@ -22989,6 +23265,7 @@ function render() {
                 ${recordDateFrom || recordDateTo ? `<button type="button" class="btn ghost" data-action="clear-date-range">${t("records.clearRange")}</button>` : ""}
               </div>
             </div>` : ""}
+            ${state.records.length ? `<div class="export-row"><button type="button" class="btn ghost" data-action="export-csv">\u{1F4E5} ${t("export.csv")}</button><button type="button" class="btn ghost" data-action="import-csv">\u{1F4E4} ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>` : `<div class="export-row"><button type="button" class="btn ghost" data-action="import-csv">\u{1F4E4} ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>`}
             <div class="record-list">
               ${state.records.length ? renderRecordList() : `<div class="empty-state">
                 <div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">\u{1F4CA}</div>
@@ -23195,7 +23472,7 @@ function render() {
       <div class="rainbow-card">
         <div class="rainbow-emoji" aria-hidden="true">\u{1F308}\u2728</div>
         <div class="rainbow-text">${t("rainbow.congrats")}</div>
-        <div class="rainbow-detail">${rainbowDetail}</div>
+        <div class="rainbow-detail">${escapeAttr(rainbowDetail)}</div>
       </div>
     </div>
     ` : ""}
@@ -23219,10 +23496,10 @@ function render() {
   } catch (e) {
     console.error("[WeightRainbow] Render error:", e);
     app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
-      <h2 style="color:#dc2626;">\u63CF\u753B\u30A8\u30E9\u30FC</h2>
-      <p style="color:#666;margin:12px 0;">${e.message}</p>
-      <p style="color:#999;font-size:0.8rem;">${e.stack ? e.stack.split("\n").slice(0, 3).join("<br>") : ""}</p>
-      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F</button>
+      <h2 style="color:#dc2626;">\u63CF\u753B\u30A8\u30E9\u30FC / Render Error</h2>
+      <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
+      <p style="color:#999;font-size:0.8rem;">${e.stack ? e.stack.split("\n").slice(0, 3).map((l) => escHtml(l)).join("<br>") : ""}</p>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
     </div>`;
   }
 }
@@ -23267,10 +23544,13 @@ function renderCalendar() {
   const data = buildCalendarMonth(state.records, calendarYear, calendarMonth);
   if (!data) return `<div class="helper">${t("chart.empty")}</div>`;
   const dayNames = ["calendar.sun", "calendar.mon", "calendar.tue", "calendar.wed", "calendar.thu", "calendar.fri", "calendar.sat"];
+  const now = /* @__PURE__ */ new Date();
+  const isCurrentMonthView = calendarYear === now.getFullYear() && calendarMonth === now.getMonth();
   let html = `<div class="calendar-nav">
-    <button type="button" data-action="cal-prev">${t("calendar.prev")}</button>
+    <button type="button" data-action="cal-prev" aria-label="${t("calendar.prev")}">${t("calendar.prev")}</button>
     <span class="calendar-label">${new Date(calendarYear, calendarMonth).toLocaleDateString(state.settings.language === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "long" })}</span>
-    <button type="button" data-action="cal-next">${t("calendar.next")}</button>
+    <button type="button" data-action="cal-next" aria-label="${t("calendar.next")}">${t("calendar.next")}</button>
+    ${!isCurrentMonthView ? `<button type="button" class="btn ghost" data-action="cal-today" style="margin-left:4px;font-size:0.72rem;">${t("diff.today")}</button>` : ""}
   </div>`;
   html += `<div class="calendar-grid">`;
   for (const key of dayNames) {
@@ -23282,18 +23562,36 @@ function renderCalendar() {
   const todayDate = /* @__PURE__ */ new Date();
   const isCurrentMonth = calendarYear === todayDate.getFullYear() && calendarMonth === todayDate.getMonth();
   const todayDay = todayDate.getDate();
+  const changeMap = calcCalendarChangeMap(state.records);
   for (const d of data.days) {
     const hasRecord = d.wt !== null;
     const isToday = isCurrentMonth && d.day === todayDay;
-    const intensity = d.intensity !== null ? d.intensity : 0;
-    const bg = hasRecord ? `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)` : "";
-    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${d.wt} kg` : ""}">
+    const change = changeMap[d.dt];
+    let bg = "";
+    let changeLabel = "";
+    if (hasRecord && change !== void 0) {
+      if (change < 0) {
+        const alpha = Math.min(50, Math.round(Math.abs(change) * 30 + 15));
+        bg = `background: color-mix(in srgb, var(--ok, #10b981) ${alpha}%, transparent)`;
+      } else if (change > 0) {
+        const alpha = Math.min(50, Math.round(change * 30 + 15));
+        bg = `background: color-mix(in srgb, var(--warn, #f59e0b) ${alpha}%, transparent)`;
+      } else {
+        bg = `background: color-mix(in srgb, var(--accent) 20%, transparent)`;
+      }
+      changeLabel = ` (${change > 0 ? "+" : ""}${change.toFixed(1)})`;
+    } else if (hasRecord) {
+      const intensity = d.intensity !== null ? d.intensity : 0;
+      bg = `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)`;
+    }
+    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${d.wt}kg${changeLabel}` : ""}">
       <span class="calendar-day">${d.day}</span>
       ${hasRecord ? `<span class="calendar-wt">${d.wt}</span>` : ""}
     </div>`;
   }
   html += `</div>`;
-  html += `<div class="helper" style="margin-top:8px">${t("calendar.records").replace("{count}", data.recordCount)}</div>`;
+  html += `<div class="calendar-legend"><span class="cal-legend-item"><span class="cal-dot cal-dot-down"></span>${t("calendar.decreased")}</span><span class="cal-legend-item"><span class="cal-dot cal-dot-up"></span>${t("calendar.increased")}</span></div>`;
+  html += `<div class="helper" style="margin-top:4px">${t("calendar.records").replace("{count}", data.recordCount)}</div>`;
   return html;
 }
 function renderStat(label, value) {
@@ -23335,7 +23633,7 @@ function renderRecord(record, prevRecord, badge) {
 function renderSourceBreakdown() {
   const breakdown = calcSourceBreakdown(state.records);
   if (!breakdown) return "";
-  const sourceIcons = { manual: "\u270F\uFE0F", voice: "\u{1F3A4}", photo: "\u{1F4F7}", quick: "\u26A1" };
+  const sourceIcons = { manual: "\u270F\uFE0F", voice: "\u{1F3A4}", photo: "\u{1F4F7}", quick: "\u26A1", import: "\u{1F4E5}" };
   const entries = Object.entries(breakdown).sort((a, b) => b[1] - a[1]);
   return `
     <div class="source-breakdown">
@@ -23367,6 +23665,43 @@ function renderStability() {
           <div class="helper">${t("chart.avg")}: ${stability.avg.toFixed(1)}kg (${stability.count} ${t("chart.records")})</div>
         </div>
       </div>
+    </div>
+  `;
+}
+function renderBMIDistribution() {
+  const dist = calcBMIDistribution(state.records);
+  if (!dist) return "";
+  const zones = [
+    { key: "under", color: "var(--info, #3b82f6)" },
+    { key: "normal", color: "var(--ok, #10b981)" },
+    { key: "over", color: "var(--warn, #f59e0b)" },
+    { key: "obese", color: "var(--danger, #ef4444)" }
+  ];
+  const bars = zones.filter((z) => dist[z.key].pct > 0).map((z) => `<div class="bmi-dist-segment" style="width:${dist[z.key].pct}%;background:${z.color}" title="${t("bmiDist." + z.key)}: ${dist[z.key].count} (${dist[z.key].pct}%)"></div>`).join("");
+  const legend = zones.map((z) => `<span class="bmi-dist-legend-item"><span class="bmi-dist-dot" style="background:${z.color}"></span>${t("bmiDist." + z.key)} ${dist[z.key].pct}%</span>`).join("");
+  return `
+    <div class="bmi-dist-section">
+      <div class="helper">${t("bmiDist.title")}</div>
+      <div class="bmi-dist-bar">${bars}</div>
+      <div class="bmi-dist-legend">${legend}</div>
+      <div class="helper hint-small" style="margin-top:4px;">${t("bmiDist.total").replace("{count}", dist.total)}</div>
+    </div>
+  `;
+}
+function renderBodyFatStats() {
+  const bfStats = calcBodyFatStats(state.records);
+  if (!bfStats) return "";
+  const changeCls = bfStats.change < 0 ? "loss" : bfStats.change > 0 ? "gain" : "neutral";
+  return `
+    <div class="bodyfat-stats-section">
+      <div class="helper">${t("bodyFat.stats")}</div>
+      <div class="stat-grid">
+        ${renderStat(t("bodyFat.latest"), `${bfStats.latest.toFixed(1)}%`)}
+        ${renderStat(t("bodyFat.change"), `<span class="${changeCls}">${bfStats.change > 0 ? "+" : ""}${bfStats.change.toFixed(1)}%</span>`)}
+        ${renderStat(t("bodyFat.min"), `${bfStats.min.toFixed(1)}%`)}
+        ${renderStat(t("bodyFat.max"), `${bfStats.max.toFixed(1)}%`)}
+      </div>
+      <div class="helper hint-small" style="margin-top:4px;">${t("bodyFat.count").replace("{count}", bfStats.count)}</div>
     </div>
   `;
 }
@@ -23413,9 +23748,10 @@ function renderRecordList() {
       }
     }
   }
+  const dtIndex = new Map(state.records.map((r, i) => [r.dt, i]));
   return displayed.map((record) => {
-    const prevIndex = state.records.indexOf(record) - 1;
-    const prevRecord = prevIndex >= 0 ? state.records[prevIndex] : null;
+    const idx = dtIndex.get(record.dt) ?? -1;
+    const prevRecord = idx > 0 ? state.records[idx - 1] : null;
     let badge = null;
     if (record.dt === minDt) badge = { type: "best", icon: "\u2B50", label: t("records.best") };
     else if (record.dt === maxDt) badge = { type: "highest", icon: "\u{1F4CD}", label: t("records.highest") };
@@ -23486,6 +23822,10 @@ function bindEvents() {
   app.querySelector('[data-action="export-excel"]')?.addEventListener("click", exportExcel);
   app.querySelector('[data-action="export-csv"]')?.addEventListener("click", exportCSV);
   app.querySelector('[data-action="export-text"]')?.addEventListener("click", exportText);
+  app.querySelector('[data-action="import-csv"]')?.addEventListener("click", () => {
+    document.getElementById("csvImportInput")?.click();
+  });
+  document.getElementById("csvImportInput")?.addEventListener("change", handleCSVImport);
   app.querySelector('[data-action="save-goal"]')?.addEventListener("click", saveGoal);
   app.querySelector('[data-action="save-reminder"]')?.addEventListener("click", saveReminder);
   app.querySelector('[data-action="google-backup"]')?.addEventListener("click", googleBackup);
@@ -23506,6 +23846,12 @@ function bindEvents() {
       calendarMonth = 0;
       calendarYear++;
     }
+    render();
+  });
+  app.querySelector('[data-action="cal-today"]')?.addEventListener("click", () => {
+    const now = /* @__PURE__ */ new Date();
+    calendarYear = now.getFullYear();
+    calendarMonth = now.getMonth();
     render();
   });
   app.querySelectorAll("[data-summary]").forEach((button) => {
@@ -23540,8 +23886,13 @@ function bindEvents() {
   app.querySelectorAll("[data-date-shortcut]").forEach((button) => {
     button.addEventListener("click", () => {
       const key = button.dataset.dateShortcut;
-      const d = key === "yesterday" ? new Date(Date.now() - 864e5) : /* @__PURE__ */ new Date();
-      state.form.date = d.toISOString().slice(0, 10);
+      if (key === "yesterday") {
+        const d = /* @__PURE__ */ new Date();
+        d.setDate(d.getDate() - 1);
+        state.form.date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      } else {
+        state.form.date = todayLocal();
+      }
       render();
     });
   });
@@ -23724,7 +24075,7 @@ function saveRecordWithWeight(weight, source) {
     state.profile = profileForRecord;
   }
   const record = buildRecord({
-    date: state.form.date || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
+    date: state.form.date || todayLocal(),
     weight: weightResult.weight,
     profile: profileForRecord,
     source,
@@ -24015,7 +24366,7 @@ function exportExcel() {
     const ws = utils.json_to_sheet(rows);
     const wb = utils.book_new();
     utils.book_append_sheet(wb, ws, t("chart.records"));
-    writeFileSync(wb, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.xlsx`);
+    writeFileSync(wb, `weight-rainbow-${todayLocal()}.xlsx`);
     setStatus(t("export.excelDone"));
   } catch {
     setStatus(t("export.error"), "error");
@@ -24038,11 +24389,44 @@ function exportCSV() {
       (r) => [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source, r.note ?? ""].map(csvEscape).join(",")
     );
     const csv = "\uFEFF" + [header, ...lines].join("\r\n");
-    downloadFile(csv, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
+    downloadFile(csv, `weight-rainbow-${todayLocal()}.csv`, "text/csv;charset=utf-8");
     setStatus(t("export.csvDone"));
   } catch {
     setStatus(t("export.error"), "error");
   }
+}
+function handleCSVImport(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const text = ev.target.result;
+    const { records, errors } = parseCSVImport(text);
+    if (!records.length) {
+      setStatus(t("import.csv.empty"), "error");
+      e.target.value = "";
+      return;
+    }
+    if (!confirm(t("import.csv.confirm").replace("{count}", records.length))) {
+      e.target.value = "";
+      return;
+    }
+    let merged = [...state.records];
+    for (const rec of records) {
+      merged = upsertRecord(merged, rec);
+    }
+    merged = trimRecords(merged);
+    state.records = merged;
+    persist();
+    let msg = t("import.csv.success").replace("{count}", records.length);
+    if (errors.length) {
+      msg += " " + t("import.csv.errors").replace("{count}", errors.length);
+    }
+    setStatus(msg);
+    e.target.value = "";
+    render();
+  };
+  reader.readAsText(file);
 }
 function exportText() {
   if (!state.records.length) {
@@ -24067,10 +24451,10 @@ function exportText() {
       summaryLines.push(`${t("chart.change")}: ${stats.change > 0 ? "+" : ""}${stats.change.toFixed(1)}kg / ${t("summary.count")}: ${state.records.length}`);
       if (stats.latestBMI) summaryLines.push(`BMI: ${stats.latestBMI.toFixed(1)} (${t(getBMIStatus(stats.latestBMI))})`);
     }
-    const text = `${t("app.title")} - ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}
+    const text = `${t("app.title")} - ${todayLocal()}
 ${"=".repeat(48)}
 ${lines.join("\n")}${summaryLines.join("\n")}`;
-    downloadFile(text, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.txt`, "text/plain");
+    downloadFile(text, `weight-rainbow-${todayLocal()}.txt`, "text/plain");
     setStatus(t("export.textDone"));
   } catch {
     setStatus(t("export.error"), "error");
@@ -24102,7 +24486,7 @@ async function shareChart() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `weight-chart-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.png`;
+    a.download = `weight-chart-${todayLocal()}.png`;
     a.click();
     URL.revokeObjectURL(url);
     setStatus(t("share.done"));
@@ -24151,7 +24535,7 @@ function exportData() {
   };
   downloadFile(
     JSON.stringify(payload, null, 2),
-    `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.json`,
+    `weight-rainbow-${todayLocal()}.json`,
     "application/json"
   );
   setStatus(t("status.exported"));
@@ -24203,7 +24587,7 @@ function resetData() {
   state.records = [];
   state.form = {
     weight: "",
-    date: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
+    date: todayLocal(),
     imageName: "",
     pickerInt: 65,
     pickerDec: 0,
@@ -24244,7 +24628,9 @@ function drawChart() {
   let chartRecords = state.records;
   if (chartPeriod !== "all") {
     const days2 = parseInt(chartPeriod, 10);
-    const cutoff = new Date(Date.now() - days2 * 864e5).toISOString().slice(0, 10);
+    const d = /* @__PURE__ */ new Date();
+    d.setDate(d.getDate() - days2);
+    const cutoff = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     chartRecords = state.records.filter((r) => r.dt >= cutoff);
   }
   if (!chartRecords.length) {
@@ -24391,7 +24777,41 @@ function drawChart() {
     context.fillText(`${t("goal.title")} ${goalWeight.toFixed(1)}`, padX + 4, goalY - 6);
     context.restore();
   }
-  const todayStr = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const trendForecast = calcTrendForecast(chartRecords);
+  if (trendForecast && trendForecast.forecast.length >= 2) {
+    context.save();
+    context.setLineDash([3, 5]);
+    context.strokeStyle = cs.getPropertyValue("--accent-2").trim() || "#ff9a00";
+    context.lineWidth = 1.5;
+    context.globalAlpha = 0.5;
+    context.beginPath();
+    const lastX = toX(chartRecords.length - 1);
+    const lastY = toY(chartRecords[chartRecords.length - 1].wt);
+    context.moveTo(lastX, lastY);
+    const totalDays = trendForecast.forecast[trendForecast.forecast.length - 1].dayOffset;
+    const pxPerDay = totalDays > 0 ? (width - padX - lastX) * 0.8 / totalDays : 0;
+    for (const pt of trendForecast.forecast) {
+      if (pt.dayOffset === 0) continue;
+      const fx = lastX + pt.dayOffset * pxPerDay;
+      const fy = toY(Math.max(min, Math.min(max, pt.weight)));
+      if (fx > width - padX) break;
+      context.lineTo(fx, fy);
+    }
+    context.stroke();
+    const lastPt = trendForecast.forecast[Math.min(trendForecast.forecast.length - 1, 7)];
+    if (lastPt) {
+      const labelX = Math.min(lastX + lastPt.dayOffset * pxPerDay, width - padX - 40);
+      const labelY = toY(Math.max(min, Math.min(max, lastPt.weight)));
+      context.setLineDash([]);
+      context.globalAlpha = 0.7;
+      context.fillStyle = cs.getPropertyValue("--accent-2").trim() || "#ff9a00";
+      context.font = "9px sans-serif";
+      context.textAlign = "left";
+      context.fillText(t("chart.forecast"), labelX + 4, labelY - 4);
+    }
+    context.restore();
+  }
+  const todayStr = todayLocal();
   const todayIdx = chartRecords.findIndex((r) => r.dt === todayStr);
   if (todayIdx >= 0) {
     const tx = toX(todayIdx);
@@ -24464,6 +24884,25 @@ function drawChart() {
   canvas.addEventListener("click", canvas._chartClickHandler);
   canvas.addEventListener("mousemove", canvas._chartMoveHandler);
   canvas.addEventListener("mouseleave", canvas._chartLeaveHandler);
+  if (canvas._chartTouchHandler) {
+    canvas.removeEventListener("touchmove", canvas._chartTouchHandler);
+  }
+  if (canvas._chartTouchEndHandler) {
+    canvas.removeEventListener("touchend", canvas._chartTouchEndHandler);
+  }
+  canvas._chartTouchHandler = (e) => {
+    e.preventDefault();
+    showTooltipForEvent(e);
+  };
+  canvas._chartTouchEndHandler = () => {
+    clearTimeout(canvas._tooltipTimer);
+    canvas._tooltipTimer = setTimeout(() => {
+      const tip = document.getElementById("chartTooltip");
+      if (tip) tip.style.display = "none";
+    }, 2e3);
+  };
+  canvas.addEventListener("touchmove", canvas._chartTouchHandler, { passive: false });
+  canvas.addEventListener("touchend", canvas._chartTouchEndHandler);
 }
 function signedWeight(weight) {
   return `${weight > 0 ? "+" : ""}${weight.toFixed(1)}kg`;
@@ -24535,7 +24974,7 @@ function initReminder() {
   let lastNotifiedDate = "";
   reminderTimer = setInterval(() => {
     const now = /* @__PURE__ */ new Date();
-    const todayStr = now.toISOString().slice(0, 10);
+    const todayStr = todayLocal();
     const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
     const targetTime = state.settings.reminderTime || "21:00";
     if (currentTime === targetTime && lastNotifiedDate !== todayStr) {
@@ -24717,7 +25156,15 @@ function handlePhotoZoom() {
   im.src = imagePreviewUrl;
   im.style.cssText = "max-width:95vw;max-height:95vh;object-fit:contain;border-radius:12px";
   ov.appendChild(im);
-  ov.addEventListener("click", () => ov.remove());
+  const dismiss = () => {
+    ov.remove();
+    document.removeEventListener("keydown", onKey);
+  };
+  const onKey = (e) => {
+    if (e.key === "Escape") dismiss();
+  };
+  ov.addEventListener("click", dismiss);
+  document.addEventListener("keydown", onKey);
   document.body.appendChild(ov);
 }
 var resizeTimer;
