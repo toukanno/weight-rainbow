@@ -91,6 +91,7 @@ import {
   calcDataFreshness,
   calcMultiPeriodRate,
   calcRecordMilestone,
+  generateAICoachReport,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -7020,5 +7021,63 @@ describe("calcRecordMilestone", () => {
     expect(r).toHaveProperty("current");
     expect(r).toHaveProperty("next");
     expect(r).toHaveProperty("remaining");
+  });
+});
+
+describe("generateAICoachReport", () => {
+  const profile = { heightCm: 170 };
+
+  it("returns new grade for insufficient records", () => {
+    const r = generateAICoachReport([{ dt: "2024-01-01", wt: 70 }], profile, 65);
+    expect(r.grade).toBe("new");
+    expect(r.advices).toContain("start");
+  });
+
+  it("returns valid structure with enough records", () => {
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2024-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 - i * 0.1,
+    }));
+    const r = generateAICoachReport(records, profile, 65);
+    expect(r).toHaveProperty("score");
+    expect(r).toHaveProperty("grade");
+    expect(r).toHaveProperty("advices");
+    expect(r).toHaveProperty("highlights");
+    expect(r).toHaveProperty("risks");
+    expect(r.score).toBeGreaterThanOrEqual(0);
+    expect(r.score).toBeLessThanOrEqual(100);
+  });
+
+  it("detects trend matching goal as highlight", () => {
+    const now = new Date();
+    const records = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(now.getTime() - (13 - i) * 86400000);
+      return {
+        dt: d.toISOString().slice(0, 10),
+        wt: 75 - i * 0.3,
+      };
+    });
+    const r = generateAICoachReport(records, profile, 65);
+    expect(r.highlights).toContain("trendMatchGoal");
+  });
+
+  it("works without goal weight", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2024-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i * 0.1,
+    }));
+    const r = generateAICoachReport(records, profile, null);
+    expect(r.prediction).toBeNull();
+    expect(r.score).toBeGreaterThanOrEqual(0);
+  });
+
+  it("clamps score between 0 and 100", () => {
+    const records = Array.from({ length: 30 }, (_, i) => ({
+      dt: `2024-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const r = generateAICoachReport(records, profile, 65);
+    expect(r.score).toBeGreaterThanOrEqual(0);
+    expect(r.score).toBeLessThanOrEqual(100);
   });
 });

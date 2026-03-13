@@ -94,6 +94,7 @@ import {
   calcDataFreshness,
   calcMultiPeriodRate,
   calcRecordMilestone,
+  generateAICoachReport,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -471,6 +472,8 @@ function render() {
           }).join("")}
         </div>` : ""}
       </section>
+
+      ${renderAICoach()}
 
       <div class="content-grid">
         <div class="column">
@@ -2164,6 +2167,106 @@ function renderRecordingTime() {
       <div class="helper hint-small" style="margin-top:4px;">${t("timeStats.most").replace("{period}", t("timeStats." + timeStats.mostCommon))}</div>
     </div>
   `;
+}
+
+function renderAICoach() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const report = generateAICoachReport(state.records, state.profile, goalWeight);
+  if (report.grade === "new" && state.records.length < 2) {
+    return `
+    <section class="ai-coach-panel panel">
+      <div class="ai-coach-header">
+        <div class="ai-coach-icon">🤖</div>
+        <div>
+          <h2>${t("ai.title")}</h2>
+          <p class="helper">${t("ai.subtitle")}</p>
+        </div>
+      </div>
+      <div class="ai-coach-empty">
+        <div class="ai-empty-icon">📊</div>
+        <p>${t("ai.advice.start")}</p>
+      </div>
+    </section>`;
+  }
+
+  const gradeColors = { excellent: "var(--ok)", good: "#22c55e", fair: "var(--warn)", needsWork: "#f97316", critical: "var(--error)" };
+  const gradeColor = gradeColors[report.grade] || "var(--muted)";
+  const scoreAngle = (report.score / 100) * 360;
+
+  return `
+    <section class="ai-coach-panel panel">
+      <div class="ai-coach-header">
+        <div class="ai-coach-icon">🤖</div>
+        <div>
+          <h2>${t("ai.title")}</h2>
+          <p class="helper">${t("ai.subtitle")}</p>
+        </div>
+        <div class="ai-score-ring" style="--score-angle: ${scoreAngle}deg; --score-color: ${gradeColor}">
+          <span class="ai-score-value">${report.score}</span>
+          <span class="ai-score-label">${t("ai.grade." + report.grade)}</span>
+        </div>
+      </div>
+
+      ${report.weeklyReport ? `
+      <div class="ai-weekly-report">
+        <h3>${t("ai.weeklyReport")}</h3>
+        <div class="ai-weekly-grid">
+          <div class="ai-weekly-stat">
+            <span class="ai-weekly-label">${t("ai.weeklyAvg")}</span>
+            <span class="ai-weekly-value">${report.weeklyReport.avg}kg</span>
+          </div>
+          ${report.weeklyReport.change !== null ? `
+          <div class="ai-weekly-stat">
+            <span class="ai-weekly-label">${t("ai.weeklyChange")}</span>
+            <span class="ai-weekly-value ${report.weeklyReport.change > 0 ? "positive" : report.weeklyReport.change < 0 ? "negative" : ""}">${report.weeklyReport.change > 0 ? "+" : ""}${report.weeklyReport.change}kg</span>
+          </div>` : ""}
+          <div class="ai-weekly-stat">
+            <span class="ai-weekly-label">${t("ai.weeklyRange")}</span>
+            <span class="ai-weekly-value">${report.weeklyReport.range}kg</span>
+          </div>
+          <div class="ai-weekly-stat">
+            <span class="ai-weekly-label">${t("ai.weeklyEntries")}</span>
+            <span class="ai-weekly-value">${report.weeklyReport.entries}</span>
+          </div>
+        </div>
+      </div>` : ""}
+
+      ${report.highlights.length ? `
+      <div class="ai-section ai-highlights">
+        <h3>${t("ai.highlights")}</h3>
+        <div class="ai-items">
+          ${report.highlights.map(h => `<div class="ai-item ai-highlight">${t("ai.highlight." + h)}</div>`).join("")}
+        </div>
+      </div>` : ""}
+
+      ${report.risks.length ? `
+      <div class="ai-section ai-risks">
+        <h3>${t("ai.risks")}</h3>
+        <div class="ai-items">
+          ${report.risks.map(r => `<div class="ai-item ai-risk">${t("ai.risk." + r)}</div>`).join("")}
+        </div>
+      </div>` : ""}
+
+      ${report.advices.length ? `
+      <div class="ai-section ai-advices">
+        <h3>${t("ai.advice")}</h3>
+        <div class="ai-items">
+          ${report.advices.map(a => `<div class="ai-item ai-advice-item">${t("ai.advice." + a)}</div>`).join("")}
+        </div>
+      </div>` : ""}
+
+      ${report.prediction ? `
+      <div class="ai-section ai-prediction">
+        <h3>${t("ai.prediction.title")}</h3>
+        <div class="ai-prediction-content">
+          ${report.prediction.achieved ? t("ai.prediction.achieved")
+            : report.prediction.noTrend ? t("ai.prediction.noTrend")
+            : report.prediction.insufficient ? t("ai.prediction.insufficient")
+            : `<div class="ai-prediction-days">${t("ai.prediction.goalDays").replace("{days}", report.prediction.days)}</div>
+               <div class="ai-prediction-date">${t("ai.prediction.goalDate").replace("{date}", report.prediction.predictedDate)}</div>`}
+        </div>
+      </div>` : ""}
+    </section>`;
 }
 
 function renderStability() {

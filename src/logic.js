@@ -1378,7 +1378,8 @@ export function calcWeightDistribution(records, bucketSize = 1) {
 
   const maxCount = Math.max(...buckets.map((b) => b.count));
   const latest = weights[weights.length - 1];
-  const latestBucket = buckets.findIndex((b) => latest >= b.start && latest < b.end) ?? buckets.length - 1;
+  const latestBucketIdx = buckets.findIndex((b) => latest >= b.start && latest < b.end);
+  const latestBucket = latestBucketIdx >= 0 ? latestBucketIdx : buckets.length - 1;
   const modeBucket = buckets.reduce((best, b, i) => b.count > buckets[best].count ? i : best, 0);
 
   return {
@@ -2469,5 +2470,185 @@ export function calcRecordMilestone(recordCount) {
     current: recordCount,
     next,
     remaining: next - recordCount,
+  };
+}
+
+/**
+ * AI Coach: Generates personalized advice by combining multiple analytics signals.
+ * Returns { score, grade, advices[], weeklyReport, prediction }
+ */
+export function generateAICoachReport(records, profile, goalWeight) {
+  if (records.length < 2) {
+    return {
+      score: 0,
+      grade: "new",
+      advices: ["start"],
+      weeklyReport: null,
+      prediction: null,
+      highlights: [],
+      risks: [],
+    };
+  }
+
+  const advices = [];
+  const highlights = [];
+  const risks = [];
+  let score = 50; // Base score
+
+  // 1. Trend analysis
+  const trend = calcWeightTrend(records);
+  const weeklyRate = calcWeeklyRate(records);
+  const hasGoal = Number.isFinite(goalWeight) && goalWeight > 0;
+  const latest = records[records.length - 1].wt;
+  const wantsLoss = hasGoal && goalWeight < latest;
+  const wantsGain = hasGoal && goalWeight > latest;
+
+  if (trend === "down" && wantsLoss) {
+    score += 15;
+    highlights.push("trendMatchGoal");
+  } else if (trend === "up" && wantsGain) {
+    score += 15;
+    highlights.push("trendMatchGoal");
+  } else if (trend === "down" && wantsGain) {
+    score -= 10;
+    risks.push("trendAgainstGoal");
+  } else if (trend === "up" && wantsLoss) {
+    score -= 10;
+    risks.push("trendAgainstGoal");
+  }
+
+  // 2. Weekly rate check (healthy: 0.2-0.5 kg/week loss)
+  if (weeklyRate) {
+    const absRate = Math.abs(weeklyRate.weeklyRate);
+    if (absRate > 1.0) {
+      risks.push("rapidChange");
+      advices.push("slowDown");
+      score -= 10;
+    } else if (absRate >= 0.2 && absRate <= 0.7 && wantsLoss && weeklyRate.weeklyRate < 0) {
+      highlights.push("healthyPace");
+      score += 10;
+    }
+  }
+
+  // 3. Consistency (streak)
+  const streak = calcStreak(records);
+  if (streak >= 14) {
+    score += 15;
+    highlights.push("greatStreak");
+  } else if (streak >= 7) {
+    score += 8;
+    highlights.push("goodStreak");
+  } else if (streak <= 2 && records.length > 7) {
+    risks.push("inconsistent");
+    advices.push("buildHabit");
+    score -= 5;
+  }
+
+  // 4. Stability
+  const stability = calcWeightStability(records);
+  if (stability) {
+    if (stability.score >= 70) {
+      highlights.push("stableWeight");
+      score += 5;
+    } else if (stability.score < 30) {
+      risks.push("highVolatility");
+      advices.push("stabilize");
+    }
+  }
+
+  // 5. Plateau detection
+  const plateau = calcWeightPlateau(records);
+  if (plateau && plateau.isPlateau) {
+    risks.push("plateau");
+    advices.push("breakPlateau");
+    score -= 5;
+  }
+
+  // 6. Goal proximity
+  if (hasGoal) {
+    const progress = calcGoalProgress(records, goalWeight);
+    if (progress && progress.percent >= 90) {
+      highlights.push("nearGoal");
+      score += 10;
+    }
+    const prediction = calcGoalPrediction(records, goalWeight);
+    if (prediction && !prediction.achieved && !prediction.insufficient && !prediction.noTrend) {
+      if (prediction.days <= 30) {
+        highlights.push("goalSoon");
+      }
+    }
+  }
+
+  // 7. BMI-based advice
+  if (profile.heightCm) {
+    const bmi = calculateBMI(latest, profile.heightCm);
+    if (bmi < 18.5) {
+      advices.push("underweight");
+    } else if (bmi >= 30) {
+      advices.push("obeseRange");
+    }
+  }
+
+  // 8. Day-of-week pattern
+  const dowAvg = calcDayOfWeekAvg(records);
+  if (dowAvg) {
+    const avgs = dowAvg.avgs.filter((a) => a !== null);
+    if (avgs.length > 0 && Math.max(...avgs) - Math.min(...avgs) > 1.0) {
+      advices.push("weekendPattern");
+    }
+  }
+
+  // Clamp score
+  score = Math.max(0, Math.min(100, score));
+
+  // Grade
+  const grade = score >= 85 ? "excellent" : score >= 70 ? "good" : score >= 50 ? "fair" : score >= 30 ? "needsWork" : "critical";
+
+  // Generate weekly report
+  const weeklyReport = generateWeeklyReport(records, goalWeight, profile);
+
+  // Generate prediction
+  const prediction = hasGoal ? calcGoalPrediction(records, goalWeight) : null;
+
+  return {
+    score,
+    grade,
+    advices,
+    weeklyReport,
+    prediction,
+    highlights,
+    risks,
+  };
+}
+
+/**
+ * Generate a weekly summary report with key metrics.
+ */
+function generateWeeklyReport(records, goalWeight, profile) {
+  if (records.length < 3) return null;
+
+  const now = new Date();
+  const oneWeekAgo = new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 10);
+  const twoWeeksAgo = new Date(now.getTime() - 14 * 86400000).toISOString().slice(0, 10);
+
+  const thisWeek = records.filter(r => r.dt >= oneWeekAgo);
+  const lastWeek = records.filter(r => r.dt >= twoWeeksAgo && r.dt < oneWeekAgo);
+
+  if (thisWeek.length === 0) return null;
+
+  const thisAvg = thisWeek.reduce((s, r) => s + r.wt, 0) / thisWeek.length;
+  const lastAvg = lastWeek.length ? lastWeek.reduce((s, r) => s + r.wt, 0) / lastWeek.length : null;
+  const weekChange = lastAvg !== null ? thisAvg - lastAvg : null;
+
+  const thisMin = Math.min(...thisWeek.map(r => r.wt));
+  const thisMax = Math.max(...thisWeek.map(r => r.wt));
+
+  return {
+    avg: Math.round(thisAvg * 10) / 10,
+    change: weekChange !== null ? Math.round(weekChange * 10) / 10 : null,
+    min: thisMin,
+    max: thisMax,
+    entries: thisWeek.length,
+    range: Math.round((thisMax - thisMin) * 10) / 10,
   };
 }

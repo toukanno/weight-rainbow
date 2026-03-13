@@ -2801,6 +2801,144 @@ function calcRecordMilestone(recordCount) {
     remaining: next - recordCount
   };
 }
+function generateAICoachReport(records, profile, goalWeight) {
+  if (records.length < 2) {
+    return {
+      score: 0,
+      grade: "new",
+      advices: ["start"],
+      weeklyReport: null,
+      prediction: null,
+      highlights: [],
+      risks: []
+    };
+  }
+  const advices = [];
+  const highlights = [];
+  const risks = [];
+  let score = 50;
+  const trend = calcWeightTrend(records);
+  const weeklyRate = calcWeeklyRate(records);
+  const hasGoal = Number.isFinite(goalWeight) && goalWeight > 0;
+  const latest = records[records.length - 1].wt;
+  const wantsLoss = hasGoal && goalWeight < latest;
+  const wantsGain = hasGoal && goalWeight > latest;
+  if (trend === "down" && wantsLoss) {
+    score += 15;
+    highlights.push("trendMatchGoal");
+  } else if (trend === "up" && wantsGain) {
+    score += 15;
+    highlights.push("trendMatchGoal");
+  } else if (trend === "down" && wantsGain) {
+    score -= 10;
+    risks.push("trendAgainstGoal");
+  } else if (trend === "up" && wantsLoss) {
+    score -= 10;
+    risks.push("trendAgainstGoal");
+  }
+  if (weeklyRate) {
+    const absRate = Math.abs(weeklyRate.weeklyRate);
+    if (absRate > 1) {
+      risks.push("rapidChange");
+      advices.push("slowDown");
+      score -= 10;
+    } else if (absRate >= 0.2 && absRate <= 0.7 && wantsLoss && weeklyRate.weeklyRate < 0) {
+      highlights.push("healthyPace");
+      score += 10;
+    }
+  }
+  const streak = calcStreak(records);
+  if (streak >= 14) {
+    score += 15;
+    highlights.push("greatStreak");
+  } else if (streak >= 7) {
+    score += 8;
+    highlights.push("goodStreak");
+  } else if (streak <= 2 && records.length > 7) {
+    risks.push("inconsistent");
+    advices.push("buildHabit");
+    score -= 5;
+  }
+  const stability = calcWeightStability(records);
+  if (stability) {
+    if (stability.score >= 70) {
+      highlights.push("stableWeight");
+      score += 5;
+    } else if (stability.score < 30) {
+      risks.push("highVolatility");
+      advices.push("stabilize");
+    }
+  }
+  const plateau = calcWeightPlateau(records);
+  if (plateau && plateau.isPlateau) {
+    risks.push("plateau");
+    advices.push("breakPlateau");
+    score -= 5;
+  }
+  if (hasGoal) {
+    const progress = calcGoalProgress(records, goalWeight);
+    if (progress && progress.percent >= 90) {
+      highlights.push("nearGoal");
+      score += 10;
+    }
+    const prediction2 = calcGoalPrediction(records, goalWeight);
+    if (prediction2 && !prediction2.achieved && !prediction2.insufficient && !prediction2.noTrend) {
+      if (prediction2.days <= 30) {
+        highlights.push("goalSoon");
+      }
+    }
+  }
+  if (profile.heightCm) {
+    const bmi = calculateBMI(latest, profile.heightCm);
+    if (bmi < 18.5) {
+      advices.push("underweight");
+    } else if (bmi >= 30) {
+      advices.push("obeseRange");
+    }
+  }
+  const dowAvg = calcDayOfWeekAvg(records);
+  if (dowAvg) {
+    const avgs = dowAvg.avgs.filter((a) => a !== null);
+    if (avgs.length > 0 && Math.max(...avgs) - Math.min(...avgs) > 1) {
+      advices.push("weekendPattern");
+    }
+  }
+  score = Math.max(0, Math.min(100, score));
+  const grade = score >= 85 ? "excellent" : score >= 70 ? "good" : score >= 50 ? "fair" : score >= 30 ? "needsWork" : "critical";
+  const weeklyReport = generateWeeklyReport(records, goalWeight, profile);
+  const prediction = hasGoal ? calcGoalPrediction(records, goalWeight) : null;
+  return {
+    score,
+    grade,
+    advices,
+    weeklyReport,
+    prediction,
+    highlights,
+    risks
+  };
+}
+function generateWeeklyReport(records, goalWeight, profile) {
+  if (records.length < 3) return null;
+  const now = /* @__PURE__ */ new Date();
+  const oneWeekAgo = new Date(now.getTime() - 7 * 864e5).toISOString().slice(0, 10);
+  const twoWeeksAgo = new Date(now.getTime() - 14 * 864e5).toISOString().slice(0, 10);
+  const thisWeek = records.filter((r) => r.dt >= oneWeekAgo);
+  const lastWeek = records.filter((r) => r.dt >= twoWeeksAgo && r.dt < oneWeekAgo);
+  if (thisWeek.length === 0) return null;
+  const thisAvg = thisWeek.reduce((s, r) => s + r.wt, 0) / thisWeek.length;
+  const lastAvg = lastWeek.length ? lastWeek.reduce((s, r) => s + r.wt, 0) / lastWeek.length : null;
+  const weekChange = lastAvg !== null ? thisAvg - lastAvg : null;
+  const thisMin = Math.min(...thisWeek.map((r) => r.wt));
+  const thisMax = Math.max(...thisWeek.map((r) => r.wt));
+  return {
+    avg: Math.round(thisAvg * 10) / 10,
+    change: weekChange !== null ? Math.round(weekChange * 10) / 10 : null,
+    min: thisMin,
+    max: thisMax,
+    entries: thisWeek.length,
+    range: Math.round((thisMax - thisMin) * 10) / 10
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -3495,7 +3633,50 @@ var translations = {
     "multiRate.weekly": "\u9031\u3042\u305F\u308A {rate}kg",
     "multiRate.noData": "\u2014",
     "milestone.reached": "{count}\u56DE\u76EE\u306E\u8A18\u9332\u9054\u6210\uFF01",
-    "milestone.next": "\u6B21\u306E\u76EE\u6A19: {next}\u56DE\uFF08\u3042\u3068{remaining}\u56DE\uFF09"
+    "milestone.next": "\u6B21\u306E\u76EE\u6A19: {next}\u56DE\uFF08\u3042\u3068{remaining}\u56DE\uFF09",
+    "ai.title": "AI\u30B3\u30FC\u30C1",
+    "ai.subtitle": "\u3042\u306A\u305F\u306E\u30C7\u30FC\u30BF\u3092\u5206\u6790\u3057\u3001\u30D1\u30FC\u30BD\u30CA\u30E9\u30A4\u30BA\u3055\u308C\u305F\u30A2\u30C9\u30D0\u30A4\u30B9\u3092\u63D0\u4F9B\u3057\u307E\u3059",
+    "ai.score": "\u7DCF\u5408\u30B9\u30B3\u30A2",
+    "ai.grade.excellent": "\u7D20\u6674\u3089\u3057\u3044\uFF01",
+    "ai.grade.good": "\u826F\u3044\u8ABF\u5B50",
+    "ai.grade.fair": "\u307E\u305A\u307E\u305A",
+    "ai.grade.needsWork": "\u6539\u5584\u306E\u4F59\u5730\u3042\u308A",
+    "ai.grade.critical": "\u8981\u6CE8\u610F",
+    "ai.grade.new": "\u30C7\u30FC\u30BF\u53CE\u96C6\u4E2D",
+    "ai.weeklyReport": "\u4ECA\u9031\u306E\u30EC\u30DD\u30FC\u30C8",
+    "ai.weeklyAvg": "\u4ECA\u9031\u306E\u5E73\u5747",
+    "ai.weeklyChange": "\u5148\u9031\u6BD4",
+    "ai.weeklyRange": "\u5909\u52D5\u5E45",
+    "ai.weeklyEntries": "\u8A18\u9332\u56DE\u6570",
+    "ai.highlights": "\u30CF\u30A4\u30E9\u30A4\u30C8",
+    "ai.risks": "\u6CE8\u610F\u30DD\u30A4\u30F3\u30C8",
+    "ai.advice": "\u30A2\u30C9\u30D0\u30A4\u30B9",
+    "ai.highlight.trendMatchGoal": "\u{1F4C8} \u30C8\u30EC\u30F3\u30C9\u304C\u76EE\u6A19\u306B\u5411\u304B\u3063\u3066\u3044\u307E\u3059\uFF01\u3053\u306E\u8ABF\u5B50\u3092\u7DAD\u6301\u3057\u307E\u3057\u3087\u3046",
+    "ai.highlight.healthyPace": "\u26A1 \u5065\u5EB7\u7684\u306A\u30DA\u30FC\u30B9\u3067\u6E1B\u91CF\u3067\u304D\u3066\u3044\u307E\u3059\uFF08\u90310.2\u301C0.7kg\uFF09",
+    "ai.highlight.greatStreak": "\u{1F525} 2\u9031\u9593\u4EE5\u4E0A\u9023\u7D9A\u8A18\u9332\u4E2D\uFF01\u7D20\u6674\u3089\u3057\u3044\u7FD2\u6163\u3067\u3059",
+    "ai.highlight.goodStreak": "\u2728 1\u9031\u9593\u4EE5\u4E0A\u9023\u7D9A\u8A18\u9332\u4E2D\uFF01\u826F\u3044\u8ABF\u5B50\u3067\u3059",
+    "ai.highlight.stableWeight": "\u2696\uFE0F \u4F53\u91CD\u304C\u5B89\u5B9A\u3057\u3066\u3044\u307E\u3059\u3002\u826F\u3044\u30B3\u30F3\u30C8\u30ED\u30FC\u30EB\u3067\u3059",
+    "ai.highlight.nearGoal": "\u{1F3AF} \u76EE\u6A19\u4F53\u91CD\u307E\u3067\u3042\u3068\u5C11\u3057\uFF01\u30B4\u30FC\u30EB\u304C\u898B\u3048\u3066\u3044\u307E\u3059",
+    "ai.highlight.goalSoon": "\u{1F3C1} \u3042\u30681\u30F6\u6708\u4EE5\u5185\u306B\u76EE\u6A19\u9054\u6210\u306E\u898B\u8FBC\u307F\u3067\u3059",
+    "ai.risk.trendAgainstGoal": "\u26A0\uFE0F \u73FE\u5728\u306E\u30C8\u30EC\u30F3\u30C9\u306F\u76EE\u6A19\u3068\u9006\u65B9\u5411\u3067\u3059",
+    "ai.risk.rapidChange": "\u26A0\uFE0F \u4F53\u91CD\u5909\u52D5\u304C\u6025\u6FC0\u3067\u3059\uFF08\u90311kg\u4EE5\u4E0A\uFF09",
+    "ai.risk.inconsistent": "\u{1F4DD} \u8A18\u9332\u306E\u983B\u5EA6\u304C\u4F4E\u4E0B\u3057\u3066\u3044\u307E\u3059",
+    "ai.risk.highVolatility": "\u{1F4CA} \u4F53\u91CD\u306E\u5909\u52D5\u304C\u5927\u304D\u3044\u3067\u3059",
+    "ai.risk.plateau": "\u{1F504} \u505C\u6EDE\u671F\u306B\u5165\u3063\u3066\u3044\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059",
+    "ai.advice.start": "\u{1F31F} \u307E\u305A\u306F\u6BCE\u65E5\u306E\u8A18\u9332\u3092\u7FD2\u6163\u306B\u3057\u307E\u3057\u3087\u3046\u30023\u65E5\u9593\u306E\u9023\u7D9A\u8A18\u9332\u3092\u76EE\u6307\u3057\u3066\u304F\u3060\u3055\u3044",
+    "ai.advice.slowDown": "\u{1F422} \u5909\u52D5\u30DA\u30FC\u30B9\u304C\u901F\u3059\u304E\u307E\u3059\u3002\u6025\u306A\u5909\u5316\u306F\u4F53\u306B\u8CA0\u62C5\u304C\u304B\u304B\u308B\u305F\u3081\u3001\u3086\u3063\u304F\u308A\u9032\u3081\u307E\u3057\u3087\u3046",
+    "ai.advice.buildHabit": "\u{1F4C5} \u6BCE\u65E5\u540C\u3058\u6642\u9593\u306B\u6E2C\u5B9A\u3059\u308B\u7FD2\u6163\u3092\u3064\u3051\u308B\u3068\u3001\u3088\u308A\u6B63\u78BA\u306A\u30C7\u30FC\u30BF\u304C\u5F97\u3089\u308C\u307E\u3059",
+    "ai.advice.stabilize": "\u{1F3AF} \u98DF\u4E8B\u3084\u904B\u52D5\u306E\u30D1\u30BF\u30FC\u30F3\u3092\u4E00\u5B9A\u306B\u4FDD\u3064\u3053\u3068\u3067\u3001\u4F53\u91CD\u306E\u5909\u52D5\u3092\u6291\u3048\u3089\u308C\u307E\u3059",
+    "ai.advice.breakPlateau": "\u{1F4AA} \u505C\u6EDE\u671F\u3092\u6253\u7834\u3059\u308B\u306B\u306F\u3001\u904B\u52D5\u5185\u5BB9\u3084\u98DF\u4E8B\u3092\u5C11\u3057\u5909\u3048\u3066\u307F\u307E\u3057\u3087\u3046",
+    "ai.advice.underweight": "\u{1F34E} BMI\u304C\u4F4E\u3081\u3067\u3059\u3002\u6804\u990A\u30D0\u30E9\u30F3\u30B9\u3092\u610F\u8B58\u3057\u3066\u3001\u5065\u5EB7\u7684\u306B\u4F53\u91CD\u3092\u5897\u3084\u3057\u307E\u3057\u3087\u3046",
+    "ai.advice.obeseRange": "\u{1F957} BMI\u304C\u9AD8\u3081\u3067\u3059\u3002\u307E\u305A\u306F\u90310.5kg\u306E\u6E1B\u91CF\u3092\u76EE\u6A19\u306B\u3001\u7121\u7406\u306E\u306A\u3044\u30DA\u30FC\u30B9\u3067\u53D6\u308A\u7D44\u307F\u307E\u3057\u3087\u3046",
+    "ai.advice.weekendPattern": "\u{1F4CA} \u66DC\u65E5\u306B\u3088\u308B\u4F53\u91CD\u5DEE\u304C\u5927\u304D\u3044\u3067\u3059\u3002\u9031\u672B\u306E\u98DF\u751F\u6D3B\u3092\u898B\u76F4\u3059\u3068\u826F\u3044\u304B\u3082\u3057\u308C\u307E\u305B\u3093",
+    "ai.prediction.title": "AI\u4E88\u6E2C",
+    "ai.prediction.goalDays": "\u76EE\u6A19\u5230\u9054\u307E\u3067\u7D04{days}\u65E5",
+    "ai.prediction.goalDate": "\u4E88\u60F3\u9054\u6210\u65E5: {date}",
+    "ai.prediction.achieved": "\u{1F389} \u76EE\u6A19\u9054\u6210\u6E08\u307F\uFF01",
+    "ai.prediction.noTrend": "\u30C8\u30EC\u30F3\u30C9\u30C7\u30FC\u30BF\u304C\u4E0D\u8DB3\u3057\u3066\u3044\u307E\u3059",
+    "ai.prediction.insufficient": "\u73FE\u5728\u306E\u30DA\u30FC\u30B9\u3067\u306F\u76EE\u6A19\u9054\u6210\u304C\u96E3\u3057\u3044\u3067\u3059\u3002\u30DA\u30FC\u30B9\u3092\u898B\u76F4\u3057\u307E\u3057\u3087\u3046"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4188,7 +4369,50 @@ var translations = {
     "multiRate.weekly": "{rate}kg/week",
     "multiRate.noData": "\u2014",
     "milestone.reached": "{count} records reached!",
-    "milestone.next": "Next milestone: {next} (only {remaining} more)"
+    "milestone.next": "Next milestone: {next} (only {remaining} more)",
+    "ai.title": "AI Coach",
+    "ai.subtitle": "Personalized insights and advice based on your data",
+    "ai.score": "Overall Score",
+    "ai.grade.excellent": "Excellent!",
+    "ai.grade.good": "Good",
+    "ai.grade.fair": "Fair",
+    "ai.grade.needsWork": "Needs Work",
+    "ai.grade.critical": "Needs Attention",
+    "ai.grade.new": "Collecting Data",
+    "ai.weeklyReport": "Weekly Report",
+    "ai.weeklyAvg": "This Week Avg",
+    "ai.weeklyChange": "vs Last Week",
+    "ai.weeklyRange": "Range",
+    "ai.weeklyEntries": "Entries",
+    "ai.highlights": "Highlights",
+    "ai.risks": "Watch Out",
+    "ai.advice": "Advice",
+    "ai.highlight.trendMatchGoal": "\u{1F4C8} Your trend is heading toward your goal! Keep it up",
+    "ai.highlight.healthyPace": "\u26A1 Healthy rate of change (0.2-0.7 kg/week)",
+    "ai.highlight.greatStreak": "\u{1F525} 14+ day recording streak! Great habit",
+    "ai.highlight.goodStreak": "\u2728 7+ day recording streak! Nice consistency",
+    "ai.highlight.stableWeight": "\u2696\uFE0F Weight is stable. Good control",
+    "ai.highlight.nearGoal": "\u{1F3AF} Almost at your goal weight!",
+    "ai.highlight.goalSoon": "\u{1F3C1} On track to hit your goal within a month",
+    "ai.risk.trendAgainstGoal": "\u26A0\uFE0F Current trend is moving away from your goal",
+    "ai.risk.rapidChange": "\u26A0\uFE0F Rapid weight change detected (>1 kg/week)",
+    "ai.risk.inconsistent": "\u{1F4DD} Recording frequency has dropped",
+    "ai.risk.highVolatility": "\u{1F4CA} High weight fluctuation detected",
+    "ai.risk.plateau": "\u{1F504} You may be in a weight plateau",
+    "ai.advice.start": "\u{1F31F} Start by recording daily. Aim for 3 consecutive days first",
+    "ai.advice.slowDown": "\u{1F422} Rate of change is too fast. Slow and steady is healthier",
+    "ai.advice.buildHabit": "\u{1F4C5} Weigh in at the same time each day for more accurate data",
+    "ai.advice.stabilize": "\u{1F3AF} Keep diet and exercise patterns consistent to reduce fluctuations",
+    "ai.advice.breakPlateau": "\u{1F4AA} Mix up your exercise routine or adjust your diet to break through",
+    "ai.advice.underweight": "\u{1F34E} BMI is low. Focus on balanced nutrition to gain weight healthily",
+    "ai.advice.obeseRange": "\u{1F957} BMI is high. Aim for 0.5 kg/week loss at a sustainable pace",
+    "ai.advice.weekendPattern": "\u{1F4CA} Large weekday/weekend weight difference. Review weekend eating",
+    "ai.prediction.title": "AI Prediction",
+    "ai.prediction.goalDays": "~{days} days to goal",
+    "ai.prediction.goalDate": "Estimated: {date}",
+    "ai.prediction.achieved": "\u{1F389} Goal achieved!",
+    "ai.prediction.noTrend": "Not enough trend data yet",
+    "ai.prediction.insufficient": "Current pace is insufficient. Consider adjusting your approach"
   }
 };
 function createTranslator(language) {
@@ -25034,6 +25258,8 @@ function render() {
         </div>` : ""}
       </section>
 
+      ${renderAICoach()}
+
       <div class="content-grid">
         <div class="column">
           <section class="panel">
@@ -26646,6 +26872,100 @@ function renderRecordingTime() {
       <div class="helper hint-small" style="margin-top:4px;">${t("timeStats.most").replace("{period}", t("timeStats." + timeStats.mostCommon))}</div>
     </div>
   `;
+}
+function renderAICoach() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const report = generateAICoachReport(state.records, state.profile, goalWeight);
+  if (report.grade === "new" && state.records.length < 2) {
+    return `
+    <section class="ai-coach-panel panel">
+      <div class="ai-coach-header">
+        <div class="ai-coach-icon">\u{1F916}</div>
+        <div>
+          <h2>${t("ai.title")}</h2>
+          <p class="helper">${t("ai.subtitle")}</p>
+        </div>
+      </div>
+      <div class="ai-coach-empty">
+        <div class="ai-empty-icon">\u{1F4CA}</div>
+        <p>${t("ai.advice.start")}</p>
+      </div>
+    </section>`;
+  }
+  const gradeColors = { excellent: "var(--ok)", good: "#22c55e", fair: "var(--warn)", needsWork: "#f97316", critical: "var(--error)" };
+  const gradeColor = gradeColors[report.grade] || "var(--muted)";
+  const scoreAngle = report.score / 100 * 360;
+  return `
+    <section class="ai-coach-panel panel">
+      <div class="ai-coach-header">
+        <div class="ai-coach-icon">\u{1F916}</div>
+        <div>
+          <h2>${t("ai.title")}</h2>
+          <p class="helper">${t("ai.subtitle")}</p>
+        </div>
+        <div class="ai-score-ring" style="--score-angle: ${scoreAngle}deg; --score-color: ${gradeColor}">
+          <span class="ai-score-value">${report.score}</span>
+          <span class="ai-score-label">${t("ai.grade." + report.grade)}</span>
+        </div>
+      </div>
+
+      ${report.weeklyReport ? `
+      <div class="ai-weekly-report">
+        <h3>${t("ai.weeklyReport")}</h3>
+        <div class="ai-weekly-grid">
+          <div class="ai-weekly-stat">
+            <span class="ai-weekly-label">${t("ai.weeklyAvg")}</span>
+            <span class="ai-weekly-value">${report.weeklyReport.avg}kg</span>
+          </div>
+          ${report.weeklyReport.change !== null ? `
+          <div class="ai-weekly-stat">
+            <span class="ai-weekly-label">${t("ai.weeklyChange")}</span>
+            <span class="ai-weekly-value ${report.weeklyReport.change > 0 ? "positive" : report.weeklyReport.change < 0 ? "negative" : ""}">${report.weeklyReport.change > 0 ? "+" : ""}${report.weeklyReport.change}kg</span>
+          </div>` : ""}
+          <div class="ai-weekly-stat">
+            <span class="ai-weekly-label">${t("ai.weeklyRange")}</span>
+            <span class="ai-weekly-value">${report.weeklyReport.range}kg</span>
+          </div>
+          <div class="ai-weekly-stat">
+            <span class="ai-weekly-label">${t("ai.weeklyEntries")}</span>
+            <span class="ai-weekly-value">${report.weeklyReport.entries}</span>
+          </div>
+        </div>
+      </div>` : ""}
+
+      ${report.highlights.length ? `
+      <div class="ai-section ai-highlights">
+        <h3>${t("ai.highlights")}</h3>
+        <div class="ai-items">
+          ${report.highlights.map((h) => `<div class="ai-item ai-highlight">${t("ai.highlight." + h)}</div>`).join("")}
+        </div>
+      </div>` : ""}
+
+      ${report.risks.length ? `
+      <div class="ai-section ai-risks">
+        <h3>${t("ai.risks")}</h3>
+        <div class="ai-items">
+          ${report.risks.map((r) => `<div class="ai-item ai-risk">${t("ai.risk." + r)}</div>`).join("")}
+        </div>
+      </div>` : ""}
+
+      ${report.advices.length ? `
+      <div class="ai-section ai-advices">
+        <h3>${t("ai.advice")}</h3>
+        <div class="ai-items">
+          ${report.advices.map((a) => `<div class="ai-item ai-advice-item">${t("ai.advice." + a)}</div>`).join("")}
+        </div>
+      </div>` : ""}
+
+      ${report.prediction ? `
+      <div class="ai-section ai-prediction">
+        <h3>${t("ai.prediction.title")}</h3>
+        <div class="ai-prediction-content">
+          ${report.prediction.achieved ? t("ai.prediction.achieved") : report.prediction.noTrend ? t("ai.prediction.noTrend") : report.prediction.insufficient ? t("ai.prediction.insufficient") : `<div class="ai-prediction-days">${t("ai.prediction.goalDays").replace("{days}", report.prediction.days)}</div>
+               <div class="ai-prediction-date">${t("ai.prediction.goalDate").replace("{date}", report.prediction.predictedDate)}</div>`}
+        </div>
+      </div>` : ""}
+    </section>`;
 }
 function renderStability() {
   const stability = calcWeightStability(state.records);
