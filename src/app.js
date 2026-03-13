@@ -4666,6 +4666,7 @@ function drawChart() {
   let chartRecords = state.records;
   if (chartPeriod !== "all") {
     const days = parseInt(chartPeriod, 10);
+    if (Number.isNaN(days)) return;
     const d = new Date(todayLocal() + "T00:00:00");
     d.setDate(d.getDate() - days);
     const cutoff = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
