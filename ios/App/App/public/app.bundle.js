@@ -3290,6 +3290,44 @@ function calcStreakCalendar(records, numWeeks = 12) {
   }
   return { weeks, totalRecorded, totalDays };
 }
+function calcMovingAvgCrossover(records) {
+  if (!records || records.length < 30) {
+    return { crossovers: [], currentTrend: "neutral", shortMA: null, longMA: null };
+  }
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  function movingAvg(arr, idx, window2) {
+    const start = Math.max(0, idx - window2 + 1);
+    const slice = arr.slice(start, idx + 1);
+    return slice.reduce((s, r) => s + r.wt, 0) / slice.length;
+  }
+  const crossovers = [];
+  let prevShort = null;
+  let prevLong = null;
+  for (let i = 29; i < sorted.length; i++) {
+    const shortMA = movingAvg(sorted, i, 7);
+    const longMA = movingAvg(sorted, i, 30);
+    if (prevShort !== null && prevLong !== null) {
+      const prevDiff = prevShort - prevLong;
+      const currDiff = shortMA - longMA;
+      if (prevDiff >= 0 && currDiff < 0) {
+        crossovers.push({ date: sorted[i].dt, type: "golden", shortMA: +shortMA.toFixed(2), longMA: +longMA.toFixed(2) });
+      } else if (prevDiff <= 0 && currDiff > 0) {
+        crossovers.push({ date: sorted[i].dt, type: "death", shortMA: +shortMA.toFixed(2), longMA: +longMA.toFixed(2) });
+      }
+    }
+    prevShort = shortMA;
+    prevLong = longMA;
+  }
+  const lastShort = movingAvg(sorted, sorted.length - 1, 7);
+  const lastLong = movingAvg(sorted, sorted.length - 1, 30);
+  const currentTrend = lastShort < lastLong ? "downtrend" : lastShort > lastLong ? "uptrend" : "neutral";
+  return {
+    crossovers: crossovers.slice(-10),
+    currentTrend,
+    shortMA: +lastShort.toFixed(2),
+    longMA: +lastLong.toFixed(2)
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -26065,6 +26103,7 @@ function render() {
                 ${renderWeightAnomalies()}
                 ${renderMilestoneHistory()}
                 ${renderWeightJourney()}
+                ${renderMovingAvgCrossover()}
               </div>
               ` : ""}
             </div>
@@ -26666,9 +26705,9 @@ function renderWeightVariance() {
       <div class="helper">${t("variance.title")}</div>
       <div class="variance-badge" style="color:${levelColor};font-weight:700;">${t("variance." + v.level)}</div>
       <div class="variance-stats">
-        <span>${t("variance.cv").replace("{cv}", v.cv)}</span>
-        <span>${t("variance.swing").replace("{swing}", v.maxSwing)}</span>
-        <span>${t("variance.daily").replace("{avg}", v.avgDailySwing)}</span>
+        <span>${t("variance.cv").replace("{cv}", Number(v.cv).toFixed(1))}</span>
+        <span>${t("variance.swing").replace("{swing}", Number(v.maxSwing).toFixed(1))}</span>
+        <span>${t("variance.daily").replace("{avg}", Number(v.avgDailySwing).toFixed(1))}</span>
       </div>
       <div class="helper hint-small">${t("variance.hint").replace("{count}", v.count)}</div>
     </div>
@@ -27071,9 +27110,9 @@ function renderVolatilityIndex() {
         <div class="volatility-bar-fill" style="width:${pct}%;background:${color}"></div>
       </div>
       <div class="volatility-stats">
-        <span>${t("volatility.overall").replace("{val}", vi.overall)}</span>
-        <span>${t("volatility.recent").replace("{val}", vi.recent)}</span>
-        <span>${t("volatility.max").replace("{val}", vi.maxSwing)}</span>
+        <span>${t("volatility.overall").replace("{val}", Number(vi.overall).toFixed(1))}</span>
+        <span>${t("volatility.recent").replace("{val}", Number(vi.recent).toFixed(1))}</span>
+        <span>${t("volatility.max").replace("{val}", Number(vi.maxSwing).toFixed(1))}</span>
       </div>
       <div class="volatility-trend">${t("volatility." + vi.trend)}</div>
       <div class="helper hint-small">${t("volatility.hint")}</div>
@@ -27554,6 +27593,32 @@ function renderStreakCalendar() {
       <div class="helper">${t("streakCal.title")}</div>
       <div class="sc-grid">${cells}</div>
       <div class="helper hint-small">${summary}</div>
+    </div>
+  `;
+}
+function renderMovingAvgCrossover() {
+  const data = calcMovingAvgCrossover(state.records);
+  if (!data.shortMA) return "";
+  const trendLabel = data.currentTrend === "downtrend" ? t("cross.downtrend") : data.currentTrend === "uptrend" ? t("cross.uptrend") : t("cross.neutral");
+  const trendIcon = data.currentTrend === "downtrend" ? "\u{1F4C9}" : data.currentTrend === "uptrend" ? "\u{1F4C8}" : "\u27A1\uFE0F";
+  const trendCls = data.currentTrend === "downtrend" ? "mac-down" : data.currentTrend === "uptrend" ? "mac-up" : "mac-neutral";
+  const crossRows = data.crossovers.length ? data.crossovers.slice(-5).reverse().map((c) => {
+    const icon = c.type === "golden" ? "\u{1F7E2}" : "\u{1F534}";
+    const label = c.type === "golden" ? t("cross.golden") : t("cross.death");
+    return `<div class="mac-row"><span class="mac-icon">${icon}</span><span class="mac-date">${c.date.slice(5).replace("-", "/")}</span><span class="mac-label">${label}</span></div>`;
+  }).join("") : `<div class="helper hint-small">${t("cross.none")}</div>`;
+  return `
+    <div class="mac-section">
+      <div class="helper">${t("cross.title")}</div>
+      <div class="mac-trend ${trendCls}">
+        <span class="mac-trend-icon">${trendIcon}</span>
+        <span class="mac-trend-text">${trendLabel}</span>
+      </div>
+      <div class="mac-ma-row">
+        <span>${t("cross.shortMA")}: <strong>${data.shortMA.toFixed(1)}kg</strong></span>
+        <span>${t("cross.longMA")}: <strong>${data.longMA.toFixed(1)}kg</strong></span>
+      </div>
+      ${crossRows}
     </div>
   `;
 }

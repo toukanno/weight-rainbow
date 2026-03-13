@@ -3094,3 +3094,57 @@ export function calcStreakCalendar(records, numWeeks = 12) {
   }
   return { weeks, totalRecorded, totalDays };
 }
+
+/**
+ * Detect moving average crossovers (7-day vs 30-day).
+ * A "golden cross" means short MA drops below long MA (weight trending down = good for loss).
+ * A "death cross" means short MA rises above long MA (weight trending up = bad for loss).
+ * Returns { crossovers: [{ date, type, shortMA, longMA }], currentTrend, shortMA, longMA }
+ */
+export function calcMovingAvgCrossover(records) {
+  if (!records || records.length < 30) {
+    return { crossovers: [], currentTrend: "neutral", shortMA: null, longMA: null };
+  }
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+
+  function movingAvg(arr, idx, window) {
+    const start = Math.max(0, idx - window + 1);
+    const slice = arr.slice(start, idx + 1);
+    return slice.reduce((s, r) => s + r.wt, 0) / slice.length;
+  }
+
+  const crossovers = [];
+  let prevShort = null;
+  let prevLong = null;
+
+  for (let i = 29; i < sorted.length; i++) {
+    const shortMA = movingAvg(sorted, i, 7);
+    const longMA = movingAvg(sorted, i, 30);
+
+    if (prevShort !== null && prevLong !== null) {
+      const prevDiff = prevShort - prevLong;
+      const currDiff = shortMA - longMA;
+
+      if (prevDiff >= 0 && currDiff < 0) {
+        crossovers.push({ date: sorted[i].dt, type: "golden", shortMA: +shortMA.toFixed(2), longMA: +longMA.toFixed(2) });
+      } else if (prevDiff <= 0 && currDiff > 0) {
+        crossovers.push({ date: sorted[i].dt, type: "death", shortMA: +shortMA.toFixed(2), longMA: +longMA.toFixed(2) });
+      }
+    }
+
+    prevShort = shortMA;
+    prevLong = longMA;
+  }
+
+  const lastShort = movingAvg(sorted, sorted.length - 1, 7);
+  const lastLong = movingAvg(sorted, sorted.length - 1, 30);
+  const currentTrend = lastShort < lastLong ? "downtrend" : lastShort > lastLong ? "uptrend" : "neutral";
+
+  return {
+    crossovers: crossovers.slice(-10),
+    currentTrend,
+    shortMA: +lastShort.toFixed(2),
+    longMA: +lastLong.toFixed(2),
+  };
+}

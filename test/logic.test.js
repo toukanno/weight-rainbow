@@ -104,6 +104,7 @@ import {
   calcWeightJourney,
   calcGoalScenarios,
   calcStreakCalendar,
+  calcMovingAvgCrossover,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -7970,5 +7971,75 @@ describe("calcStreakCalendar", () => {
     const result = calcStreakCalendar([], 2);
     expect(result.totalRecorded).toBe(0);
     expect(result.totalDays).toBeGreaterThan(0);
+  });
+});
+
+describe("calcMovingAvgCrossover", () => {
+  it("returns neutral for fewer than 30 records", () => {
+    const records = Array.from({ length: 20 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i * 0.1,
+    }));
+    const result = calcMovingAvgCrossover(records);
+    expect(result.currentTrend).toBe("neutral");
+    expect(result.shortMA).toBeNull();
+    expect(result.crossovers).toEqual([]);
+  });
+
+  it("returns uptrend when short MA > long MA", () => {
+    // Steadily increasing weights: short MA will be above long MA
+    const records = Array.from({ length: 40 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 60 + i * 0.5,
+    }));
+    const result = calcMovingAvgCrossover(records);
+    expect(result.currentTrend).toBe("uptrend");
+    expect(result.shortMA).toBeGreaterThan(result.longMA);
+  });
+
+  it("returns downtrend when short MA < long MA", () => {
+    // Steadily decreasing weights: short MA will be below long MA
+    const records = Array.from({ length: 40 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 80 - i * 0.5,
+    }));
+    const result = calcMovingAvgCrossover(records);
+    expect(result.currentTrend).toBe("downtrend");
+    expect(result.shortMA).toBeLessThan(result.longMA);
+  });
+
+  it("detects crossovers when trend reverses", () => {
+    // First 30 records: increasing, then 20 records: sharply decreasing
+    const records = [];
+    for (let i = 0; i < 30; i++) {
+      records.push({ dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 60 + i * 0.3 });
+    }
+    for (let i = 0; i < 20; i++) {
+      const day = 31 + i;
+      const month = day > 31 ? 2 : 1;
+      const d = day > 31 ? day - 31 : day;
+      records.push({ dt: `2025-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`, wt: 69 - i * 1.0 });
+    }
+    const result = calcMovingAvgCrossover(records);
+    expect(result.crossovers.length).toBeGreaterThan(0);
+    const hasGolden = result.crossovers.some((c) => c.type === "golden");
+    expect(hasGolden).toBe(true);
+  });
+
+  it("limits crossovers to last 10", () => {
+    const result = calcMovingAvgCrossover([]);
+    expect(result.crossovers.length).toBeLessThanOrEqual(10);
+  });
+
+  it("returns shortMA and longMA as numbers", () => {
+    const records = Array.from({ length: 35 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcMovingAvgCrossover(records);
+    expect(typeof result.shortMA).toBe("number");
+    expect(typeof result.longMA).toBe("number");
+    expect(result.shortMA).toBeCloseTo(70, 1);
+    expect(result.longMA).toBeCloseTo(70, 1);
   });
 });
