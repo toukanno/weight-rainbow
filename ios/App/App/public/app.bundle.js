@@ -22291,6 +22291,7 @@ function showFirstLaunchModal() {
   app.innerHTML = `
     <div class="lang-modal-overlay">
       <div class="lang-modal">
+        <div style="font-size:2.4rem;margin-bottom:8px;">\u{1F308}</div>
         <h2>\u3088\u3046\u3053\u305D / Welcome</h2>
         <p>\u8A00\u8A9E\u3092\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044<br>Choose your language</p>
         <div class="lang-modal-buttons">

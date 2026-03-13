@@ -135,6 +135,7 @@ function showFirstLaunchModal() {
   app.innerHTML = `
     <div class="lang-modal-overlay">
       <div class="lang-modal">
+        <div style="font-size:2.4rem;margin-bottom:8px;">🌈</div>
         <h2>ようこそ / Welcome</h2>
         <p>言語を選択してください<br>Choose your language</p>
         <div class="lang-modal-buttons">
