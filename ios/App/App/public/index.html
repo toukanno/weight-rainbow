@@ -607,6 +607,10 @@
 
       .record-note {
         font-style: italic;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 100%;
       }
 
       .note-hashtag {
@@ -707,7 +711,8 @@
       }
       .note-tag {
         font-size: 0.72rem;
-        padding: 3px 10px;
+        padding: 6px 12px;
+        min-height: 32px;
         border-radius: 12px;
         border: 1px solid var(--border);
         background: var(--surface);
@@ -1089,7 +1094,8 @@
       }
 
       .chip {
-        padding: 8px 10px;
+        padding: 10px 14px;
+        min-height: 44px;
         background: var(--surface-strong);
         border: 1px solid var(--border);
         color: var(--text);
@@ -1422,7 +1428,8 @@
       }
 
       .date-shortcut {
-        padding: 4px 10px;
+        padding: 6px 12px;
+        min-height: 32px;
         border-radius: 8px;
         border: 1px solid var(--border);
         background: var(--surface);
@@ -1528,7 +1535,7 @@
 
       .record-delete {
         padding: 8px 14px;
-        min-height: 36px;
+        min-height: 44px;
         border-radius: 12px;
         border: 1px solid color-mix(in srgb, var(--error, #dc2626) 20%, transparent);
         background: color-mix(in srgb, var(--error, #dc2626) 8%, transparent);
@@ -2004,7 +2011,8 @@
       }
 
       .summary-tab {
-        padding: 8px 18px;
+        padding: 10px 18px;
+        min-height: 40px;
         border-radius: 999px;
         border: 1px solid var(--border);
         background: var(--surface);
