@@ -231,7 +231,63 @@
       .app-shell {
         width: min(1180px, calc(100% - 32px));
         margin: 0 auto;
-        padding: 28px 0 48px;
+        padding: 28px 0 100px;
+      }
+
+      /* Bottom Navigation */
+      .bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        background: var(--surface-strong);
+        border-top: 1px solid var(--border);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        padding: 6px 0 calc(6px + env(safe-area-inset-bottom, 0));
+        z-index: 1000;
+        box-shadow: 0 -2px 20px rgba(0, 0, 0, 0.06);
+      }
+
+      .bottom-nav-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        padding: 6px 12px;
+        border: none;
+        background: none;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: color 0.2s ease, transform 0.15s ease;
+        -webkit-tap-highlight-color: transparent;
+        position: relative;
+        min-width: 56px;
+      }
+
+      .bottom-nav-item svg {
+        width: 22px;
+        height: 22px;
+        stroke-width: 1.8;
+        transition: transform 0.2s ease;
+      }
+
+      .bottom-nav-item.active {
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      .bottom-nav-item.active svg {
+        transform: scale(1.1);
+      }
+
+      .bottom-nav-item:active {
+        transform: scale(0.92);
       }
 
       .hero {
@@ -398,7 +454,7 @@
       }
 
       .content-grid {
-        grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+        grid-template-columns: 1fr;
         gap: 18px;
         margin-top: 18px;
       }
@@ -3574,7 +3630,7 @@
         .tab-row, .export-row, .export-grid, .data-actions,
         .google-actions, .record-delete, .quick-section,
         .voice-box, .photo-box, .note-tags-row, .date-shortcuts,
-        .record-search, .record-date-range, .ad-slot,
+        .record-search, .record-date-range, .ad-slot, .bottom-nav,
         [data-action="save-record"], [data-action="save-profile"],
         [data-action="save-settings"], [data-action="toggle-records"] {
           display: none !important;

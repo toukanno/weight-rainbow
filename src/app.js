@@ -133,6 +133,7 @@ let recordSearchQuery = "";
 let recordDateFrom = "";
 let recordDateTo = "";
 let searchDebounceTimer = null;
+let activeTab = "home";
 
 // Initialize quick weight from last record
 {
@@ -359,7 +360,7 @@ function render() {
 
   app.innerHTML = `
     <main class="app-shell">
-      <section class="hero">
+      <section class="hero" ${activeTab !== "home" ? 'style="display:none"' : ""}>
         <div class="hero-top">
           <div>
             <div class="eyebrow">${t("status.ready")}</div>
@@ -447,7 +448,7 @@ function render() {
       </section>
 
       <div class="content-grid">
-        <div class="column">
+        <div class="column" data-tab="home" ${activeTab !== "home" ? 'style="display:none"' : ""}>
           <section class="panel">
             <div class="section-header">
               <div>
@@ -607,7 +608,9 @@ function render() {
               ${lastUndoState ? `<button type="button" class="undo-btn" data-action="undo">${t("undo.button")}</button>` : ""}
             </div>
           </section>
+        </div>
 
+        <div class="column" data-tab="graph" ${activeTab !== "graph" ? 'style="display:none"' : ""}>
           <section class="panel">
             <div class="section-header">
               <div>
@@ -713,7 +716,9 @@ function render() {
             </div>
             ` : ""}
           </section>
+        </div>
 
+        <div class="column" data-tab="calendar" ${activeTab !== "calendar" ? 'style="display:none"' : ""}>
           <!-- Monthly Stats Panel -->
           ${renderMonthlyStats()}
 
@@ -727,7 +732,9 @@ function render() {
             </div>
             ${renderCalendar()}
           </section>
+        </div>
 
+        <div class="column" data-tab="search" ${activeTab !== "search" ? 'style="display:none"' : ""}>
           <!-- Records List Panel -->
           <section class="panel records-panel">
             <div class="section-header">
@@ -773,7 +780,7 @@ function render() {
           </section>
         </div>
 
-        <div class="column">
+        <div class="column" data-tab="settings" ${activeTab !== "settings" ? 'style="display:none"' : ""}>
           <section class="panel">
             <div class="section-header">
               <div>
@@ -953,6 +960,28 @@ function render() {
         </div>
       </div>
     </main>
+    <nav class="bottom-nav" role="navigation" aria-label="メインナビゲーション">
+      <button type="button" class="bottom-nav-item ${activeTab === "home" ? "active" : ""}" data-nav="home">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span>${t("nav.home")}</span>
+      </button>
+      <button type="button" class="bottom-nav-item ${activeTab === "search" ? "active" : ""}" data-nav="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <span>${t("nav.search")}</span>
+      </button>
+      <button type="button" class="bottom-nav-item ${activeTab === "calendar" ? "active" : ""}" data-nav="calendar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span>${t("nav.calendar")}</span>
+      </button>
+      <button type="button" class="bottom-nav-item ${activeTab === "graph" ? "active" : ""}" data-nav="graph">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>${t("nav.graph")}</span>
+      </button>
+      <button type="button" class="bottom-nav-item ${activeTab === "settings" ? "active" : ""}" data-nav="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>${t("nav.settings")}</span>
+      </button>
+    </nav>
     ${rainbowVisible ? `
     <div class="rainbow-overlay" id="rainbowOverlay" role="alert" aria-live="assertive">
       <div class="confetti-container" id="confettiContainer"></div>
@@ -1870,6 +1899,15 @@ function renderPickerDecOptions(selected) {
 }
 
 function bindEvents() {
+  // Bottom navigation
+  app.querySelectorAll("[data-nav]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeTab = button.dataset.nav;
+      render();
+      window.scrollTo(0, 0);
+    });
+  });
+
   app.querySelectorAll("[data-mode]").forEach((button) => {
     button.addEventListener("click", () => {
       activeEntryMode = button.dataset.mode;

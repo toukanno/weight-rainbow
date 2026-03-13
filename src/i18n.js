@@ -550,6 +550,11 @@ export const translations = {
     "streakReward.master": "マスター",
     "streakReward.legend": "レジェンド",
     "streakReward.hint": "毎日記録して次のバッジを目指そう！",
+    "nav.home": "ホーム",
+    "nav.search": "検索",
+    "nav.calendar": "カレンダー",
+    "nav.graph": "グラフ",
+    "nav.settings": "設定",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1102,6 +1107,11 @@ export const translations = {
     "streakReward.master": "Master",
     "streakReward.legend": "Legend",
     "streakReward.hint": "Record daily to earn the next badge!",
+    "nav.home": "Home",
+    "nav.search": "Search",
+    "nav.calendar": "Calendar",
+    "nav.graph": "Graph",
+    "nav.settings": "Settings",
   },
 };
 
