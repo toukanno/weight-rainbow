@@ -525,3 +525,12 @@ export function filterRecords(records, query) {
     return false;
   });
 }
+
+export function filterRecordsByDateRange(records, fromDate, toDate) {
+  if (!fromDate && !toDate) return records;
+  return records.filter((r) => {
+    if (fromDate && r.dt < fromDate) return false;
+    if (toDate && r.dt > toDate) return false;
+    return true;
+  });
+}

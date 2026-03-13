@@ -69,6 +69,8 @@ let calendarYear = new Date().getFullYear();
 let calendarMonth = new Date().getMonth();
 let showMonthlyStats = false;
 let recordSearchQuery = "";
+let recordDateFrom = "";
+let recordDateTo = "";
 
 // Initialize quick weight from last record
 {
@@ -568,6 +570,13 @@ function render() {
             <div class="record-search">
               <input id="recordSearch" type="search" placeholder="${escapeAttr(t("records.search"))}" value="${escapeAttr(recordSearchQuery)}" autocomplete="off" />
               ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : ""}
+            </div>
+            <div class="record-date-range">
+              <div class="date-range-fields">
+                <label>${t("records.from")}<input id="dateRangeFrom" type="date" value="${escapeAttr(recordDateFrom)}" /></label>
+                <label>${t("records.to")}<input id="dateRangeTo" type="date" value="${escapeAttr(recordDateTo)}" /></label>
+                ${recordDateFrom || recordDateTo ? `<button type="button" class="btn ghost" data-action="clear-date-range">${t("records.clearRange")}</button>` : ""}
+              </div>
             </div>` : ""}
             <div class="record-list">
               ${state.records.length ? renderRecordList() : `<div class="empty-state"><div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">📊</div><div class="helper">${t("records.empty")}</div></div>`}
@@ -905,9 +914,11 @@ function renderRecord(record, prevRecord, badge) {
 }
 
 function renderRecordList() {
-  const filtered = filterRecords(state.records, recordSearchQuery);
+  let filtered = filterRecords(state.records, recordSearchQuery);
+  filtered = filterRecordsByDateRange(filtered, recordDateFrom, recordDateTo);
   const reversed = filtered.slice().reverse();
-  const displayed = showAllRecords || recordSearchQuery ? reversed : reversed.slice(0, 5);
+  const hasFilter = recordSearchQuery || recordDateFrom || recordDateTo;
+  const displayed = showAllRecords || hasFilter ? reversed : reversed.slice(0, 5);
 
   // Find all-time min/max for badge display (only when 3+ records)
   let minDt = null;
@@ -979,6 +990,19 @@ function bindEvents() {
     // Restore focus and cursor position after render
     const input = document.getElementById("recordSearch");
     if (input) { input.focus(); input.selectionStart = input.selectionEnd = input.value.length; }
+  });
+  app.querySelector("#dateRangeFrom")?.addEventListener("change", (e) => {
+    recordDateFrom = e.target.value;
+    render();
+  });
+  app.querySelector("#dateRangeTo")?.addEventListener("change", (e) => {
+    recordDateTo = e.target.value;
+    render();
+  });
+  app.querySelector('[data-action="clear-date-range"]')?.addEventListener("click", () => {
+    recordDateFrom = "";
+    recordDateTo = "";
+    render();
   });
   app.querySelector('[data-action="export-excel"]')?.addEventListener("click", exportExcel);
   app.querySelector('[data-action="export-csv"]')?.addEventListener("click", exportCSV);

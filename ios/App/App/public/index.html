@@ -712,6 +712,31 @@
         font-weight: 700;
       }
 
+      .record-date-range {
+        margin-top: 8px;
+      }
+      .date-range-fields {
+        display: flex;
+        gap: 8px;
+        align-items: flex-end;
+        flex-wrap: wrap;
+      }
+      .date-range-fields label {
+        font-size: 0.72rem;
+        color: var(--muted);
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .date-range-fields input[type="date"] {
+        font-size: 0.82rem;
+        padding: 4px 8px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+      }
+
       .chip {
         padding: 8px 10px;
         background: rgba(255, 255, 255, 0.9);
@@ -1912,6 +1937,12 @@
       }
 
       body[data-theme="midnight"] .record-search input[type="search"] {
+        background: rgba(30, 35, 55, 0.7);
+        border-color: rgba(139, 146, 176, 0.24);
+        color: #e4e7f0;
+      }
+
+      body[data-theme="midnight"] .date-range-fields input[type="date"] {
         background: rgba(30, 35, 55, 0.7);
         border-color: rgba(139, 146, 176, 0.24);
         color: #e4e7f0;

@@ -27,6 +27,7 @@ import {
   calcInsight,
   toggleNoteTag,
   NOTE_TAGS,
+  filterRecordsByDateRange,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -745,5 +746,37 @@ describe("NOTE_TAGS", () => {
     expect(NOTE_TAGS).toContain("exercise");
     expect(NOTE_TAGS).toContain("diet");
     expect(NOTE_TAGS.length).toBeGreaterThanOrEqual(6);
+  });
+});
+
+describe("filterRecordsByDateRange", () => {
+  const records = [
+    { dt: "2025-01-01", wt: 70 },
+    { dt: "2025-01-15", wt: 69 },
+    { dt: "2025-02-01", wt: 68 },
+    { dt: "2025-03-01", wt: 67 },
+  ];
+
+  it("returns all records when no dates specified", () => {
+    expect(filterRecordsByDateRange(records, "", "")).toEqual(records);
+  });
+
+  it("filters by from date only", () => {
+    const result = filterRecordsByDateRange(records, "2025-02-01", "");
+    expect(result).toHaveLength(2);
+    expect(result[0].dt).toBe("2025-02-01");
+  });
+
+  it("filters by to date only", () => {
+    const result = filterRecordsByDateRange(records, "", "2025-01-15");
+    expect(result).toHaveLength(2);
+    expect(result[1].dt).toBe("2025-01-15");
+  });
+
+  it("filters by both from and to", () => {
+    const result = filterRecordsByDateRange(records, "2025-01-15", "2025-02-01");
+    expect(result).toHaveLength(2);
+    expect(result[0].dt).toBe("2025-01-15");
+    expect(result[1].dt).toBe("2025-02-01");
   });
 });
