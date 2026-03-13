@@ -30,6 +30,7 @@ import {
   calcWeeklyRate,
   calcMonthlyStats,
   filterRecords,
+  calcInsight,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -229,6 +230,7 @@ function render() {
   const bmiStatus = stats?.latestBMI ? t(getBMIStatus(stats.latestBMI)) : t("bmi.unknown");
   const motivation = getMotivationalMessage(streak, trend, state.records, goalProgress);
   const achievements = calcAchievements(state.records, streak, goalWeight);
+  const insight = calcInsight(state.records);
   const previewWeightResult = validateWeight(state.form.weight);
   const currentBMI = previewWeightResult.valid && state.profile.heightCm
     ? buildRecord({
@@ -516,6 +518,14 @@ function render() {
                   <div class="helper">${t("rate.period").replace("{days}", weeklyRate.totalDays).replace("{change}", (weeklyRate.totalChange > 0 ? "+" : "") + weeklyRate.totalChange.toFixed(1))}</div>`
                 : `<div class="helper">${t("rate.insufficient")}</div>`}
             </div>
+            ${insight ? `<div class="insight-box">
+              <div class="helper">${t("insight.bestDay").replace("{day}", t("day." + insight.bestDay))}</div>
+              ${insight.weekComparison !== null ? `<div class="helper">${
+                insight.weekComparison > 0.05 ? t("insight.weekUp").replace("{diff}", insight.weekComparison.toFixed(1))
+                : insight.weekComparison < -0.05 ? t("insight.weekDown").replace("{diff}", insight.weekComparison.toFixed(1))
+                : t("insight.weekSame")
+              }</div>` : ""}
+            </div>` : ""}
           </section>
 
           <!-- Monthly Stats Panel -->

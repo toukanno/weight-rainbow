@@ -1150,6 +1150,31 @@ function calcMonthlyStats(records) {
     return { month: key, count: weights.length, avg, min, max, change };
   });
 }
+function calcInsight(records) {
+  if (records.length < 3) return null;
+  const dayCounts = [0, 0, 0, 0, 0, 0, 0];
+  for (const r of records) {
+    const dow = (/* @__PURE__ */ new Date(r.dt + "T00:00:00")).getDay();
+    dayCounts[dow]++;
+  }
+  const bestDay = dayCounts.indexOf(Math.max(...dayCounts));
+  const now = /* @__PURE__ */ new Date();
+  const thisWeekStart = new Date(now);
+  thisWeekStart.setDate(now.getDate() - now.getDay());
+  const lastWeekStart = new Date(thisWeekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+  const thisWeekStr = thisWeekStart.toISOString().slice(0, 10);
+  const lastWeekStr = lastWeekStart.toISOString().slice(0, 10);
+  const thisWeek = records.filter((r) => r.dt >= thisWeekStr);
+  const lastWeek = records.filter((r) => r.dt >= lastWeekStr && r.dt < thisWeekStr);
+  let weekComparison = null;
+  if (thisWeek.length && lastWeek.length) {
+    const thisAvg = thisWeek.reduce((s, r) => s + r.wt, 0) / thisWeek.length;
+    const lastAvg = lastWeek.reduce((s, r) => s + r.wt, 0) / lastWeek.length;
+    weekComparison = Math.round((thisAvg - lastAvg) * 10) / 10;
+  }
+  return { bestDay, weekComparison };
+}
 function filterRecords(records, query) {
   if (!query || !query.trim()) return records;
   const q = query.trim().toLowerCase();
@@ -1453,7 +1478,18 @@ var translations = {
     "monthly.title": "\u6708\u5225\u7D71\u8A08",
     "monthly.hint": "\u6708\u3054\u3068\u306E\u4F53\u91CD\u63A8\u79FB\u3092\u78BA\u8A8D\u3067\u304D\u307E\u3059",
     "monthly.records": "{count}\u4EF6",
-    "monthly.showAll": "\u5168{count}\u30F6\u6708\u3092\u8868\u793A"
+    "monthly.showAll": "\u5168{count}\u30F6\u6708\u3092\u8868\u793A",
+    "insight.bestDay": "\u3088\u304F\u8A18\u9332\u3059\u308B\u66DC\u65E5: {day}",
+    "insight.weekUp": "\u4ECA\u9031\u306E\u5E73\u5747\u306F\u5148\u9031\u3088\u308A +{diff}kg",
+    "insight.weekDown": "\u4ECA\u9031\u306E\u5E73\u5747\u306F\u5148\u9031\u3088\u308A {diff}kg",
+    "insight.weekSame": "\u4ECA\u9031\u3068\u5148\u9031\u306E\u5E73\u5747\u306F\u307B\u307C\u540C\u3058\u3067\u3059",
+    "day.0": "\u65E5\u66DC",
+    "day.1": "\u6708\u66DC",
+    "day.2": "\u706B\u66DC",
+    "day.3": "\u6C34\u66DC",
+    "day.4": "\u6728\u66DC",
+    "day.5": "\u91D1\u66DC",
+    "day.6": "\u571F\u66DC"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1744,7 +1780,18 @@ var translations = {
     "monthly.title": "Monthly Stats",
     "monthly.hint": "Track your weight progress by month",
     "monthly.records": "{count} records",
-    "monthly.showAll": "Show all {count} months"
+    "monthly.showAll": "Show all {count} months",
+    "insight.bestDay": "Most active day: {day}",
+    "insight.weekUp": "This week's avg is +{diff}kg vs last week",
+    "insight.weekDown": "This week's avg is {diff}kg vs last week",
+    "insight.weekSame": "This week's avg is similar to last week",
+    "day.0": "Sunday",
+    "day.1": "Monday",
+    "day.2": "Tuesday",
+    "day.3": "Wednesday",
+    "day.4": "Thursday",
+    "day.5": "Friday",
+    "day.6": "Saturday"
   }
 };
 function createTranslator(language) {
@@ -22435,6 +22482,7 @@ function render() {
   const bmiStatus = stats?.latestBMI ? t(getBMIStatus(stats.latestBMI)) : t("bmi.unknown");
   const motivation = getMotivationalMessage(streak, trend, state.records, goalProgress);
   const achievements = calcAchievements(state.records, streak, goalWeight);
+  const insight = calcInsight(state.records);
   const previewWeightResult = validateWeight(state.form.weight);
   const currentBMI = previewWeightResult.valid && state.profile.heightCm ? buildRecord({
     date: state.form.date || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
@@ -22704,6 +22752,10 @@ function render() {
               ${weeklyRate ? `<div class="rate-value ${weeklyRate.weeklyRate < 0 ? "loss" : weeklyRate.weeklyRate > 0 ? "gain" : "neutral"}">${weeklyRate.weeklyRate > 0 ? "+" : ""}${t("rate.value").replace("{rate}", weeklyRate.weeklyRate.toFixed(2))}</div>
                   <div class="helper">${t("rate.period").replace("{days}", weeklyRate.totalDays).replace("{change}", (weeklyRate.totalChange > 0 ? "+" : "") + weeklyRate.totalChange.toFixed(1))}</div>` : `<div class="helper">${t("rate.insufficient")}</div>`}
             </div>
+            ${insight ? `<div class="insight-box">
+              <div class="helper">${t("insight.bestDay").replace("{day}", t("day." + insight.bestDay))}</div>
+              ${insight.weekComparison !== null ? `<div class="helper">${insight.weekComparison > 0.05 ? t("insight.weekUp").replace("{diff}", insight.weekComparison.toFixed(1)) : insight.weekComparison < -0.05 ? t("insight.weekDown").replace("{diff}", insight.weekComparison.toFixed(1)) : t("insight.weekSame")}</div>` : ""}
+            </div>` : ""}
           </section>
 
           <!-- Monthly Stats Panel -->

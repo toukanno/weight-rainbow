@@ -289,6 +289,12 @@ export const translations = {
     "monthly.hint": "月ごとの体重推移を確認できます",
     "monthly.records": "{count}件",
     "monthly.showAll": "全{count}ヶ月を表示",
+    "insight.bestDay": "よく記録する曜日: {day}",
+    "insight.weekUp": "今週の平均は先週より +{diff}kg",
+    "insight.weekDown": "今週の平均は先週より {diff}kg",
+    "insight.weekSame": "今週と先週の平均はほぼ同じです",
+    "day.0": "日曜", "day.1": "月曜", "day.2": "火曜", "day.3": "水曜",
+    "day.4": "木曜", "day.5": "金曜", "day.6": "土曜",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -580,6 +586,12 @@ export const translations = {
     "monthly.hint": "Track your weight progress by month",
     "monthly.records": "{count} records",
     "monthly.showAll": "Show all {count} months",
+    "insight.bestDay": "Most active day: {day}",
+    "insight.weekUp": "This week's avg is +{diff}kg vs last week",
+    "insight.weekDown": "This week's avg is {diff}kg vs last week",
+    "insight.weekSame": "This week's avg is similar to last week",
+    "day.0": "Sunday", "day.1": "Monday", "day.2": "Tuesday", "day.3": "Wednesday",
+    "day.4": "Thursday", "day.5": "Friday", "day.6": "Saturday",
   },
 };
 

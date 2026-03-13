@@ -24,6 +24,7 @@ import {
   calcMonthlyStats,
   filterRecords,
   calcBMIZoneWeights,
+  calcInsight,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -686,5 +687,25 @@ describe("i18n record badge keys", () => {
     for (const key of badgeKeys) {
       expect(translations.en[key], `Missing en key: ${key}`).toBeDefined();
     }
+  });
+});
+
+describe("calcInsight", () => {
+  it("returns null for fewer than 3 records", () => {
+    expect(calcInsight([])).toBeNull();
+    expect(calcInsight([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns bestDay for 3+ records", () => {
+    // All on Wednesdays (day 3)
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-08", wt: 69 },
+      { dt: "2025-01-15", wt: 68 },
+    ];
+    const result = calcInsight(records);
+    expect(result).not.toBeNull();
+    expect(result.bestDay).toBeGreaterThanOrEqual(0);
+    expect(result.bestDay).toBeLessThanOrEqual(6);
   });
 });

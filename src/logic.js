@@ -470,6 +470,38 @@ export function calcMonthlyStats(records) {
   });
 }
 
+export function calcInsight(records) {
+  if (records.length < 3) return null;
+  // Find most common recording day of week
+  const dayCounts = [0, 0, 0, 0, 0, 0, 0];
+  for (const r of records) {
+    const dow = new Date(r.dt + "T00:00:00").getDay();
+    dayCounts[dow]++;
+  }
+  const bestDay = dayCounts.indexOf(Math.max(...dayCounts));
+
+  // This week vs last week average
+  const now = new Date();
+  const thisWeekStart = new Date(now);
+  thisWeekStart.setDate(now.getDate() - now.getDay());
+  const lastWeekStart = new Date(thisWeekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+  const thisWeekStr = thisWeekStart.toISOString().slice(0, 10);
+  const lastWeekStr = lastWeekStart.toISOString().slice(0, 10);
+
+  const thisWeek = records.filter((r) => r.dt >= thisWeekStr);
+  const lastWeek = records.filter((r) => r.dt >= lastWeekStr && r.dt < thisWeekStr);
+
+  let weekComparison = null;
+  if (thisWeek.length && lastWeek.length) {
+    const thisAvg = thisWeek.reduce((s, r) => s + r.wt, 0) / thisWeek.length;
+    const lastAvg = lastWeek.reduce((s, r) => s + r.wt, 0) / lastWeek.length;
+    weekComparison = Math.round((thisAvg - lastAvg) * 10) / 10;
+  }
+
+  return { bestDay, weekComparison };
+}
+
 export function filterRecords(records, query) {
   if (!query || !query.trim()) return records;
   const q = query.trim().toLowerCase();

@@ -1580,6 +1580,24 @@
         border-color: rgba(139, 146, 176, 0.2);
       }
 
+      /* Insight Box */
+      .insight-box {
+        margin-top: 10px;
+        padding: 8px 12px;
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--accent) 6%, transparent);
+        border: 1px solid color-mix(in srgb, var(--accent) 12%, transparent);
+      }
+
+      .insight-box .helper {
+        font-size: 0.78rem;
+      }
+
+      body[data-theme="midnight"] .insight-box {
+        background: color-mix(in srgb, var(--accent) 10%, rgba(30, 35, 55, 0.6));
+        border-color: color-mix(in srgb, var(--accent) 16%, rgba(139, 146, 176, 0.2));
+      }
+
       /* Hover/active enhancements */
       .summary-tab:hover {
         transform: translateY(-1px);
