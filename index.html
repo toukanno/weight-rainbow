@@ -2691,8 +2691,8 @@
 
       .scroll-top-btn {
         position: fixed;
-        bottom: 24px;
-        right: 24px;
+        bottom: max(24px, env(safe-area-inset-bottom, 0px));
+        right: max(24px, env(safe-area-inset-right, 0px));
         width: 44px;
         height: 44px;
         border-radius: 50%;
@@ -3067,6 +3067,36 @@
         color: var(--muted);
         margin-top: 6px;
       }
+
+      .mp-section { margin-top: 14px; }
+      .mp-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 0;
+        border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+      }
+      .mp-row:last-of-type { border-bottom: none; }
+      .mp-label { flex: 1; font-size: 0.85rem; }
+      .mp-avg { font-weight: 700; font-size: 0.95rem; }
+      .mp-change {
+        font-size: 0.78rem;
+        padding: 2px 6px;
+        border-radius: 6px;
+        font-weight: 600;
+      }
+      .mp-up { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+      .mp-down { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+      .mp-count { font-size: 0.72rem; color: var(--muted); }
+      .mp-status {
+        text-align: center;
+        font-size: 0.8rem;
+        margin-top: 8px;
+        padding: 4px 8px;
+        border-radius: 8px;
+      }
+      .mp-has-pattern { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+      .mp-stable { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
 
       .wc-section { margin-top: 14px; }
       .wc-header, .wc-row {
@@ -4896,8 +4926,8 @@
       /* Scroll-to-top Button */
       .scroll-top-btn {
         position: fixed;
-        bottom: 24px;
-        right: 24px;
+        bottom: max(24px, env(safe-area-inset-bottom, 0px));
+        right: max(24px, env(safe-area-inset-right, 0px));
         width: 44px;
         height: 44px;
         border-radius: 50%;
@@ -5477,8 +5507,8 @@
         }
 
         .scroll-top-btn {
-          bottom: 16px;
-          right: 16px;
+          bottom: max(16px, env(safe-area-inset-bottom, 0px));
+          right: max(16px, env(safe-area-inset-right, 0px));
         }
 
         .lang-modal {

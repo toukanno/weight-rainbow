@@ -3647,6 +3647,46 @@ function calcDailyTarget(records, goalWeight) {
     onTarget
   };
 }
+function calcMonthPhaseAvg(records) {
+  if (!records || records.length < 14) return null;
+  const phases = [
+    { label: "early", days: "1-7", sums: 0, counts: 0, weights: [] },
+    { label: "mid", days: "8-14", sums: 0, counts: 0, weights: [] },
+    { label: "late", days: "15-21", sums: 0, counts: 0, weights: [] },
+    { label: "end", days: "22-31", sums: 0, counts: 0, weights: [] }
+  ];
+  for (const r of records) {
+    const day = parseInt(r.dt.slice(8), 10);
+    let idx;
+    if (day <= 7) idx = 0;
+    else if (day <= 14) idx = 1;
+    else if (day <= 21) idx = 2;
+    else idx = 3;
+    phases[idx].sums += r.wt;
+    phases[idx].counts += 1;
+    phases[idx].weights.push(r.wt);
+  }
+  const result = phases.map((p, i) => ({
+    label: p.label,
+    days: p.days,
+    avg: p.counts > 0 ? +(p.sums / p.counts).toFixed(1) : null,
+    count: p.counts,
+    change: null
+  }));
+  if (result[0].avg !== null) {
+    for (let i = 0; i < result.length; i++) {
+      if (result[i].avg !== null) {
+        result[i].change = +(result[i].avg - result[0].avg).toFixed(2);
+      }
+    }
+  }
+  const avgs = result.filter((r) => r.avg !== null).map((r) => r.avg);
+  const maxVar = avgs.length > 1 ? Math.max(...avgs) - Math.min(...avgs) : 0;
+  return {
+    phases: result,
+    hasPattern: maxVar > 0.3
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -4526,7 +4566,17 @@ var translations = {
     "dtarget.above": "\u76EE\u6A19\u3088\u308A {diff}kg \u4E0A",
     "dtarget.below": "\u76EE\u6A19\u3088\u308A {diff}kg \u4E0B",
     "dtarget.onTarget": "\u76EE\u6A19\u901A\u308A\uFF01",
-    "dtarget.pace": "\u9031 {pace}kg \u30DA\u30FC\u30B9"
+    "dtarget.pace": "\u9031 {pace}kg \u30DA\u30FC\u30B9",
+    "mphase.title": "\u6708\u5185\u30D1\u30BF\u30FC\u30F3",
+    "mphase.early": "\u4E0A\u65EC (1-7\u65E5)",
+    "mphase.mid": "\u4E2D\u65EC (8-14\u65E5)",
+    "mphase.late": "\u4E0B\u65EC (15-21\u65E5)",
+    "mphase.end": "\u6708\u672B (22-31\u65E5)",
+    "mphase.avg": "\u5E73\u5747",
+    "mphase.change": "\u5DEE",
+    "mphase.pattern": "\u6708\u5185\u306E\u5909\u52D5\u30D1\u30BF\u30FC\u30F3\u3042\u308A",
+    "mphase.noPattern": "\u5B89\u5B9A\u3057\u305F\u6708\u5185\u63A8\u79FB",
+    "mphase.records": "\u4EF6"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5397,7 +5447,24 @@ var translations = {
     "bfTrend.down": "Decreasing",
     "bfTrend.up": "Increasing",
     "bfTrend.neutral": "Stable",
-    "bfTrend.nodata": "Insufficient body fat data"
+    "bfTrend.nodata": "Insufficient body fat data",
+    "dtarget.title": "Today's Target Weight",
+    "dtarget.target": "Target",
+    "dtarget.current": "Current",
+    "dtarget.above": "{diff}kg above target",
+    "dtarget.below": "{diff}kg below target",
+    "dtarget.onTarget": "On Target!",
+    "dtarget.pace": "{pace}kg/week pace",
+    "mphase.title": "Monthly Patterns",
+    "mphase.early": "Early (1-7)",
+    "mphase.mid": "Mid (8-14)",
+    "mphase.late": "Late (15-21)",
+    "mphase.end": "End (22-31)",
+    "mphase.avg": "Avg",
+    "mphase.change": "Diff",
+    "mphase.pattern": "Monthly variation detected",
+    "mphase.noPattern": "Stable throughout month",
+    "mphase.records": "records"
   }
 };
 function createTranslator(language) {
@@ -26548,6 +26615,7 @@ function render() {
             ${renderWeeklySummaryComparison()}
             ${renderGoalProgressRing()}
             ${renderDailyTarget()}
+            ${renderMonthPhaseAvg()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -28374,6 +28442,37 @@ function renderDailyTarget() {
       </div>
       <div class="dt-status ${statusCls}">${statusMsg}</div>
       <div class="dt-pace">${paceStr}</div>
+    </div>
+  `;
+}
+function renderMonthPhaseAvg() {
+  const data = calcMonthPhaseAvg(state.records);
+  if (!data) return "";
+  const phaseLabels = {
+    early: t("mphase.early"),
+    mid: t("mphase.mid"),
+    late: t("mphase.late"),
+    end: t("mphase.end")
+  };
+  const rows = data.phases.map((p) => {
+    if (p.avg === null) return "";
+    const changeStr = p.change !== null && p.change !== 0 ? `<span class="mp-change ${p.change > 0 ? "mp-up" : "mp-down"}">${p.change > 0 ? "+" : ""}${p.change.toFixed(2)}kg</span>` : "";
+    return `
+      <div class="mp-row">
+        <span class="mp-label">${phaseLabels[p.label]}</span>
+        <span class="mp-avg">${p.avg}kg</span>
+        ${changeStr}
+        <span class="mp-count">${p.count} ${t("mphase.records")}</span>
+      </div>
+    `;
+  }).join("");
+  const statusMsg = data.hasPattern ? t("mphase.pattern") : t("mphase.noPattern");
+  const statusCls = data.hasPattern ? "mp-has-pattern" : "mp-stable";
+  return `
+    <div class="mp-section">
+      <div class="helper">${t("mphase.title")}</div>
+      ${rows}
+      <div class="mp-status ${statusCls}">${statusMsg}</div>
     </div>
   `;
 }
@@ -30409,7 +30508,7 @@ function handlePhotoZoom() {
   const im = document.createElement("img");
   im.src = imagePreviewUrl;
   im.alt = t("entry.photoPreview");
-  im.style.cssText = "max-width:95vw;max-height:95vh;object-fit:contain;border-radius:12px";
+  im.style.cssText = "max-width:95vw;max-height:95dvh;object-fit:contain;border-radius:12px";
   ov.appendChild(im);
   ov.tabIndex = -1;
   const dismiss = () => {

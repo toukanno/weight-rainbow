@@ -117,6 +117,7 @@ import {
   calcGoalProgressRing,
   calcBodyFatTrend,
   calcDailyTarget,
+  calcMonthPhaseAvg,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -811,6 +812,7 @@ function render() {
             ${renderWeeklySummaryComparison()}
             ${renderGoalProgressRing()}
             ${renderDailyTarget()}
+            ${renderMonthPhaseAvg()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -2774,6 +2776,44 @@ function renderDailyTarget() {
       </div>
       <div class="dt-status ${statusCls}">${statusMsg}</div>
       <div class="dt-pace">${paceStr}</div>
+    </div>
+  `;
+}
+
+function renderMonthPhaseAvg() {
+  const data = calcMonthPhaseAvg(state.records);
+  if (!data) return "";
+
+  const phaseLabels = {
+    early: t("mphase.early"),
+    mid: t("mphase.mid"),
+    late: t("mphase.late"),
+    end: t("mphase.end"),
+  };
+
+  const rows = data.phases.map((p) => {
+    if (p.avg === null) return "";
+    const changeStr = p.change !== null && p.change !== 0
+      ? `<span class="mp-change ${p.change > 0 ? "mp-up" : "mp-down"}">${p.change > 0 ? "+" : ""}${p.change.toFixed(2)}kg</span>`
+      : "";
+    return `
+      <div class="mp-row">
+        <span class="mp-label">${phaseLabels[p.label]}</span>
+        <span class="mp-avg">${p.avg}kg</span>
+        ${changeStr}
+        <span class="mp-count">${p.count} ${t("mphase.records")}</span>
+      </div>
+    `;
+  }).join("");
+
+  const statusMsg = data.hasPattern ? t("mphase.pattern") : t("mphase.noPattern");
+  const statusCls = data.hasPattern ? "mp-has-pattern" : "mp-stable";
+
+  return `
+    <div class="mp-section">
+      <div class="helper">${t("mphase.title")}</div>
+      ${rows}
+      <div class="mp-status ${statusCls}">${statusMsg}</div>
     </div>
   `;
 }
@@ -4945,7 +4985,7 @@ function handlePhotoZoom() {
   const im = document.createElement("img");
   im.src = imagePreviewUrl;
   im.alt = t("entry.photoPreview");
-  im.style.cssText = "max-width:95vw;max-height:95vh;object-fit:contain;border-radius:12px";
+  im.style.cssText = "max-width:95vw;max-height:95dvh;object-fit:contain;border-radius:12px";
   ov.appendChild(im);
   ov.tabIndex = -1;
   const dismiss = () => { ov.remove(); document.removeEventListener("keydown", onKey); };

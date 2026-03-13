@@ -114,6 +114,7 @@ import {
   calcGoalProgressRing,
   calcBodyFatTrend,
   calcDailyTarget,
+  calcMonthPhaseAvg,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -8593,5 +8594,71 @@ describe("calcDailyTarget", () => {
 
   it("handles null records", () => {
     expect(calcDailyTarget(null, 65)).toBeNull();
+  });
+});
+
+describe("calcMonthPhaseAvg", () => {
+  it("returns null for fewer than 14 records", () => {
+    expect(calcMonthPhaseAvg([])).toBeNull();
+    expect(calcMonthPhaseAvg(null)).toBeNull();
+    const few = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    expect(calcMonthPhaseAvg(few)).toBeNull();
+  });
+
+  it("groups records into 4 phases", () => {
+    const records = Array.from({ length: 30 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + (i < 7 ? 0 : i < 14 ? 0.5 : i < 21 ? 1.0 : 1.5),
+    }));
+    const result = calcMonthPhaseAvg(records);
+    expect(result).not.toBeNull();
+    expect(result.phases).toHaveLength(4);
+    expect(result.phases[0].label).toBe("early");
+    expect(result.phases[1].label).toBe("mid");
+    expect(result.phases[2].label).toBe("late");
+    expect(result.phases[3].label).toBe("end");
+  });
+
+  it("calculates averages correctly", () => {
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: i < 7 ? 70 : 71,
+    }));
+    const result = calcMonthPhaseAvg(records);
+    expect(result.phases[0].avg).toBe(70);
+    expect(result.phases[1].avg).toBe(71);
+    expect(result.phases[0].count).toBe(7);
+    expect(result.phases[1].count).toBe(7);
+  });
+
+  it("detects pattern when variation > 0.3kg", () => {
+    const records = Array.from({ length: 28 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: i < 7 ? 70 : i < 14 ? 70 : i < 21 ? 70 : 71,
+    }));
+    const result = calcMonthPhaseAvg(records);
+    expect(result.hasPattern).toBe(true);
+  });
+
+  it("reports no pattern when stable", () => {
+    const records = Array.from({ length: 28 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcMonthPhaseAvg(records);
+    expect(result.hasPattern).toBe(false);
+  });
+
+  it("calculates change relative to first phase", () => {
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: i < 7 ? 70 : 72,
+    }));
+    const result = calcMonthPhaseAvg(records);
+    expect(result.phases[0].change).toBe(0);
+    expect(result.phases[1].change).toBe(2);
   });
 });
