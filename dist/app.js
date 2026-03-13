@@ -1934,6 +1934,30 @@ function calcNextMilestones(records, heightCm = null) {
   milestones.sort((a, b) => a.remaining - b.remaining);
   return milestones.length ? milestones.slice(0, 3) : null;
 }
+function calcSeasonality(records) {
+  if (records.length < 30) return null;
+  const monthData = Array.from({ length: 12 }, () => ({ sum: 0, count: 0 }));
+  for (const r of records) {
+    const month = parseInt(r.dt.slice(5, 7), 10) - 1;
+    monthData[month].sum += r.wt;
+    monthData[month].count++;
+  }
+  const avgs = monthData.map((m) => m.count > 0 ? Math.round(m.sum / m.count * 10) / 10 : null);
+  const validAvgs = avgs.filter((a) => a !== null);
+  if (validAvgs.length < 3) return null;
+  const overallAvg = Math.round(validAvgs.reduce((s, a) => s + a, 0) / validAvgs.length * 10) / 10;
+  const lightest = avgs.reduce((best, a, i) => a !== null && (best === null || a < avgs[best]) ? i : best, null);
+  const heaviest = avgs.reduce((best, a, i) => a !== null && (best === null || a > avgs[best]) ? i : best, null);
+  const seasonalRange = lightest !== null && heaviest !== null ? Math.round((avgs[heaviest] - avgs[lightest]) * 10) / 10 : 0;
+  return {
+    monthAvgs: avgs,
+    counts: monthData.map((m) => m.count),
+    overallAvg,
+    lightestMonth: lightest,
+    heaviestMonth: heaviest,
+    seasonalRange
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -2431,7 +2455,24 @@ var translations = {
     "milestone.next.roundDown": "{target}kg \u307E\u3067\u3042\u3068 {remaining}kg",
     "milestone.next.fiveDown": "{target}kg \u307E\u3067\u3042\u3068 {remaining}kg",
     "milestone.next.bmiZone": "BMI {bmi}\u4EE5\u4E0B\u307E\u3067\u3042\u3068 {remaining}kg\uFF08{target}kg\uFF09",
-    "milestone.next.hint": "\u76F4\u8FD1\u306E\u76EE\u6A19\u5730\u70B9"
+    "milestone.next.hint": "\u76F4\u8FD1\u306E\u76EE\u6A19\u5730\u70B9",
+    "season.title": "\u5B63\u7BC0\u30D1\u30BF\u30FC\u30F3",
+    "season.lightest": "\u6700\u3082\u8EFD\u3044\u6708: {month}\u6708\uFF08\u5E73\u5747 {avg}kg\uFF09",
+    "season.heaviest": "\u6700\u3082\u91CD\u3044\u6708: {month}\u6708\uFF08\u5E73\u5747 {avg}kg\uFF09",
+    "season.range": "\u5B63\u7BC0\u5909\u52D5\u5E45: {range}kg",
+    "season.hint": "\u6708\u5225\u306E\u5E73\u5747\u4F53\u91CD\u30D1\u30BF\u30FC\u30F3",
+    "season.month.1": "1\u6708",
+    "season.month.2": "2\u6708",
+    "season.month.3": "3\u6708",
+    "season.month.4": "4\u6708",
+    "season.month.5": "5\u6708",
+    "season.month.6": "6\u6708",
+    "season.month.7": "7\u6708",
+    "season.month.8": "8\u6708",
+    "season.month.9": "9\u6708",
+    "season.month.10": "10\u6708",
+    "season.month.11": "11\u6708",
+    "season.month.12": "12\u6708"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2927,7 +2968,24 @@ var translations = {
     "milestone.next.roundDown": "{remaining}kg to {target}kg",
     "milestone.next.fiveDown": "{remaining}kg to {target}kg",
     "milestone.next.bmiZone": "{remaining}kg to BMI {bmi} ({target}kg)",
-    "milestone.next.hint": "Your nearest targets"
+    "milestone.next.hint": "Your nearest targets",
+    "season.title": "Seasonal Pattern",
+    "season.lightest": "Lightest month: {month} (avg {avg}kg)",
+    "season.heaviest": "Heaviest month: {month} (avg {avg}kg)",
+    "season.range": "Seasonal range: {range}kg",
+    "season.hint": "Average weight pattern by month",
+    "season.month.1": "Jan",
+    "season.month.2": "Feb",
+    "season.month.3": "Mar",
+    "season.month.4": "Apr",
+    "season.month.5": "May",
+    "season.month.6": "Jun",
+    "season.month.7": "Jul",
+    "season.month.8": "Aug",
+    "season.month.9": "Sep",
+    "season.month.10": "Oct",
+    "season.month.11": "Nov",
+    "season.month.12": "Dec"
   }
 };
 function createTranslator(language) {
@@ -24008,6 +24066,7 @@ function render() {
                 ${renderWeightVariance()}
                 ${renderWeightPlateau()}
                 ${renderRecordGaps()}
+                ${renderSeasonality()}
               </div>
               ` : ""}
             </div>
@@ -24708,6 +24767,29 @@ function renderNextMilestones() {
       <div class="helper">${t("milestone.next.title")}</div>
       ${items}
       <div class="helper hint-small">${t("milestone.next.hint")}</div>
+    </div>
+  `;
+}
+function renderSeasonality() {
+  const s = calcSeasonality(state.records);
+  if (!s) return "";
+  const bars = s.monthAvgs.map((avg, i) => {
+    if (avg === null) return `<div class="season-bar-wrap"><div class="season-bar-label">${t("season.month." + (i + 1))}</div><div class="season-bar" style="height:0"></div></div>`;
+    const diff = avg - s.overallAvg;
+    const pct = Math.min(100, Math.max(5, 50 + diff * 10));
+    const color = i === s.lightestMonth ? "var(--ok, #10b981)" : i === s.heaviestMonth ? "var(--warn, #f59e0b)" : "var(--accent)";
+    return `<div class="season-bar-wrap"><div class="season-bar" style="height:${pct}%;background:${color};" title="${avg}kg"></div><div class="season-bar-label">${t("season.month." + (i + 1))}</div></div>`;
+  }).join("");
+  return `
+    <div class="season-section">
+      <div class="helper">${t("season.title")}</div>
+      <div class="season-chart">${bars}</div>
+      <div class="season-info">
+        <div>${t("season.lightest").replace("{month}", s.lightestMonth + 1).replace("{avg}", s.monthAvgs[s.lightestMonth])}</div>
+        <div>${t("season.heaviest").replace("{month}", s.heaviestMonth + 1).replace("{avg}", s.monthAvgs[s.heaviestMonth])}</div>
+        <div>${t("season.range").replace("{range}", s.seasonalRange)}</div>
+      </div>
+      <div class="helper hint-small">${t("season.hint")}</div>
     </div>
   `;
 }

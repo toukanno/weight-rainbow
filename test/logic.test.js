@@ -64,6 +64,7 @@ import {
   calcCalorieEstimate,
   calcMomentumScore,
   calcNextMilestones,
+  calcSeasonality,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -3550,5 +3551,50 @@ describe("createDefaultSettings edge cases", () => {
   it("has valid default language", () => {
     const settings = createDefaultSettings();
     expect(["ja", "en"]).toContain(settings.language);
+  });
+});
+
+describe("calcSeasonality", () => {
+  it("returns null for fewer than 30 records", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 70,
+    }));
+    expect(calcSeasonality(records)).toBeNull();
+  });
+
+  it("returns monthly averages for sufficient data", () => {
+    const records = [];
+    for (let m = 1; m <= 6; m++) {
+      for (let d = 1; d <= 5; d++) {
+        records.push({ dt: `2025-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`, wt: 65 + m });
+      }
+    }
+    const result = calcSeasonality(records);
+    expect(result).not.toBeNull();
+    expect(result.monthAvgs.length).toBe(12);
+    expect(result.lightestMonth).toBe(0); // January (65+1=66)
+    expect(result.heaviestMonth).toBe(5); // June (65+6=71)
+    expect(result.seasonalRange).toBe(5);
+  });
+
+  it("returns null if fewer than 3 months have data", () => {
+    const records = Array.from({ length: 30 }, (_, i) => ({
+      dt: `2025-01-${String((i % 28) + 1).padStart(2, "0")}`, wt: 70,
+    }));
+    // All records in January — only 1 month
+    const result = calcSeasonality(records);
+    expect(result).toBeNull();
+  });
+
+  it("handles overall average correctly", () => {
+    const records = [];
+    for (let m = 1; m <= 4; m++) {
+      for (let d = 1; d <= 8; d++) {
+        records.push({ dt: `2025-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`, wt: 70 });
+      }
+    }
+    const result = calcSeasonality(records);
+    expect(result).not.toBeNull();
+    expect(result.overallAvg).toBe(70);
   });
 });

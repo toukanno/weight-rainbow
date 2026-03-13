@@ -66,6 +66,7 @@ import {
   calcCalorieEstimate,
   calcMomentumScore,
   calcNextMilestones,
+  calcSeasonality,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -687,6 +688,7 @@ function render() {
                 ${renderWeightVariance()}
                 ${renderWeightPlateau()}
                 ${renderRecordGaps()}
+                ${renderSeasonality()}
               </div>
               ` : ""}
             </div>
@@ -1415,6 +1417,30 @@ function renderNextMilestones() {
       <div class="helper">${t("milestone.next.title")}</div>
       ${items}
       <div class="helper hint-small">${t("milestone.next.hint")}</div>
+    </div>
+  `;
+}
+
+function renderSeasonality() {
+  const s = calcSeasonality(state.records);
+  if (!s) return "";
+  const bars = s.monthAvgs.map((avg, i) => {
+    if (avg === null) return `<div class="season-bar-wrap"><div class="season-bar-label">${t("season.month." + (i + 1))}</div><div class="season-bar" style="height:0"></div></div>`;
+    const diff = avg - s.overallAvg;
+    const pct = Math.min(100, Math.max(5, 50 + diff * 10));
+    const color = i === s.lightestMonth ? "var(--ok, #10b981)" : i === s.heaviestMonth ? "var(--warn, #f59e0b)" : "var(--accent)";
+    return `<div class="season-bar-wrap"><div class="season-bar" style="height:${pct}%;background:${color};" title="${avg}kg"></div><div class="season-bar-label">${t("season.month." + (i + 1))}</div></div>`;
+  }).join("");
+  return `
+    <div class="season-section">
+      <div class="helper">${t("season.title")}</div>
+      <div class="season-chart">${bars}</div>
+      <div class="season-info">
+        <div>${t("season.lightest").replace("{month}", s.lightestMonth + 1).replace("{avg}", s.monthAvgs[s.lightestMonth])}</div>
+        <div>${t("season.heaviest").replace("{month}", s.heaviestMonth + 1).replace("{avg}", s.monthAvgs[s.heaviestMonth])}</div>
+        <div>${t("season.range").replace("{range}", s.seasonalRange)}</div>
+      </div>
+      <div class="helper hint-small">${t("season.hint")}</div>
     </div>
   `;
 }

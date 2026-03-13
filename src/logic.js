@@ -1329,3 +1329,30 @@ export function calcNextMilestones(records, heightCm = null) {
   milestones.sort((a, b) => a.remaining - b.remaining);
   return milestones.length ? milestones.slice(0, 3) : null;
 }
+
+export function calcSeasonality(records) {
+  if (records.length < 30) return null;
+  const monthData = Array.from({ length: 12 }, () => ({ sum: 0, count: 0 }));
+  for (const r of records) {
+    const month = parseInt(r.dt.slice(5, 7), 10) - 1;
+    monthData[month].sum += r.wt;
+    monthData[month].count++;
+  }
+  const avgs = monthData.map((m) => m.count > 0 ? Math.round((m.sum / m.count) * 10) / 10 : null);
+  const validAvgs = avgs.filter((a) => a !== null);
+  if (validAvgs.length < 3) return null;
+  const overallAvg = Math.round((validAvgs.reduce((s, a) => s + a, 0) / validAvgs.length) * 10) / 10;
+  const lightest = avgs.reduce((best, a, i) => a !== null && (best === null || a < avgs[best]) ? i : best, null);
+  const heaviest = avgs.reduce((best, a, i) => a !== null && (best === null || a > avgs[best]) ? i : best, null);
+  const seasonalRange = lightest !== null && heaviest !== null
+    ? Math.round((avgs[heaviest] - avgs[lightest]) * 10) / 10
+    : 0;
+  return {
+    monthAvgs: avgs,
+    counts: monthData.map((m) => m.count),
+    overallAvg,
+    lightestMonth: lightest,
+    heaviestMonth: heaviest,
+    seasonalRange,
+  };
+}
