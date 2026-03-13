@@ -24070,7 +24070,7 @@ function renderDataHealth() {
     <div class="health-section">
       <div class="helper">${t("health.title")}</div>
       <div class="health-display">
-        <div class="health-score ${level}">${health.score}</div>
+        <div class="health-score ${level}" role="meter" aria-valuenow="${health.score}" aria-valuemin="0" aria-valuemax="100" aria-label="${t("health.title")}">${health.score}</div>
         <div class="health-details">
           <div class="helper hint-small">${t("health.score").replace("{score}", health.score)}</div>
           ${issueHtml}
@@ -24087,7 +24087,7 @@ function renderWeightRange() {
     <div class="range-section">
       <div class="helper">${t("range.title")}</div>
       <div class="range-bar-container">
-        <div class="range-bar-track">
+        <div class="range-bar-track" role="meter" aria-valuenow="${range.position}" aria-valuemin="0" aria-valuemax="100" aria-label="${t("range.title")}">
           <div class="range-bar-fill" style="width:${range.position}%"></div>
           <div class="range-bar-marker" style="left:${range.position}%"></div>
         </div>
@@ -24211,7 +24211,7 @@ function renderBMIDistribution() {
   return `
     <div class="bmi-dist-section">
       <div class="helper">${t("bmiDist.title")}</div>
-      <div class="bmi-dist-bar">${bars}</div>
+      <div class="bmi-dist-bar" role="img" aria-label="${zones.map((z) => `${t("bmiDist." + z.key)}: ${dist[z.key].pct}%`).join(", ")}">${bars}</div>
       <div class="bmi-dist-legend">${legend}</div>
       <div class="helper hint-small" style="margin-top:4px;">${t("bmiDist.total").replace("{count}", dist.total)}</div>
     </div>
