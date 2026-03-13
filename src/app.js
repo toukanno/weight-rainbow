@@ -209,6 +209,7 @@ function showFirstLaunchModal() {
       </div>
     </div>
   `;
+  app.querySelector("[data-lang]")?.focus();
   app.querySelectorAll("[data-lang]").forEach((button) => {
     button.addEventListener("click", () => {
       const lang = button.dataset.lang;
@@ -2929,11 +2930,13 @@ function handlePhotoZoom() {
   im.alt = t("entry.photoPreview");
   im.style.cssText = "max-width:95vw;max-height:95vh;object-fit:contain;border-radius:12px";
   ov.appendChild(im);
+  ov.tabIndex = -1;
   const dismiss = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
   const onKey = (e) => { if (e.key === "Escape") dismiss(); };
   ov.addEventListener("click", dismiss);
   document.addEventListener("keydown", onKey);
   document.body.appendChild(ov);
+  ov.focus();
 }
 
 
@@ -2959,5 +2962,15 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && rainbowVisible) {
     rainbowVisible = false;
     document.getElementById("rainbowOverlay")?.remove();
+  }
+
+  // Ctrl/Cmd+K to focus search
+  if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+    event.preventDefault();
+    const searchInput = document.getElementById("recordSearch");
+    if (searchInput) {
+      searchInput.focus();
+      searchInput.select();
+    }
   }
 });

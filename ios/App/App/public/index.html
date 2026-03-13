@@ -2881,6 +2881,38 @@
           font-size: 11px;
         }
       }
+
+      @media print {
+        body {
+          background: white !important;
+          color: #222 !important;
+        }
+        .hero, .panel, .hero-card {
+          box-shadow: none !important;
+          border: 1px solid #ccc !important;
+          backdrop-filter: none !important;
+          background: white !important;
+          break-inside: avoid;
+        }
+        .hero::after, .rainbow-overlay, .confetti-container,
+        #statusBar, .entry-tabs, .btn-row, .import-export,
+        .settings-section, .review-section, .footer-section,
+        .lang-modal-overlay, .photo-preview, .summary-tabs {
+          display: none !important;
+        }
+        .container {
+          max-width: 100% !important;
+          padding: 0 !important;
+        }
+        canvas#chart {
+          max-width: 100% !important;
+          height: auto !important;
+        }
+        .record-actions {
+          display: none !important;
+        }
+        a { color: #222 !important; text-decoration: none !important; }
+      }
     </style>
   </head>
   <body data-theme="prism">
