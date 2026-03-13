@@ -52,6 +52,7 @@ import {
   calcMovingAverages,
   calcGoalMilestones,
   calcRecordingTimeStats,
+  calcConsistencyStreak,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -638,6 +639,7 @@ function render() {
             </div>` : ""}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
+            ${renderConsistencyStreak()}
             ${renderBMIDistribution()}
             ${renderWeightPercentile()}
             ${renderMovingAverages()}
@@ -1111,6 +1113,21 @@ function renderStability() {
           <div class="helper">${t("stability.stddev")}: ${stability.stdDev.toFixed(2)}kg</div>
           <div class="helper">${t("chart.avg")}: ${stability.avg.toFixed(1)}kg (${stability.count} ${t("chart.records")})</div>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderConsistencyStreak() {
+  const cs = calcConsistencyStreak(state.records);
+  if (!cs || cs.streak < 2) return "";
+  return `
+    <div class="consistency-section">
+      <div class="helper">${t("consistency.title")}</div>
+      <div class="consistency-display">
+        <span class="consistency-badge${cs.streak >= 5 ? " great" : ""}">${cs.streak >= 5 ? "🎯" : "📊"} ${t("consistency.current").replace("{days}", cs.streak).replace("{tol}", cs.tolerance)}</span>
+        ${cs.best > cs.streak ? `<span class="helper hint-small">${t("consistency.best").replace("{days}", cs.best)}</span>` : ""}
+        ${cs.streak >= 5 ? `<span class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("consistency.great")}</span>` : ""}
       </div>
     </div>
   `;

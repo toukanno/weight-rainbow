@@ -50,6 +50,7 @@ import {
   calcMovingAverages,
   calcGoalMilestones,
   calcRecordingTimeStats,
+  calcConsistencyStreak,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -2163,5 +2164,54 @@ describe("calcRecordingTimeStats", () => {
     expect(stats.afternoon.count).toBe(1);
     expect(stats.evening.count).toBe(1);
     expect(stats.night.count).toBe(1);
+  });
+});
+
+describe("calcConsistencyStreak", () => {
+  it("returns null for fewer than 2 records", () => {
+    expect(calcConsistencyStreak([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("counts consecutive records within tolerance of latest", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70.3 },
+      { dt: "2025-01-03", wt: 70.1 },
+    ];
+    const result = calcConsistencyStreak(records);
+    expect(result.streak).toBe(3);
+  });
+
+  it("breaks streak when weight changes too much", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 68 },
+      { dt: "2025-01-02", wt: 70.3 },
+      { dt: "2025-01-03", wt: 70.1 },
+    ];
+    const result = calcConsistencyStreak(records);
+    // latest is 70.1, 70.3 is within 0.5, but 68 is not within 0.5 of 70.1
+    expect(result.streak).toBe(2);
+  });
+
+  it("tracks best-ever consistency streak", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70.2 },
+      { dt: "2025-01-03", wt: 70.1 },
+      { dt: "2025-01-04", wt: 72 },
+      { dt: "2025-01-05", wt: 72.3 },
+    ];
+    const result = calcConsistencyStreak(records);
+    expect(result.best).toBe(3); // first 3 records had consistent weights
+    expect(result.streak).toBe(2); // current streak: 72 and 72.3
+  });
+
+  it("uses custom tolerance", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70.8 },
+    ];
+    expect(calcConsistencyStreak(records, 0.5).streak).toBe(1);
+    expect(calcConsistencyStreak(records, 1.0).streak).toBe(2);
   });
 });

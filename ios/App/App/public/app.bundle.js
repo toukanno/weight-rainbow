@@ -1537,6 +1537,26 @@ function calcMovingAverages(records, shortWindow = 7, longWindow = 30) {
     crossing: prevSignal
   };
 }
+function calcConsistencyStreak(records, tolerance = 0.5) {
+  if (records.length < 2) return null;
+  const latest = records[records.length - 1].wt;
+  let streak = 1;
+  for (let i = records.length - 2; i >= 0; i--) {
+    if (Math.abs(records[i].wt - latest) <= tolerance) streak++;
+    else break;
+  }
+  let best = 1;
+  let current = 1;
+  for (let i = 1; i < records.length; i++) {
+    if (Math.abs(records[i].wt - records[i - 1].wt) <= tolerance) {
+      current++;
+      if (current > best) best = current;
+    } else {
+      current = 1;
+    }
+  }
+  return { streak, best, tolerance, latest };
+}
 function csvEscape(val) {
   const str = String(val ?? "");
   if (/[,"\r\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
@@ -1747,6 +1767,10 @@ var translations = {
     "timeStats.night": "\u6DF1\u591C (22-5\u6642)",
     "timeStats.avg": "\u5E73\u5747\u8A18\u9332\u6642\u523B: {hour}\u6642",
     "timeStats.most": "\u6700\u3082\u591A\u3044\u6642\u9593\u5E2F: {period}",
+    "consistency.title": "\u4F53\u91CD\u5B89\u5B9A\u30B9\u30C8\u30EA\u30FC\u30AF",
+    "consistency.current": "\u73FE\u5728: {days}\u56DE\u9023\u7D9A (\xB1{tol}kg\u4EE5\u5185)",
+    "consistency.best": "\u904E\u53BB\u6700\u9577: {days}\u56DE\u9023\u7D9A",
+    "consistency.great": "\u5B89\u5B9A\u3092\u7DAD\u6301\u3057\u3066\u3044\u307E\u3059\uFF01",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
     "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01\uFF08-{diff}kg\uFF09",
     "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
@@ -2140,6 +2164,10 @@ var translations = {
     "timeStats.night": "Night (22-5)",
     "timeStats.avg": "Average recording time: {hour}:00",
     "timeStats.most": "Most common: {period}",
+    "consistency.title": "Weight Consistency Streak",
+    "consistency.current": "Current: {days} in a row (within \xB1{tol}kg)",
+    "consistency.best": "Personal best: {days} in a row",
+    "consistency.great": "Maintaining consistency!",
     "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
@@ -23371,6 +23399,7 @@ function render() {
             </div>` : ""}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
+            ${renderConsistencyStreak()}
             ${renderBMIDistribution()}
             ${renderWeightPercentile()}
             ${renderMovingAverages()}
@@ -23831,6 +23860,20 @@ function renderStability() {
           <div class="helper">${t("stability.stddev")}: ${stability.stdDev.toFixed(2)}kg</div>
           <div class="helper">${t("chart.avg")}: ${stability.avg.toFixed(1)}kg (${stability.count} ${t("chart.records")})</div>
         </div>
+      </div>
+    </div>
+  `;
+}
+function renderConsistencyStreak() {
+  const cs = calcConsistencyStreak(state.records);
+  if (!cs || cs.streak < 2) return "";
+  return `
+    <div class="consistency-section">
+      <div class="helper">${t("consistency.title")}</div>
+      <div class="consistency-display">
+        <span class="consistency-badge${cs.streak >= 5 ? " great" : ""}">${cs.streak >= 5 ? "\u{1F3AF}" : "\u{1F4CA}"} ${t("consistency.current").replace("{days}", cs.streak).replace("{tol}", cs.tolerance)}</span>
+        ${cs.best > cs.streak ? `<span class="helper hint-small">${t("consistency.best").replace("{days}", cs.best)}</span>` : ""}
+        ${cs.streak >= 5 ? `<span class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("consistency.great")}</span>` : ""}
       </div>
     </div>
   `;
