@@ -2581,6 +2581,39 @@ function validateWeightEntry(newWeight, records, threshold = 3) {
   }
   return warnings;
 }
+function calcWeeklyAverages(records, numWeeks = 8) {
+  if (records.length === 0) return [];
+  const now = /* @__PURE__ */ new Date();
+  const todayDay = now.getDay();
+  const currentWeekStart = new Date(now);
+  currentWeekStart.setDate(now.getDate() - (todayDay + 6) % 7);
+  currentWeekStart.setHours(0, 0, 0, 0);
+  const weeks = [];
+  for (let i = numWeeks - 1; i >= 0; i--) {
+    const start = new Date(currentWeekStart);
+    start.setDate(start.getDate() - i * 7);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    const startStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+    const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+    const inWeek = records.filter((r) => r.dt >= startStr && r.dt <= endStr);
+    if (inWeek.length === 0) {
+      weeks.push({ weekStart: startStr, weekEnd: endStr, avg: null, count: 0, min: null, max: null });
+    } else {
+      const weights = inWeek.map((r) => r.wt);
+      const sum = weights.reduce((s, w) => s + w, 0);
+      weeks.push({
+        weekStart: startStr,
+        weekEnd: endStr,
+        avg: Math.round(sum / weights.length * 10) / 10,
+        count: weights.length,
+        min: Math.round(Math.min(...weights) * 10) / 10,
+        max: Math.round(Math.max(...weights) * 10) / 10
+      });
+    }
+  }
+  return weeks;
+}
 
 // src/i18n.js
 var translations = {
@@ -3234,7 +3267,13 @@ var translations = {
     "dupes.clean": "\u554F\u984C\u306A\u3057",
     "validate.largeDiff": "\u524D\u56DE\uFF08{previous}kg\u3001{date}\uFF09\u304B\u3089{diff}kg\u4EE5\u4E0A\u306E\u5909\u52D5\u3067\u3059\u3002\u5165\u529B\u5024\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "validate.outsideRange": "\u5165\u529B\u5024\u304C\u904E\u53BB\u306E\u8A18\u9332\u7BC4\u56F2\uFF08{min}\u301C{max}kg\uFF09\u3092\u5927\u304D\u304F\u8D85\u3048\u3066\u3044\u307E\u3059\u3002",
-    "validate.title": "\u5165\u529B\u78BA\u8A8D"
+    "validate.title": "\u5165\u529B\u78BA\u8A8D",
+    "weeklyAvg.title": "\u9031\u9593\u5E73\u5747\u63A8\u79FB",
+    "weeklyAvg.week": "{start}\u301C",
+    "weeklyAvg.avg": "\u5E73\u5747 {avg}kg",
+    "weeklyAvg.noData": "\u30C7\u30FC\u30BF\u306A\u3057",
+    "weeklyAvg.count": "{count}\u4EF6",
+    "weeklyAvg.change": "\u5148\u9031\u6BD4 {change}kg"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3886,7 +3925,13 @@ var translations = {
     "dupes.clean": "No issues found",
     "validate.largeDiff": "Weight changed by {diff}kg or more from last entry ({previous}kg on {date}). Please verify.",
     "validate.outsideRange": "Weight is well outside your historical range ({min} \u2013 {max}kg).",
-    "validate.title": "Entry Validation"
+    "validate.title": "Entry Validation",
+    "weeklyAvg.title": "Weekly Averages",
+    "weeklyAvg.week": "{start}\u2013",
+    "weeklyAvg.avg": "Avg {avg}kg",
+    "weeklyAvg.noData": "No data",
+    "weeklyAvg.count": "{count} entries",
+    "weeklyAvg.change": "{change}kg vs prev week"
   }
 };
 function createTranslator(language) {
@@ -24970,6 +25015,7 @@ function render() {
             ${renderCalorieEstimate()}
             ${renderWeightConfidence()}
             ${renderBodyFatStats()}
+            ${renderWeeklyAverages()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -26135,6 +26181,37 @@ function renderDuplicateCheck() {
     </div>
   `;
 }
+function renderWeeklyAverages() {
+  const weeks = calcWeeklyAverages(state.records, 8);
+  const withData = weeks.filter((w) => w.avg !== null);
+  if (withData.length < 2) return "";
+  const allAvgs = withData.map((w) => w.avg);
+  const minAvg = Math.min(...allAvgs);
+  const maxAvg = Math.max(...allAvgs);
+  const range = maxAvg - minAvg || 1;
+  const bars = weeks.map((w, i) => {
+    if (w.avg === null) {
+      return `<div class="weekly-avg-bar-wrap"><div class="weekly-avg-bar empty"></div><div class="weekly-avg-label">${t("weeklyAvg.noData")}</div></div>`;
+    }
+    const pct = Math.max(10, (w.avg - minAvg) / range * 80 + 10);
+    const prev = i > 0 ? weeks[i - 1] : null;
+    const change = prev && prev.avg !== null ? Math.round((w.avg - prev.avg) * 10) / 10 : null;
+    const changeClass = change !== null ? change < 0 ? "down" : change > 0 ? "up" : "flat" : "";
+    const startLabel = w.weekStart.slice(5).replace("-", "/");
+    return `<div class="weekly-avg-bar-wrap">
+      <div class="weekly-avg-value">${w.avg}</div>
+      <div class="weekly-avg-bar ${changeClass}" style="height:${pct}%"></div>
+      <div class="weekly-avg-label">${startLabel}</div>
+      ${change !== null ? `<div class="weekly-avg-change ${changeClass}">${change > 0 ? "+" : ""}${change}</div>` : ""}
+    </div>`;
+  });
+  return `
+    <div class="weekly-avg-section">
+      <div class="helper">${t("weeklyAvg.title")}</div>
+      <div class="weekly-avg-chart">${bars.join("")}</div>
+    </div>
+  `;
+}
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -26677,6 +26754,7 @@ var validationBypass = false;
 function saveRecordWithWeight(weight, source) {
   const weightResult = validateWeight(String(weight));
   if (!weightResult.valid) {
+    validationBypass = false;
     setStatus(t(weightResult.error || "entry.noWeight"), "error");
     return;
   }
@@ -26700,6 +26778,7 @@ function saveRecordWithWeight(weight, source) {
   validationBypass = false;
   const bfResult = validateBodyFat(state.form.bodyFat);
   if (!bfResult.valid) {
+    validationBypass = false;
     setStatus(t(bfResult.error), "error");
     return;
   }
@@ -26740,6 +26819,7 @@ function saveRecordWithWeight(weight, source) {
     note: ""
   };
   if (!persist()) {
+    validationBypass = false;
     setStatus(t("status.storageError"), "error");
     return;
   }

@@ -83,6 +83,7 @@ import {
   getFrequentNotes,
   detectDuplicates,
   validateWeightEntry,
+  calcWeeklyAverages,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -6400,5 +6401,89 @@ describe("validateWeightEntry", () => {
     const records = [{ dt: "2025-01-01", wt: 70 }];
     expect(validateWeightEntry(NaN, records)).toEqual([]);
     expect(validateWeightEntry(Infinity, records)).toEqual([]);
+  });
+});
+
+// ── calcProgressSummary edge cases ──
+describe("calcProgressSummary edge cases", () => {
+  it("returns null for fewer than 4 records", () => {
+    expect(calcProgressSummary([])).toBeNull();
+    expect(calcProgressSummary([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+    expect(calcProgressSummary([
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69 },
+      { dt: "2025-01-03", wt: 68 },
+    ])).toBeNull();
+  });
+
+  it("detects improving trend", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-01-10", wt: 74 },
+      { dt: "2025-01-20", wt: 72 },
+      { dt: "2025-01-30", wt: 71 },
+    ];
+    const result = calcProgressSummary(records);
+    expect(result).not.toBeNull();
+    expect(result.trend).toBe("improving");
+    expect(result.totalChange).toBeLessThan(0);
+    expect(result.recordCount).toBe(4);
+  });
+
+  it("detects gaining trend", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 65 },
+      { dt: "2025-01-10", wt: 66 },
+      { dt: "2025-01-20", wt: 68 },
+      { dt: "2025-01-30", wt: 69 },
+    ];
+    const result = calcProgressSummary(records);
+    expect(result).not.toBeNull();
+    expect(result.trend).toBe("gaining");
+    expect(result.totalChange).toBeGreaterThan(0);
+  });
+
+  it("detects stable trend", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-10", wt: 70.1 },
+      { dt: "2025-01-20", wt: 70.2 },
+      { dt: "2025-01-30", wt: 70.1 },
+    ];
+    const result = calcProgressSummary(records);
+    expect(result).not.toBeNull();
+    expect(result.trend).toBe("stable");
+  });
+});
+
+// ── calcMilestoneTimeline edge cases ──
+describe("calcMilestoneTimeline edge cases", () => {
+  it("returns null for fewer than 3 records", () => {
+    expect(calcMilestoneTimeline([])).toBeNull();
+    expect(calcMilestoneTimeline([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("detects all-time low events", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-02-10", wt: 73 },
+      { dt: "2025-03-20", wt: 70 },
+    ];
+    const result = calcMilestoneTimeline(records);
+    expect(result).not.toBeNull();
+    expect(result.events.length).toBeGreaterThan(0);
+    expect(result.events.some((e) => e.type === "low")).toBe(true);
+  });
+
+  it("returns structure with events array and total", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72 },
+      { dt: "2025-02-15", wt: 70 },
+      { dt: "2025-03-30", wt: 69 },
+    ];
+    const result = calcMilestoneTimeline(records);
+    expect(result).not.toBeNull();
+    expect(Array.isArray(result.events)).toBe(true);
+    expect(typeof result.total).toBe("number");
   });
 });
