@@ -1,0 +1,6 @@
+"CFBundleDisplayName" = "レインボー体重管理";
+"NSCameraUsageDescription" = "体重計の写真を撮影または読み込んで体重入力を補助するために使用します。画像は端末外へ送信されません。";
+"NSMicrophoneUsageDescription" = "音声で体重を入力するためにマイクを使用します。音声データは端末外へ送信されません。";
+"NSPhotoLibraryAddUsageDescription" = "体重入力を確認するための写真を端末内で保存または再利用します。";
+"NSPhotoLibraryUsageDescription" = "体重計の写真を選択して体重入力を補助します。写真はアップロードされません。";
+"NSSpeechRecognitionUsageDescription" = "話した体重を文字に変換し、端末内の入力補助としてのみ利用します。";

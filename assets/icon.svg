@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Weight Rainbow">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff5f6d"/>
+      <stop offset="50%" stop-color="#ffc471"/>
+      <stop offset="100%" stop-color="#0ea5e9"/>
+    </linearGradient>
+    <linearGradient id="dial" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#0ea5e9"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="120" fill="url(#bg)"/>
+  <rect x="88" y="116" width="336" height="280" rx="76" fill="#ffffff" fill-opacity="0.88"/>
+  <path d="M168 246c0-49.7 40.3-90 90-90s90 40.3 90 90" fill="none" stroke="url(#dial)" stroke-width="28" stroke-linecap="round"/>
+  <circle cx="256" cy="246" r="20" fill="#1f2440"/>
+  <path d="M256 246l82-46" stroke="#1f2440" stroke-width="18" stroke-linecap="round"/>
+  <rect x="182" y="284" width="148" height="50" rx="25" fill="#f4f1ff"/>
+  <text x="256" y="318" text-anchor="middle" font-size="42" font-family="Avenir Next, Arial, sans-serif" font-weight="700" fill="#1f2440">BMI</text>
+</svg>

@@ -1,64 +1,243 @@
-/**
- * Pure business logic extracted from index.html for testability.
- */
+export const STORAGE_KEYS = {
+  records: "weightRainbow.records",
+  profile: "weightRainbow.profile",
+  settings: "weightRainbow.settings",
+  firstLaunchDone: "weightRainbow.firstLaunchDone",
+};
 
-/**
- * Parse and validate a weight input value.
- * @param {string|number} value - Raw input value
- * @returns {{ valid: boolean, weight?: number, error?: string }}
- */
+export const THEME_LIST = [
+  { id: "prism",    color: "#ff5f6d" },
+  { id: "sunrise",  color: "#ff7a59" },
+  { id: "mist",     color: "#0ea5e9" },
+  { id: "forest",   color: "#10b981" },
+  { id: "lavender", color: "#8b5cf6" },
+  { id: "ocean",    color: "#3b82f6" },
+  { id: "cherry",   color: "#ec4899" },
+  { id: "midnight", color: "#818cf8" },
+  { id: "amber",    color: "#f59e0b" },
+  { id: "rose",     color: "#f43f5e" },
+  { id: "mint",     color: "#14b8a6" },
+];
+
+export const MAX_RECORDS = 180;
+export const WEIGHT_RANGE = { min: 20, max: 300 };
+export const HEIGHT_RANGE = { min: 80, max: 250 };
+export const AGE_RANGE = { min: 1, max: 120 };
+
+export function normalizeNumericInput(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/[０-９]/g, (char) => String(char.charCodeAt(0) - 0xff10))
+    .replace(/[．，]/g, ".")
+    .replace(/,/g, ".")
+    .replace(/\s+/g, "");
+}
+
 export function validateWeight(value) {
-  const wt = parseFloat(value);
-  if (!wt || isNaN(wt)) {
-    return { valid: false, error: "体重を入力してください" };
+  const normalized = normalizeNumericInput(value);
+  if (!/^\d{1,3}(\.\d{1,2})?$/.test(normalized)) {
+    return { valid: false, error: "weight.invalid" };
   }
-  if (wt < 0) {
-    return { valid: false, error: "体重は正の値を入力してください" };
+
+  const weight = Number(normalized);
+  if (!Number.isFinite(weight) || weight < WEIGHT_RANGE.min || weight > WEIGHT_RANGE.max) {
+    return { valid: false, error: "weight.range" };
   }
-  return { valid: true, weight: wt };
+
+  return { valid: true, weight };
 }
 
-/**
- * Add or update a weight record in the log.
- * @param {Array<{dt: string, wt: number}>} records - Existing records
- * @param {string} date - ISO date string (YYYY-MM-DD)
- * @param {number} weight - Weight in kg
- * @returns {Array<{dt: string, wt: number}>} Updated records (sorted by date)
- */
-export function upsertRecord(records, date, weight) {
-  const d = [...records];
-  const existing = d.findIndex(r => r.dt === date);
-  if (existing >= 0) {
-    d[existing] = { ...d[existing], wt: weight };
+export function validateProfile(profile) {
+  const result = {
+    name: String(profile.name ?? "").trim().slice(0, 40),
+    heightCm: null,
+    age: null,
+    gender: String(profile.gender ?? "unspecified"),
+  };
+
+  const heightValue = normalizeNumericInput(profile.heightCm);
+  if (heightValue) {
+    const heightCm = Number(heightValue);
+    if (!Number.isFinite(heightCm) || heightCm < HEIGHT_RANGE.min || heightCm > HEIGHT_RANGE.max) {
+      return { valid: false, error: "profile.heightRange" };
+    }
+    result.heightCm = heightCm;
+  }
+
+  const ageValue = normalizeNumericInput(profile.age);
+  if (ageValue) {
+    const age = Number(ageValue);
+    if (!Number.isInteger(age) || age < AGE_RANGE.min || age > AGE_RANGE.max) {
+      return { valid: false, error: "profile.ageRange" };
+    }
+    result.age = age;
+  }
+
+  if (!["female", "male", "nonbinary", "unspecified"].includes(result.gender)) {
+    result.gender = "unspecified";
+  }
+
+  return { valid: true, profile: result };
+}
+
+export function calculateBMI(weightKg, heightCm) {
+  const weight = Number(weightKg);
+  const height = Number(heightCm);
+  if (!Number.isFinite(weight) || !Number.isFinite(height) || height <= 0) {
+    return null;
+  }
+
+  const bmi = weight / ((height / 100) ** 2);
+  return Math.round(bmi * 10) / 10;
+}
+
+export function getBMIStatus(bmi) {
+  if (!Number.isFinite(bmi)) return "bmi.unknown";
+  if (bmi < 18.5) return "bmi.under";
+  if (bmi < 25) return "bmi.normal";
+  if (bmi < 30) return "bmi.over";
+  return "bmi.obese";
+}
+
+export function extractWeightCandidates(text) {
+  const normalized = normalizeNumericInput(text)
+    .replace(/kg/gi, " ")
+    .replace(/キロ/g, " ")
+    .replace(/点/g, ".")
+    .replace(/[^\d.]/g, " ");
+
+  const matches = normalized.match(/\d{2,3}(?:\.\d{1,2})?/g) ?? [];
+  const candidates = matches
+    .map((token) => Number(token))
+    .filter((weight) => weight >= WEIGHT_RANGE.min && weight <= WEIGHT_RANGE.max);
+
+  return [...new Set(candidates)];
+}
+
+export function pickWeightCandidate(candidates, fallbackWeight = null) {
+  if (!candidates.length) return null;
+  if (!Number.isFinite(fallbackWeight)) return candidates[0];
+
+  return [...candidates].sort((left, right) => {
+    const leftDelta = Math.abs(left - fallbackWeight);
+    const rightDelta = Math.abs(right - fallbackWeight);
+    return leftDelta - rightDelta;
+  })[0];
+}
+
+export function parseVoiceWeight(transcript, fallbackWeight = null) {
+  const candidates = extractWeightCandidates(transcript);
+  return pickWeightCandidate(candidates, fallbackWeight);
+}
+
+export function buildRecord({ date, weight, profile, source, imageName = "" }) {
+  const bmi = calculateBMI(weight, profile.heightCm);
+  return {
+    dt: date,
+    wt: weight,
+    bmi,
+    source,
+    imageName,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+export function upsertRecord(records, record) {
+  const next = [...records];
+  const existingIndex = next.findIndex((entry) => entry.dt === record.dt);
+
+  if (existingIndex >= 0) {
+    next[existingIndex] = { ...next[existingIndex], ...record };
   } else {
-    d.push({ dt: date, wt: weight });
+    next.push(record);
   }
-  d.sort((a, b) => a.dt.localeCompare(b.dt));
-  return d;
+
+  next.sort((left, right) => left.dt.localeCompare(right.dt));
+  return next;
 }
 
-/**
- * Trim records to a maximum count, removing the oldest entries.
- * @param {Array<{dt: string, wt: number}>} records - Sorted records
- * @param {number} maxCount - Maximum number of records to keep
- * @returns {Array<{dt: string, wt: number}>} Trimmed records
- */
-export function trimRecords(records, maxCount = 90) {
+export function trimRecords(records, maxCount = MAX_RECORDS) {
   if (records.length <= maxCount) return records;
   return records.slice(records.length - maxCount);
 }
 
-/**
- * Calculate statistics from an array of weight values.
- * @param {number[]} weights - Array of weight values
- * @returns {{ latest: number, min: number, max: number, change: number, avg: string }}
- */
-export function calcStats(weights) {
-  if (!weights.length) return null;
-  const latest = weights[weights.length - 1];
-  const min = Math.min(...weights);
-  const max = Math.max(...weights);
-  const change = weights[weights.length - 1] - weights[0];
-  const avg = (weights.reduce((s, v) => s + v, 0) / weights.length).toFixed(1);
-  return { latest, min, max, change, avg };
+export function calcStats(records, profile = {}) {
+  if (!records.length) return null;
+
+  const weights = records.map((record) => record.wt);
+  const latestWeight = weights[weights.length - 1];
+  const firstWeight = weights[0];
+  const avgWeight = weights.reduce((sum, value) => sum + value, 0) / weights.length;
+  const latestBMI = calculateBMI(latestWeight, profile.heightCm);
+
+  return {
+    latestWeight,
+    minWeight: Math.min(...weights),
+    maxWeight: Math.max(...weights),
+    change: Math.round((latestWeight - firstWeight) * 10) / 10,
+    avgWeight: Math.round(avgWeight * 10) / 10,
+    latestBMI,
+    latestDate: records[records.length - 1].dt,
+  };
+}
+
+export function createDefaultProfile() {
+  return {
+    name: "",
+    heightCm: "",
+    age: "",
+    gender: "unspecified",
+  };
+}
+
+export function createDefaultSettings() {
+  return {
+    language: "ja",
+    theme: "prism",
+    chartStyle: "detailed",
+    adPreviewEnabled: true,
+    goalWeight: null,
+    reminderEnabled: false,
+    reminderTime: "21:00",
+  };
+}
+
+export function calcDailyDiff(records) {
+  if (records.length < 2) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const todayRecord = records.find((r) => r.dt === today);
+  const yesterdayRecord = records.find((r) => r.dt === yesterday);
+  if (!todayRecord || !yesterdayRecord) return null;
+  const diff = Math.round((todayRecord.wt - yesterdayRecord.wt) * 10) / 10;
+  return { today: todayRecord.wt, yesterday: yesterdayRecord.wt, diff };
+}
+
+export function calcGoalProgress(records, goalWeight) {
+  if (!records.length || !Number.isFinite(goalWeight)) return null;
+  const firstWeight = records[0].wt;
+  const latestWeight = records[records.length - 1].wt;
+  const totalToLose = firstWeight - goalWeight;
+  if (totalToLose === 0) return { percent: 100, remaining: 0 };
+  const lost = firstWeight - latestWeight;
+  const percent = Math.max(0, Math.min(100, Math.round((lost / totalToLose) * 100)));
+  const remaining = Math.round((latestWeight - goalWeight) * 10) / 10;
+  return { percent, remaining };
+}
+
+export function calcPeriodSummary(records, days) {
+  const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const filtered = records.filter((r) => r.dt >= cutoff);
+  if (!filtered.length) return null;
+  const weights = filtered.map((r) => r.wt);
+  const avg = Math.round((weights.reduce((s, w) => s + w, 0) / weights.length) * 10) / 10;
+  return {
+    count: filtered.length,
+    avg,
+    min: Math.min(...weights),
+    max: Math.max(...weights),
+    change: filtered.length >= 2
+      ? Math.round((weights[weights.length - 1] - weights[0]) * 10) / 10
+      : 0,
+  };
 }

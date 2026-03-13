@@ -1,0 +1,9 @@
+{
+  "appId": "com.weightrainbow.app",
+  "appName": "Rainbow Weight Log",
+  "webDir": "web",
+  "ios": {
+    "contentInset": "automatic",
+    "limitsNavigationsToAppBoundDomains": true
+  }
+}

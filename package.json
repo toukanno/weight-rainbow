@@ -1,12 +1,26 @@
 {
   "name": "weight-rainbow",
   "private": true,
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "prepare:web": "node scripts/prepare-web.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check": "npm test && node --check src/app.js && node --check src/logic.js && node --check src/i18n.js && node --check scripts/prepare-web.mjs",
+    "native:sync": "npm run prepare:web && npx cap sync ios",
+    "native:open": "npx cap open ios"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "esbuild": "^0.27.4",
     "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "@capacitor/camera": "^8.0.2",
+    "@capacitor/cli": "^8.2.0",
+    "@capacitor/core": "^8.2.0",
+    "@capacitor/ios": "^8.2.0",
+    "xlsx": "^0.18.5"
   }
 }

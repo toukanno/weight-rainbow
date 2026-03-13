@@ -1,0 +1,18 @@
+{
+  "name": "レインボー体重管理",
+  "short_name": "WeightRainbow",
+  "description": "写真・音声・手入力に対応した、ローカル保存中心の体重管理アプリです。",
+  "lang": "ja",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#fbf8ff",
+  "theme_color": "#ff5f6d",
+  "icons": [
+    {
+      "src": "./assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

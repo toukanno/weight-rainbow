@@ -1,139 +1,242 @@
-import { describe, it, expect } from "vitest";
-import { validateWeight, upsertRecord, trimRecords, calcStats } from "../src/logic.js";
+import { describe, expect, it } from "vitest";
+import {
+  buildRecord,
+  calcStats,
+  calcDailyDiff,
+  calcGoalProgress,
+  calcPeriodSummary,
+  calculateBMI,
+  createDefaultProfile,
+  createDefaultSettings,
+  extractWeightCandidates,
+  getBMIStatus,
+  parseVoiceWeight,
+  trimRecords,
+  upsertRecord,
+  validateProfile,
+  validateWeight,
+} from "../src/logic.js";
 
 describe("validateWeight", () => {
-  it("accepts a valid weight", () => {
+  it("accepts valid decimal input", () => {
     expect(validateWeight("65.5")).toEqual({ valid: true, weight: 65.5 });
   });
 
-  it("accepts an integer weight", () => {
-    expect(validateWeight("70")).toEqual({ valid: true, weight: 70 });
+  it("accepts full-width digits", () => {
+    expect(validateWeight("６５．４")).toEqual({ valid: true, weight: 65.4 });
   });
 
-  it("rejects empty string", () => {
-    const result = validateWeight("");
-    expect(result.valid).toBe(false);
-    expect(result.error).toBeDefined();
+  it("rejects non-numeric strings", () => {
+    expect(validateWeight("abc")).toEqual({ valid: false, error: "weight.invalid" });
   });
 
-  it("rejects NaN input", () => {
-    const result = validateWeight("abc");
-    expect(result.valid).toBe(false);
-  });
-
-  it("rejects zero weight (current behavior — potential bug)", () => {
-    // parseFloat("0") is falsy, so the current logic rejects it
-    const result = validateWeight("0");
-    expect(result.valid).toBe(false);
-  });
-
-  it("rejects negative weight", () => {
-    const result = validateWeight("-5");
-    expect(result.valid).toBe(false);
-  });
-
-  it("parses weight from string with trailing text like '65abc'", () => {
-    // parseFloat("65abc") returns 65 — this is silently accepted
-    const result = validateWeight("65abc");
-    expect(result.valid).toBe(true);
-    expect(result.weight).toBe(65);
+  it("rejects values outside supported range", () => {
+    expect(validateWeight("10")).toEqual({ valid: false, error: "weight.range" });
+    expect(validateWeight("301")).toEqual({ valid: false, error: "weight.range" });
   });
 });
 
-describe("upsertRecord", () => {
-  it("adds a new record to an empty log", () => {
-    const result = upsertRecord([], "2026-03-09", 65.5);
-    expect(result).toEqual([{ dt: "2026-03-09", wt: 65.5 }]);
+describe("validateProfile", () => {
+  it("sanitizes a valid profile", () => {
+    expect(
+      validateProfile({
+        name: " Rainbow ",
+        heightCm: "170",
+        age: "32",
+        gender: "female",
+      }),
+    ).toEqual({
+      valid: true,
+      profile: { name: "Rainbow", heightCm: 170, age: 32, gender: "female" },
+    });
   });
 
-  it("adds a new record and maintains sort order", () => {
-    const existing = [{ dt: "2026-03-01", wt: 60 }, { dt: "2026-03-10", wt: 62 }];
-    const result = upsertRecord(existing, "2026-03-05", 61);
-    expect(result).toEqual([
+  it("rejects invalid height", () => {
+    expect(validateProfile({ ...createDefaultProfile(), heightCm: "79" })).toEqual({
+      valid: false,
+      error: "profile.heightRange",
+    });
+  });
+
+  it("rejects invalid age", () => {
+    expect(validateProfile({ ...createDefaultProfile(), age: "0" })).toEqual({
+      valid: false,
+      error: "profile.ageRange",
+    });
+  });
+});
+
+describe("BMI helpers", () => {
+  it("calculates BMI to one decimal place", () => {
+    expect(calculateBMI(65, 170)).toBe(22.5);
+  });
+
+  it("returns null when height is missing", () => {
+    expect(calculateBMI(65, "")).toBeNull();
+  });
+
+  it("classifies BMI states", () => {
+    expect(getBMIStatus(17.9)).toBe("bmi.under");
+    expect(getBMIStatus(22)).toBe("bmi.normal");
+    expect(getBMIStatus(27)).toBe("bmi.over");
+    expect(getBMIStatus(33)).toBe("bmi.obese");
+  });
+});
+
+describe("OCR and voice helpers", () => {
+  it("extracts weight-like candidates from mixed text", () => {
+    expect(extractWeightCandidates("Weight 65.4kg / BMI 22.5")).toEqual([65.4, 22.5]);
+  });
+
+  it("extracts candidates from Japanese speech text", () => {
+    expect(parseVoiceWeight("きょうの体重は ６４ 点 ８ キロ", 65)).toBe(64.8);
+  });
+});
+
+describe("record helpers", () => {
+  it("builds a record with BMI", () => {
+    const record = buildRecord({
+      date: "2026-03-13",
+      weight: 65,
+      profile: { heightCm: 170 },
+      source: "manual",
+    });
+
+    expect(record).toMatchObject({
+      dt: "2026-03-13",
+      wt: 65,
+      bmi: 22.5,
+      source: "manual",
+    });
+  });
+
+  it("upserts and sorts records by date", () => {
+    const first = buildRecord({
+      date: "2026-03-10",
+      weight: 64,
+      profile: { heightCm: 170 },
+      source: "manual",
+    });
+    const second = buildRecord({
+      date: "2026-03-08",
+      weight: 63.5,
+      profile: { heightCm: 170 },
+      source: "voice",
+    });
+
+    const records = upsertRecord([first], second);
+    expect(records.map((record) => record.dt)).toEqual(["2026-03-08", "2026-03-10"]);
+  });
+
+  it("trims oldest records when over max count", () => {
+    const records = Array.from({ length: 5 }, (_, index) => ({
+      dt: `2026-03-0${index + 1}`,
+      wt: 60 + index,
+    }));
+
+    expect(trimRecords(records, 3).map((record) => record.dt)).toEqual(["2026-03-03", "2026-03-04", "2026-03-05"]);
+  });
+
+  it("computes aggregate stats from records", () => {
+    const records = [
       { dt: "2026-03-01", wt: 60 },
-      { dt: "2026-03-05", wt: 61 },
-      { dt: "2026-03-10", wt: 62 },
-    ]);
-  });
+      { dt: "2026-03-02", wt: 61.5 },
+      { dt: "2026-03-03", wt: 59.5 },
+    ];
 
-  it("updates an existing record for the same date", () => {
-    const existing = [{ dt: "2026-03-01", wt: 60 }];
-    const result = upsertRecord(existing, "2026-03-01", 61.5);
-    expect(result).toEqual([{ dt: "2026-03-01", wt: 61.5 }]);
-    expect(result).toHaveLength(1);
-  });
-
-  it("does not mutate the original array", () => {
-    const original = [{ dt: "2026-03-01", wt: 60 }];
-    upsertRecord(original, "2026-03-02", 61);
-    expect(original).toHaveLength(1);
-  });
-
-  it("sorts records across year boundaries", () => {
-    const records = [{ dt: "2026-01-01", wt: 60 }];
-    const result = upsertRecord(records, "2025-12-31", 59);
-    expect(result[0].dt).toBe("2025-12-31");
-    expect(result[1].dt).toBe("2026-01-01");
+    expect(calcStats(records, { heightCm: 170 })).toEqual({
+      latestWeight: 59.5,
+      minWeight: 59.5,
+      maxWeight: 61.5,
+      change: -0.5,
+      avgWeight: 60.3,
+      latestBMI: 20.6,
+      latestDate: "2026-03-03",
+    });
   });
 });
 
-describe("trimRecords", () => {
-  it("returns records unchanged when under the limit", () => {
-    const records = [{ dt: "2026-03-01", wt: 60 }];
-    expect(trimRecords(records, 90)).toEqual(records);
-  });
-
-  it("returns records unchanged at exactly the limit", () => {
-    const records = Array.from({ length: 90 }, (_, i) => ({
-      dt: `2026-01-${String(i + 1).padStart(2, "0")}`,
-      wt: 60 + i * 0.1,
-    }));
-    expect(trimRecords(records, 90)).toHaveLength(90);
-  });
-
-  it("trims oldest records when over the limit", () => {
-    const records = Array.from({ length: 92 }, (_, i) => ({
-      dt: `d${i}`,
-      wt: 60 + i,
-    }));
-    const result = trimRecords(records, 90);
-    expect(result).toHaveLength(90);
-    // The first two (oldest) should be removed
-    expect(result[0].dt).toBe("d2");
-    expect(result[result.length - 1].dt).toBe("d91");
+describe("defaults", () => {
+  it("returns stable default settings", () => {
+    expect(createDefaultSettings()).toEqual({
+      language: "ja",
+      theme: "prism",
+      chartStyle: "detailed",
+      adPreviewEnabled: true,
+      goalWeight: null,
+      reminderEnabled: false,
+      reminderTime: "21:00",
+    });
   });
 });
 
-describe("calcStats", () => {
-  it("returns null for empty array", () => {
-    expect(calcStats([])).toBeNull();
+describe("calcDailyDiff", () => {
+  it("returns null with fewer than 2 records", () => {
+    expect(calcDailyDiff([])).toBeNull();
+    expect(calcDailyDiff([{ dt: "2026-03-13", wt: 70 }])).toBeNull();
   });
 
-  it("computes correct stats for a single value", () => {
-    const stats = calcStats([65]);
-    expect(stats.latest).toBe(65);
-    expect(stats.min).toBe(65);
-    expect(stats.max).toBe(65);
-    expect(stats.change).toBe(0);
-    expect(stats.avg).toBe("65.0");
+  it("returns null when today or yesterday record is missing", () => {
+    const records = [
+      { dt: "2026-03-10", wt: 70 },
+      { dt: "2026-03-11", wt: 71 },
+    ];
+    expect(calcDailyDiff(records)).toBeNull();
   });
 
-  it("computes correct stats for multiple values", () => {
-    const stats = calcStats([60, 62, 58, 65]);
-    expect(stats.latest).toBe(65);
-    expect(stats.min).toBe(58);
-    expect(stats.max).toBe(65);
-    expect(stats.change).toBe(5); // 65 - 60
-    expect(stats.avg).toBe("61.3"); // (60+62+58+65)/4 = 61.25 -> "61.3"
+  it("returns diff when both today and yesterday exist", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const records = [
+      { dt: yesterday, wt: 70.0 },
+      { dt: today, wt: 69.5 },
+    ];
+    const result = calcDailyDiff(records);
+    expect(result).toEqual({ today: 69.5, yesterday: 70.0, diff: -0.5 });
+  });
+});
+
+describe("calcGoalProgress", () => {
+  it("returns null with no records", () => {
+    expect(calcGoalProgress([], 60)).toBeNull();
   });
 
-  it("shows negative change when weight decreased", () => {
-    const stats = calcStats([70, 68, 65]);
-    expect(stats.change).toBe(-5); // 65 - 70
+  it("returns null with non-finite goal", () => {
+    expect(calcGoalProgress([{ wt: 70 }], null)).toBeNull();
   });
 
-  it("computes average to one decimal place", () => {
-    const stats = calcStats([60, 61, 62]);
-    expect(stats.avg).toBe("61.0");
+  it("calculates progress correctly", () => {
+    const records = [{ wt: 80 }, { wt: 75 }, { wt: 70 }];
+    const result = calcGoalProgress(records, 60);
+    expect(result.percent).toBe(50);
+    expect(result.remaining).toBe(10);
+  });
+
+  it("caps at 100% when goal exceeded", () => {
+    const records = [{ wt: 80 }, { wt: 55 }];
+    const result = calcGoalProgress(records, 60);
+    expect(result.percent).toBe(100);
+    expect(result.remaining).toBe(-5);
+  });
+});
+
+describe("calcPeriodSummary", () => {
+  it("returns null with no records in period", () => {
+    const records = [{ dt: "2020-01-01", wt: 70 }];
+    expect(calcPeriodSummary(records, 7)).toBeNull();
+  });
+
+  it("calculates weekly summary", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const records = [
+      { dt: today, wt: 70 },
+      { dt: today, wt: 72 },
+    ];
+    // Deduplicated by date - both have same dt
+    const result = calcPeriodSummary(records, 7);
+    expect(result.count).toBe(2);
+    expect(result.avg).toBe(71);
+    expect(result.min).toBe(70);
+    expect(result.max).toBe(72);
   });
 });

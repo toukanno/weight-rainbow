@@ -1,0 +1,6 @@
+"CFBundleDisplayName" = "Rainbow Weight Log";
+"NSCameraUsageDescription" = "Read the scale photo or take a photo to help enter your weight. Images stay on this device.";
+"NSMicrophoneUsageDescription" = "Use the microphone to capture a spoken weight value for local input only.";
+"NSPhotoLibraryAddUsageDescription" = "Save or reuse scale photos while checking your weight entry on this device.";
+"NSPhotoLibraryUsageDescription" = "Select a scale photo to help enter your weight. Photos are not uploaded.";
+"NSSpeechRecognitionUsageDescription" = "Convert your spoken weight to text for local input assistance only.";
