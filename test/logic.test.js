@@ -2421,6 +2421,17 @@ describe("calcBestPeriod", () => {
     expect(result[30]).toBeUndefined();
   });
 
+  it("returns result with change=0 when weights are constant", () => {
+    const records = [];
+    for (let i = 0; i < 10; i++) {
+      const d = String(i + 1).padStart(2, "0");
+      records.push({ dt: `2025-01-${d}`, wt: 70 });
+    }
+    const result = calcBestPeriod(records);
+    expect(result).not.toBeNull();
+    expect(result[7].change).toBe(0);
+  });
+
   it("finds best 30-day period with enough records", () => {
     const records = [];
     for (let i = 0; i < 35; i++) {

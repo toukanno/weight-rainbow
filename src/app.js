@@ -58,6 +58,7 @@ import {
   calcWeightRangePosition,
   calcTagImpact,
   calcBestPeriod,
+  calcWeeklyFrequency,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -662,6 +663,7 @@ function render() {
             ${renderWeightRange()}
             ${renderTagImpact()}
             ${renderBestPeriod()}
+            ${renderWeeklyFrequency()}
             ${renderBodyFatStats()}
           </section>
 

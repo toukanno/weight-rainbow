@@ -2105,7 +2105,11 @@ var translations = {
     "bestPeriod.month": "\u6700\u826F\u306E30\u65E5\u9593",
     "bestPeriod.change": "{change}kg",
     "bestPeriod.range": "{from} \u301C {to}",
-    "bestPeriod.weight": "{start}kg \u2192 {end}kg"
+    "bestPeriod.weight": "{start}kg \u2192 {end}kg",
+    "freq.title": "\u9031\u5225 \u8A18\u9332\u983B\u5EA6",
+    "freq.avg": "\u5E73\u5747: \u9031{avg}\u56DE",
+    "freq.perfect": "\u6BCE\u65E5\u8A18\u9332\u9054\u6210\u306E\u9031\u3042\u308A\uFF01",
+    "freq.hint": "\u904E\u53BB{weeks}\u9031\u9593\u306E\u8A18\u9332\u6570"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2540,7 +2544,11 @@ var translations = {
     "bestPeriod.month": "Best 30 days",
     "bestPeriod.change": "{change}kg",
     "bestPeriod.range": "{from} to {to}",
-    "bestPeriod.weight": "{start}kg \u2192 {end}kg"
+    "bestPeriod.weight": "{start}kg \u2192 {end}kg",
+    "freq.title": "Weekly Recording Frequency",
+    "freq.avg": "Average: {avg}/week",
+    "freq.perfect": "Perfect week achieved!",
+    "freq.hint": "Last {weeks} weeks"
   }
 };
 function createTranslator(language) {
@@ -23604,6 +23612,7 @@ function render() {
             ${renderWeightRange()}
             ${renderTagImpact()}
             ${renderBestPeriod()}
+            ${renderWeeklyFrequency()}
             ${renderBodyFatStats()}
           </section>
 
