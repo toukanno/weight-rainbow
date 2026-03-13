@@ -656,3 +656,35 @@ describe("calcBMIZoneWeights", () => {
     expect(zones.overMax).toBe(76.8);
   });
 });
+
+describe("i18n record badge keys", () => {
+  let translations;
+  beforeAll(async () => {
+    const mod = await import("../src/i18n.js");
+    translations = mod.translations;
+  });
+
+  const badgeKeys = [
+    "records.best",
+    "records.highest",
+    "records.search",
+    "records.searchResult",
+    "chart.bmiZones",
+    "monthly.title",
+    "monthly.hint",
+    "monthly.records",
+    "monthly.showAll",
+  ];
+
+  it("has all record/feature keys in Japanese", () => {
+    for (const key of badgeKeys) {
+      expect(translations.ja[key], `Missing ja key: ${key}`).toBeDefined();
+    }
+  });
+
+  it("has all record/feature keys in English", () => {
+    for (const key of badgeKeys) {
+      expect(translations.en[key], `Missing en key: ${key}`).toBeDefined();
+    }
+  });
+});

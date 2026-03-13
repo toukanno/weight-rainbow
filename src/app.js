@@ -2130,6 +2130,8 @@ function googleGetToken() {
 
 async function googleBackup() {
   if (!GOOGLE_CLIENT_ID) { setStatus(t("google.notConfigured"), "error"); return; }
+  const btn = app.querySelector('[data-action="google-backup"]');
+  btn?.classList.add("loading");
   try {
     const tk = await googleGetToken();
     const data = {
@@ -2170,11 +2172,15 @@ async function googleBackup() {
     setStatus(t("google.backupDone"));
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
+  } finally {
+    btn?.classList.remove("loading");
   }
 }
 
 async function googleRestore() {
   if (!GOOGLE_CLIENT_ID) { setStatus(t("google.notConfigured"), "error"); return; }
+  const btn = app.querySelector('[data-action="google-restore"]');
+  btn?.classList.add("loading");
   try {
     const tk = await googleGetToken();
     const sr = await fetch(
@@ -2201,6 +2207,8 @@ async function googleRestore() {
     render();
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
+  } finally {
+    btn?.classList.remove("loading");
   }
 }
 
