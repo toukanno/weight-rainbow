@@ -78,6 +78,8 @@ import {
   calcVolatilityIndex,
   calcPeriodComparison,
   calcGoalCountdown,
+  calcBodyComposition,
+  generateWeightSummary,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -4947,6 +4949,98 @@ describe("calcGoalCountdown", () => {
   });
 });
 
+describe("calcBodyComposition", () => {
+  it("returns null for fewer than 3 body fat records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bf: 20 },
+      { dt: "2025-01-02", wt: 69, bf: 19.5 },
+    ];
+    expect(calcBodyComposition(records)).toBeNull();
+  });
+
+  it("detects fat loss trend", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 80, bf: 25 },
+      { dt: "2025-01-02", wt: 78, bf: 23 },
+      { dt: "2025-01-03", wt: 76, bf: 21 },
+    ];
+    const result = calcBodyComposition(records);
+    expect(result).not.toBeNull();
+    expect(result.bfChange).toBeLessThan(0);
+    expect(result.fatMassChange).toBeLessThan(0);
+    expect(result.trend).toBe("fatLoss");
+  });
+
+  it("calculates fat and lean mass correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 100, bf: 30 },
+      { dt: "2025-01-02", wt: 95, bf: 28 },
+      { dt: "2025-01-03", wt: 90, bf: 25 },
+    ];
+    const result = calcBodyComposition(records);
+    expect(result.firstFatMass).toBe(30); // 100 * 30%
+    expect(result.latestFatMass).toBe(22.5); // 90 * 25%
+    expect(result.firstLeanMass).toBe(70); // 100 - 30
+    expect(result.latestLeanMass).toBe(67.5); // 90 - 22.5
+  });
+
+  it("ignores records without body fat", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bf: 20 },
+      { dt: "2025-01-02", wt: 69 },
+      { dt: "2025-01-03", wt: 68, bf: 18 },
+      { dt: "2025-01-04", wt: 67, bf: 17 },
+    ];
+    const result = calcBodyComposition(records);
+    expect(result).not.toBeNull();
+    expect(result.dataPoints).toBe(3);
+  });
+});
+
+describe("generateWeightSummary", () => {
+  it("returns null for fewer than 2 records", () => {
+    expect(generateWeightSummary([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("generates summary with weight stats", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-01-15", wt: 72 },
+      { dt: "2025-01-30", wt: 70 },
+    ];
+    const result = generateWeightSummary(records);
+    expect(result).not.toBeNull();
+    expect(result.weight.first).toBe(75);
+    expect(result.weight.latest).toBe(70);
+    expect(result.weight.totalChange).toBe(-5);
+    expect(result.weight.min).toBe(70);
+    expect(result.weight.max).toBe(75);
+    expect(result.records).toBe(3);
+    expect(result.period.from).toBe("2025-01-01");
+    expect(result.period.to).toBe("2025-01-30");
+  });
+
+  it("includes BMI when height provided", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70 },
+    ];
+    const result = generateWeightSummary(records, { heightCm: 170 });
+    expect(result.bmi).not.toBeNull();
+    expect(result.bmi.bmi).toBeCloseTo(24.2, 1);
+    expect(result.bmi.zone).toBe("normal");
+  });
+
+  it("returns null BMI without height", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69 },
+    ];
+    const result = generateWeightSummary(records, {});
+    expect(result.bmi).toBeNull();
+  });
+});
+
 describe("buildRecord edge cases", () => {
   it("truncates note to 100 characters", () => {
     const longNote = "x".repeat(150);
@@ -6011,5 +6105,89 @@ describe("calcPeriodComparison edge cases", () => {
     expect(result).not.toBeNull();
     expect(result).toHaveProperty("weekly");
     expect(result).toHaveProperty("monthly");
+  });
+});
+
+describe("generateWeightSummary", () => {
+  it("returns null for fewer than 2 records", () => {
+    expect(generateWeightSummary([])).toBeNull();
+    expect(generateWeightSummary([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns summary with correct structure", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 80 },
+      { dt: "2025-01-15", wt: 78 },
+      { dt: "2025-01-30", wt: 75 },
+    ];
+    const result = generateWeightSummary(records);
+    expect(result).not.toBeNull();
+    expect(result.period.from).toBe("2025-01-01");
+    expect(result.period.to).toBe("2025-01-30");
+    expect(result.period.days).toBe(29);
+    expect(result.weight.first).toBe(80);
+    expect(result.weight.latest).toBe(75);
+    expect(result.weight.min).toBe(75);
+    expect(result.weight.max).toBe(80);
+    expect(result.weight.totalChange).toBe(-5);
+    expect(result.records).toBe(3);
+    expect(result.bmi).toBeNull();
+  });
+
+  it("includes BMI when height provided", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-15", wt: 68 },
+    ];
+    const result = generateWeightSummary(records, { heightCm: 170 });
+    expect(result.bmi).not.toBeNull();
+    expect(result.bmi.bmi).toBeCloseTo(23.5, 1);
+    expect(result.bmi.zone).toBe("normal");
+  });
+
+  it("calculates avg correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 60 },
+      { dt: "2025-01-02", wt: 80 },
+    ];
+    const result = generateWeightSummary(records);
+    expect(result.weight.avg).toBe(70);
+  });
+});
+
+describe("calcBodyComposition edge cases", () => {
+  it("detects fatLoss trend", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 80, bf: 25 },
+      { dt: "2025-01-15", wt: 79, bf: 24 },
+      { dt: "2025-01-30", wt: 78, bf: 23 },
+    ];
+    const result = calcBodyComposition(records);
+    expect(result).not.toBeNull();
+    expect(result.trend).toBe("fatLoss");
+  });
+
+  it("detects decline trend (gaining fat, losing lean)", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bf: 20 },
+      { dt: "2025-01-15", wt: 71, bf: 22 },
+      { dt: "2025-01-30", wt: 72, bf: 25 },
+    ];
+    const result = calcBodyComposition(records);
+    expect(result).not.toBeNull();
+    expect(result.trend).toBe("decline");
+  });
+
+  it("filters out records without body fat", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bf: 20 },
+      { dt: "2025-01-02", wt: 71 }, // no bf
+      { dt: "2025-01-03", wt: 72, bf: null }, // null bf
+      { dt: "2025-01-15", wt: 69, bf: 19 },
+      { dt: "2025-01-30", wt: 68, bf: 18 },
+    ];
+    const result = calcBodyComposition(records);
+    expect(result).not.toBeNull();
+    expect(result.dataPoints).toBe(3);
   });
 });

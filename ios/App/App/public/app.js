@@ -2478,6 +2478,31 @@ function calcBodyComposition(records) {
     dataPoints: sorted.length
   };
 }
+function generateWeightSummary(records, profile = {}) {
+  if (records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const first = sorted[0];
+  const latest = sorted[sorted.length - 1];
+  const weights = sorted.map((r) => r.wt);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  const avg = Math.round(weights.reduce((s, w) => s + w, 0) / weights.length * 10) / 10;
+  const totalChange = Math.round((latest.wt - first.wt) * 10) / 10;
+  const days2 = Math.max(1, Math.round((new Date(latest.dt) - new Date(first.dt)) / 864e5));
+  let bmiInfo = null;
+  if (profile.heightCm) {
+    const h = profile.heightCm / 100;
+    const latestBmi = Math.round(latest.wt / (h * h) * 10) / 10;
+    const zone = latestBmi < 18.5 ? "underweight" : latestBmi < 25 ? "normal" : latestBmi < 30 ? "overweight" : "obese";
+    bmiInfo = { bmi: latestBmi, zone };
+  }
+  return {
+    period: { from: first.dt, to: latest.dt, days: days2 },
+    weight: { first: first.wt, latest: latest.wt, min, max, avg, totalChange },
+    records: sorted.length,
+    bmi: bmiInfo
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -3112,7 +3137,16 @@ var translations = {
     "bodyComp.recomp": "\u4F53\u7D44\u6210\u6539\u5584\u4E2D\uFF08\u30EA\u30B3\u30F3\u30D7\uFF09",
     "bodyComp.decline": "\u6CE8\u610F\u304C\u5FC5\u8981\u3067\u3059",
     "bodyComp.mixed": "\u5909\u52D5\u4E2D",
-    "bodyComp.hint": "{n}\u4EF6\u306E\u4F53\u8102\u80AA\u30C7\u30FC\u30BF\u306B\u57FA\u3065\u304F\u5206\u6790"
+    "bodyComp.hint": "{n}\u4EF6\u306E\u4F53\u8102\u80AA\u30C7\u30FC\u30BF\u306B\u57FA\u3065\u304F\u5206\u6790",
+    "share.title": "\u30B5\u30DE\u30EA\u30FC\u5171\u6709",
+    "share.btn": "\u30C6\u30AD\u30B9\u30C8\u3092\u30B3\u30D4\u30FC",
+    "share.copied": "\u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F\uFF01",
+    "share.period": "\u671F\u9593: {from} \u301C {to}\uFF08{days}\u65E5\u9593\uFF09",
+    "share.weight": "\u4F53\u91CD: {first}kg \u2192 {latest}kg\uFF08{change}kg\uFF09",
+    "share.range": "\u7BC4\u56F2: {min}kg \u301C {max}kg\uFF08\u5E73\u5747 {avg}kg\uFF09",
+    "share.bmi": "BMI: {bmi}\uFF08{zone}\uFF09",
+    "share.records": "\u8A18\u9332\u6570: {n}\u4EF6",
+    "share.footer": "\u2014 Rainbow\u4F53\u91CD\u7BA1\u7406\u3067\u8A18\u9332"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3745,7 +3779,16 @@ var translations = {
     "bodyComp.recomp": "Body recomposition",
     "bodyComp.decline": "Needs attention",
     "bodyComp.mixed": "Mixed changes",
-    "bodyComp.hint": "Based on {n} body fat records"
+    "bodyComp.hint": "Based on {n} body fat records",
+    "share.title": "Share Summary",
+    "share.btn": "Copy text",
+    "share.copied": "Copied!",
+    "share.period": "Period: {from} \u2013 {to} ({days} days)",
+    "share.weight": "Weight: {first}kg \u2192 {latest}kg ({change}kg)",
+    "share.range": "Range: {min}kg \u2013 {max}kg (avg {avg}kg)",
+    "share.bmi": "BMI: {bmi} ({zone})",
+    "share.records": "Records: {n}",
+    "share.footer": "\u2014 Tracked with Rainbow Weight Log"
   }
 };
 function createTranslator(language) {
@@ -24849,6 +24892,7 @@ function render() {
                 ${renderVolatilityIndex()}
                 ${renderPeriodComparison()}
                 ${renderBodyComposition()}
+                ${renderShareSummary()}
               </div>
               ` : ""}
             </div>
@@ -25941,6 +25985,29 @@ function renderBodyComposition() {
     </div>
   `;
 }
+function renderShareSummary() {
+  const summary = generateWeightSummary(state.records, state.profile);
+  if (!summary) return "";
+  const changeStr = summary.weight.totalChange > 0 ? "+" + summary.weight.totalChange : String(summary.weight.totalChange);
+  const lines = [
+    t("share.period").replace("{from}", summary.period.from).replace("{to}", summary.period.to).replace("{days}", summary.period.days),
+    t("share.weight").replace("{first}", summary.weight.first).replace("{latest}", summary.weight.latest).replace("{change}", changeStr),
+    t("share.range").replace("{min}", summary.weight.min).replace("{max}", summary.weight.max).replace("{avg}", summary.weight.avg),
+    t("share.records").replace("{n}", summary.records)
+  ];
+  if (summary.bmi) {
+    lines.push(t("share.bmi").replace("{bmi}", summary.bmi.bmi).replace("{zone}", summary.bmi.zone));
+  }
+  lines.push(t("share.footer"));
+  const text = lines.join("\n");
+  return `
+    <div class="share-summary-section">
+      <div class="helper">${t("share.title")}</div>
+      <pre class="share-summary-text">${text}</pre>
+      <button type="button" class="btn ghost share-summary-btn" data-action="copy-summary" data-text="${text.replace(/"/g, "&quot;")}">${t("share.btn")}</button>
+    </div>
+  `;
+}
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -26186,6 +26253,17 @@ function bindEvents() {
   app.querySelector('[data-action="toggle-analytics"]')?.addEventListener("click", () => {
     showAdvancedAnalytics = !showAdvancedAnalytics;
     render();
+  });
+  app.querySelector('[data-action="copy-summary"]')?.addEventListener("click", async (e) => {
+    const text = e.target.dataset.text;
+    try {
+      await navigator.clipboard.writeText(text);
+      e.target.textContent = t("share.copied");
+      setTimeout(() => {
+        e.target.textContent = t("share.btn");
+      }, 2e3);
+    } catch {
+    }
   });
   app.querySelector("#recordSearch")?.addEventListener("input", (e) => {
     recordSearchQuery = e.target.value;

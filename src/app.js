@@ -82,6 +82,7 @@ import {
   calcPeriodComparison,
   calcGoalCountdown,
   calcBodyComposition,
+  generateWeightSummary,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -728,6 +729,7 @@ function render() {
                 ${renderVolatilityIndex()}
                 ${renderPeriodComparison()}
                 ${renderBodyComposition()}
+                ${renderShareSummary()}
               </div>
               ` : ""}
             </div>
@@ -1878,6 +1880,30 @@ function renderBodyComposition() {
   `;
 }
 
+function renderShareSummary() {
+  const summary = generateWeightSummary(state.records, state.profile);
+  if (!summary) return "";
+  const changeStr = summary.weight.totalChange > 0 ? "+" + summary.weight.totalChange : String(summary.weight.totalChange);
+  const lines = [
+    t("share.period").replace("{from}", summary.period.from).replace("{to}", summary.period.to).replace("{days}", summary.period.days),
+    t("share.weight").replace("{first}", summary.weight.first).replace("{latest}", summary.weight.latest).replace("{change}", changeStr),
+    t("share.range").replace("{min}", summary.weight.min).replace("{max}", summary.weight.max).replace("{avg}", summary.weight.avg),
+    t("share.records").replace("{n}", summary.records),
+  ];
+  if (summary.bmi) {
+    lines.push(t("share.bmi").replace("{bmi}", summary.bmi.bmi).replace("{zone}", summary.bmi.zone));
+  }
+  lines.push(t("share.footer"));
+  const text = lines.join("\n");
+  return `
+    <div class="share-summary-section">
+      <div class="helper">${t("share.title")}</div>
+      <pre class="share-summary-text">${text}</pre>
+      <button type="button" class="btn ghost share-summary-btn" data-action="copy-summary" data-text="${text.replace(/"/g, "&quot;")}">${t("share.btn")}</button>
+    </div>
+  `;
+}
+
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -2142,6 +2168,14 @@ function bindEvents() {
   app.querySelector('[data-action="toggle-analytics"]')?.addEventListener("click", () => {
     showAdvancedAnalytics = !showAdvancedAnalytics;
     render();
+  });
+  app.querySelector('[data-action="copy-summary"]')?.addEventListener("click", async (e) => {
+    const text = e.target.dataset.text;
+    try {
+      await navigator.clipboard.writeText(text);
+      e.target.textContent = t("share.copied");
+      setTimeout(() => { e.target.textContent = t("share.btn"); }, 2000);
+    } catch { /* clipboard not available */ }
   });
   app.querySelector("#recordSearch")?.addEventListener("input", (e) => {
     recordSearchQuery = e.target.value;
