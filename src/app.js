@@ -1983,12 +1983,15 @@ function renderRecordingCalendar() {
   const firstDow = cal.days[0].dayOfWeek;
   const blanks = Array.from({ length: firstDow }, () => `<div class="rec-cal-blank"></div>`).join("");
   const cells = cal.days.map((d) => {
+    const isToday = d.date === todayStr;
     const isFuture = d.date > todayStr;
     const cls = isFuture ? "future" : d.recorded ? "recorded" : "missed";
     const title = d.recorded ? `${d.day}: ${d.weight.toFixed(1)}kg` : `${d.day}`;
-    return `<div class="rec-cal-cell ${cls}" title="${title}"><span>${d.day}</span></div>`;
+    return `<div class="rec-cal-cell ${cls}${isToday ? " today" : ""}" title="${title}"><span>${d.day}</span></div>`;
   }).join("");
-  const rateText = t("recCal.rate").replace("{rate}", cal.rate).replace("{count}", cal.recordedCount).replace("{total}", cal.totalDays);
+  const elapsed = cal.days.filter((d) => d.date <= todayStr).length;
+  const adjustedRate = elapsed > 0 ? Math.round((cal.recordedCount / elapsed) * 100) : 0;
+  const rateText = t("recCal.rate").replace("{rate}", adjustedRate).replace("{count}", cal.recordedCount).replace("{total}", elapsed);
   return `
     <div class="rec-cal-section">
       <div class="helper">${t("recCal.title")}</div>
