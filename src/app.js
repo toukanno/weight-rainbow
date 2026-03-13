@@ -604,7 +604,7 @@ function render() {
               <button type="button" class="summary-tab ${chartPeriod === "all" ? "active" : ""}" data-chart-period="all" role="tab" aria-selected="${chartPeriod === "all"}">${t("chart.period.all")}</button>
             </div>
             <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}${stats ? ` — ${stats.latestWeight.toFixed(1)}kg, ${t("chart.change")}: ${stats.change > 0 ? "+" : ""}${stats.change.toFixed(1)}kg, ${state.records.length} ${t("chart.records")}` : ""}"></canvas>
-            <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
+            <div id="chartTooltip" class="chart-tooltip" role="tooltip" aria-live="polite" style="display:none;"></div>
             ${state.records.length >= 3 ? `<div class="chart-legend">
               <span class="chart-legend-item"><span class="chart-legend-line gradient"></span>${t("chart.legend.weight")}</span>
               <span class="chart-legend-item"><span class="chart-legend-line dashed accent3"></span>${t("chart.legend.movingAvg")}</span>
@@ -702,8 +702,8 @@ function render() {
             <div class="record-date-range">
               <div class="helper hint-small">${t("records.dateRange")}</div>
               <div class="date-range-fields">
-                <label>${t("records.from")}<input id="dateRangeFrom" type="date" value="${escapeAttr(recordDateFrom)}" /></label>
-                <label>${t("records.to")}<input id="dateRangeTo" type="date" value="${escapeAttr(recordDateTo)}" /></label>
+                <label>${t("records.from")}<input id="dateRangeFrom" type="date" value="${escapeAttr(recordDateFrom)}" max="${todayLocal()}" /></label>
+                <label>${t("records.to")}<input id="dateRangeTo" type="date" value="${escapeAttr(recordDateTo)}" max="${todayLocal()}" /></label>
                 ${recordDateFrom || recordDateTo ? `<button type="button" class="btn ghost" data-action="clear-date-range">${t("records.clearRange")}</button>` : ""}
               </div>
             </div>` : ""}
@@ -1538,10 +1538,16 @@ function bindEvents() {
   });
   app.querySelector("#dateRangeFrom")?.addEventListener("change", (e) => {
     recordDateFrom = e.target.value;
+    if (recordDateFrom && recordDateTo && recordDateFrom > recordDateTo) {
+      recordDateTo = recordDateFrom;
+    }
     render();
   });
   app.querySelector("#dateRangeTo")?.addEventListener("change", (e) => {
     recordDateTo = e.target.value;
+    if (recordDateFrom && recordDateTo && recordDateFrom > recordDateTo) {
+      recordDateFrom = recordDateTo;
+    }
     render();
   });
   app.querySelector('[data-action="clear-date-range"]')?.addEventListener("click", () => {
