@@ -909,6 +909,11 @@ export const translations = {
     "cdist.median": "中央値",
     "cdist.normal": "通常範囲",
     "cdist.to": "〜",
+    "gstreak.title": "目標連続記録",
+    "gstreak.days": "日連続で目標に近づいています",
+    "gstreak.dist": "目標まで",
+    "gstreak.closest": "最接近",
+    "gstreak.achieved": "目標達成中！",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1820,6 +1825,11 @@ export const translations = {
     "cdist.median": "Median",
     "cdist.normal": "Normal range",
     "cdist.to": "to",
+    "gstreak.title": "Goal Streak",
+    "gstreak.days": "consecutive days trending toward goal",
+    "gstreak.dist": "Distance to goal",
+    "gstreak.closest": "Closest",
+    "gstreak.achieved": "Goal achieved!",
   },
 };
 

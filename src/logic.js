@@ -3884,3 +3884,50 @@ export function calcDailyChangeDist(records) {
     totalChanges: changes.length,
   };
 }
+
+/**
+ * Calculate how many consecutive recent records are on the "right side" of the goal.
+ * For weight loss: counts days where weight <= goal or trending toward it.
+ * For weight gain: counts days where weight >= goal or trending toward it.
+ * Returns { streak, direction, goalWeight, closestToGoal, currentDist }
+ */
+export function calcGoalStreak(records, goalWeight) {
+  if (!records || records.length < 2 || !Number.isFinite(goalWeight) || goalWeight <= 0) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const current = sorted[sorted.length - 1].wt;
+  const direction = current > goalWeight ? "lose" : current < goalWeight ? "gain" : "achieved";
+
+  if (direction === "achieved") {
+    return { streak: 1, direction: "achieved", goalWeight, closestToGoal: current, currentDist: 0 };
+  }
+
+  // Count consecutive records moving toward goal from the end
+  // Each record should be closer to goal than the one before it (with tolerance)
+  let streak = 1;
+  let closestToGoal = current;
+  let closestDist = Math.abs(current - goalWeight);
+
+  for (let i = sorted.length - 2; i >= 0; i--) {
+    const prevDist = Math.abs(sorted[i].wt - goalWeight);
+    const nextDist = Math.abs(sorted[i + 1].wt - goalWeight);
+    // Previous record was farther from goal or roughly equal — streak continues
+    if (prevDist >= nextDist - 0.2) {
+      streak++;
+      if (Math.abs(sorted[i].wt - goalWeight) < closestDist) {
+        closestDist = Math.abs(sorted[i].wt - goalWeight);
+        closestToGoal = sorted[i].wt;
+      }
+    } else {
+      break;
+    }
+  }
+
+  return {
+    streak,
+    direction,
+    goalWeight,
+    closestToGoal: +closestToGoal.toFixed(1),
+    currentDist: +Math.abs(current - goalWeight).toFixed(1),
+  };
+}

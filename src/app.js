@@ -826,6 +826,7 @@ function render() {
             ${renderRecentWeightBars()}
             ${renderWeightAnniversary()}
             ${renderTrendForecast()}
+            ${renderGoalStreak()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -2684,7 +2685,7 @@ function renderGoalProgressRing() {
   const circ = 2 * Math.PI * r;
   const offset = circ - (data.percent / 100) * circ;
   const trackColor = "var(--border)";
-  const fillColor = data.percent >= 100 ? "var(--ok)" : data.onTrack ? "var(--accent)" : "var(--danger)";
+  const fillColor = data.percent >= 100 ? "var(--ok)" : data.onTrack ? "var(--accent)" : "var(--error)";
 
   const statusLabel = data.percent >= 100 ? t("gring.done")
     : data.onTrack ? t("gring.onTrack") : t("gring.offTrack");
@@ -2992,6 +2993,34 @@ function renderDailyChangeDist() {
         <span>${t("cdist.median")}: ${medSign}${data.medianChange}kg</span>
       </div>
       <div class="cd-range">${t("cdist.normal")}: ${data.normalRange.low > 0 ? "+" : ""}${data.normalRange.low} ${t("cdist.to")} ${data.normalRange.high > 0 ? "+" : ""}${data.normalRange.high}kg</div>
+    </div>
+  `;
+}
+
+function renderGoalStreak() {
+  const goalWeight = Number(state.settings.goalWeight);
+  if (!goalWeight) return "";
+  const data = calcGoalStreak(state.records, goalWeight);
+  if (!data || data.streak < 2) return "";
+
+  if (data.direction === "achieved") {
+    return `
+      <div class="gs-section gs-achieved">
+        <div class="helper">${t("gstreak.title")}</div>
+        <div class="gs-msg">${t("gstreak.achieved")}</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="gs-section">
+      <div class="helper">${t("gstreak.title")}</div>
+      <div class="gs-count">${data.streak}</div>
+      <div class="gs-label">${t("gstreak.days")}</div>
+      <div class="gs-detail">
+        <span>${t("gstreak.dist")}: ${data.currentDist}kg</span>
+        <span>${t("gstreak.closest")}: ${data.closestToGoal}kg</span>
+      </div>
     </div>
   `;
 }

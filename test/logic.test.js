@@ -119,6 +119,7 @@ import {
   calcRecentWeightBars,
   calcWeightAnniversary,
   calcDailyChangeDist,
+  calcGoalStreak,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -8895,5 +8896,57 @@ describe("calcDailyChangeDist", () => {
     const totalPct = result.buckets.reduce((s, b) => s + b.pct, 0);
     expect(totalPct).toBeGreaterThan(95);
     expect(totalPct).toBeLessThanOrEqual(101);
+  });
+});
+
+describe("calcGoalStreak", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcGoalStreak([], 65)).toBeNull();
+    expect(calcGoalStreak(null, 65)).toBeNull();
+    expect(calcGoalStreak([{ dt: "2025-01-01", wt: 70 }], 65)).toBeNull();
+    expect(calcGoalStreak([{ dt: "2025-01-01", wt: 70 }, { dt: "2025-01-02", wt: 69 }], 0)).toBeNull();
+  });
+
+  it("detects achieved goal", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 66 },
+      { dt: "2025-01-02", wt: 65 },
+    ];
+    const result = calcGoalStreak(records, 65);
+    expect(result.direction).toBe("achieved");
+  });
+
+  it("counts streak toward loss goal", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-01-02", wt: 74 },
+      { dt: "2025-01-03", wt: 73.5 },
+      { dt: "2025-01-04", wt: 73 },
+    ];
+    const result = calcGoalStreak(records, 65);
+    expect(result.streak).toBeGreaterThanOrEqual(2);
+    expect(result.direction).toBe("lose");
+    expect(result.currentDist).toBe(8);
+  });
+
+  it("counts streak toward gain goal", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 55 },
+      { dt: "2025-01-02", wt: 56 },
+      { dt: "2025-01-03", wt: 56.5 },
+    ];
+    const result = calcGoalStreak(records, 65);
+    expect(result.direction).toBe("gain");
+    expect(result.streak).toBeGreaterThanOrEqual(2);
+  });
+
+  it("returns closestToGoal value", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72 },
+      { dt: "2025-01-02", wt: 70 },
+      { dt: "2025-01-03", wt: 69 },
+    ];
+    const result = calcGoalStreak(records, 65);
+    expect(result.closestToGoal).toBe(69);
   });
 });

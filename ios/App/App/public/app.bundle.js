@@ -3864,6 +3864,38 @@ function calcDailyChangeDist(records) {
     totalChanges: changes.length
   };
 }
+function calcGoalStreak(records, goalWeight) {
+  if (!records || records.length < 2 || !Number.isFinite(goalWeight) || goalWeight <= 0) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const current = sorted[sorted.length - 1].wt;
+  const direction = current > goalWeight ? "lose" : current < goalWeight ? "gain" : "achieved";
+  if (direction === "achieved") {
+    return { streak: 1, direction: "achieved", goalWeight, closestToGoal: current, currentDist: 0 };
+  }
+  let streak = 1;
+  let closestToGoal = current;
+  let closestDist = Math.abs(current - goalWeight);
+  for (let i = sorted.length - 2; i >= 0; i--) {
+    const prevDist = Math.abs(sorted[i].wt - goalWeight);
+    const nextDist = Math.abs(sorted[i + 1].wt - goalWeight);
+    if (prevDist >= nextDist - 0.2) {
+      streak++;
+      if (Math.abs(sorted[i].wt - goalWeight) < closestDist) {
+        closestDist = Math.abs(sorted[i].wt - goalWeight);
+        closestToGoal = sorted[i].wt;
+      }
+    } else {
+      break;
+    }
+  }
+  return {
+    streak,
+    direction,
+    goalWeight,
+    closestToGoal: +closestToGoal.toFixed(1),
+    currentDist: +Math.abs(current - goalWeight).toFixed(1)
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -26883,6 +26915,7 @@ function render() {
             ${renderRecentWeightBars()}
             ${renderWeightAnniversary()}
             ${renderTrendForecast()}
+            ${renderGoalStreak()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -28616,7 +28649,7 @@ function renderGoalProgressRing() {
   const circ = 2 * Math.PI * r;
   const offset = circ - data.percent / 100 * circ;
   const trackColor = "var(--border)";
-  const fillColor = data.percent >= 100 ? "var(--ok)" : data.onTrack ? "var(--accent)" : "var(--danger)";
+  const fillColor = data.percent >= 100 ? "var(--ok)" : data.onTrack ? "var(--accent)" : "var(--error)";
   const statusLabel = data.percent >= 100 ? t("gring.done") : data.onTrack ? t("gring.onTrack") : t("gring.offTrack");
   const statusCls = data.percent >= 100 ? "gr-done" : data.onTrack ? "gr-on" : "gr-off";
   const rateSign = data.weeklyRate > 0 ? "-" : data.weeklyRate < 0 ? "+" : "";
@@ -28884,6 +28917,31 @@ function renderDailyChangeDist() {
         <span>${t("cdist.median")}: ${medSign}${data.medianChange}kg</span>
       </div>
       <div class="cd-range">${t("cdist.normal")}: ${data.normalRange.low > 0 ? "+" : ""}${data.normalRange.low} ${t("cdist.to")} ${data.normalRange.high > 0 ? "+" : ""}${data.normalRange.high}kg</div>
+    </div>
+  `;
+}
+function renderGoalStreak() {
+  const goalWeight = Number(state.settings.goalWeight);
+  if (!goalWeight) return "";
+  const data = calcGoalStreak(state.records, goalWeight);
+  if (!data || data.streak < 2) return "";
+  if (data.direction === "achieved") {
+    return `
+      <div class="gs-section gs-achieved">
+        <div class="helper">${t("gstreak.title")}</div>
+        <div class="gs-msg">${t("gstreak.achieved")}</div>
+      </div>
+    `;
+  }
+  return `
+    <div class="gs-section">
+      <div class="helper">${t("gstreak.title")}</div>
+      <div class="gs-count">${data.streak}</div>
+      <div class="gs-label">${t("gstreak.days")}</div>
+      <div class="gs-detail">
+        <span>${t("gstreak.dist")}: ${data.currentDist}kg</span>
+        <span>${t("gstreak.closest")}: ${data.closestToGoal}kg</span>
+      </div>
     </div>
   `;
 }
