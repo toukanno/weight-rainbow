@@ -28956,7 +28956,7 @@ async function googleRestore() {
   btn?.classList.add("loading");
   try {
     const tk = await googleGetToken();
-    const sr = await fetch(
+    const sr = await fetchWithTimeout(
       `https://www.googleapis.com/drive/v3/files?q=name='${BACKUP_FILENAME}'+and+trashed=false&spaces=appDataFolder&fields=files(id)`,
       { headers: { Authorization: `Bearer ${tk}` } }
     );
@@ -28967,7 +28967,7 @@ async function googleRestore() {
       setStatus(t("google.noData"), "error");
       return;
     }
-    const cr = await fetch(
+    const cr = await fetchWithTimeout(
       `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
       { headers: { Authorization: `Bearer ${tk}` } }
     );
