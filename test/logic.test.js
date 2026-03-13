@@ -84,6 +84,7 @@ import {
   detectDuplicates,
   validateWeightEntry,
   calcWeeklyAverages,
+  calcMonthlyRecordingMap,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -6535,5 +6536,55 @@ describe("calcWeeklyAverages", () => {
     const result = calcWeeklyAverages([{ dt, wt: 70 }], 4);
     const nullWeeks = result.filter((w) => w.avg === null);
     expect(nullWeeks.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("calcMonthlyRecordingMap", () => {
+  it("returns correct structure for current month", () => {
+    const now = new Date();
+    const dt = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    const result = calcMonthlyRecordingMap([{ dt, wt: 70 }]);
+    expect(result.year).toBe(now.getFullYear());
+    expect(result.month).toBe(now.getMonth());
+    expect(result.recordedCount).toBe(1);
+    expect(result.days.length).toBeGreaterThanOrEqual(28);
+    expect(result.rate).toBeGreaterThan(0);
+  });
+
+  it("returns zero rate for empty records", () => {
+    const result = calcMonthlyRecordingMap([], 2025, 0);
+    expect(result.recordedCount).toBe(0);
+    expect(result.rate).toBe(0);
+    expect(result.days).toHaveLength(31); // January 2025
+  });
+
+  it("marks correct days as recorded", () => {
+    const records = [
+      { dt: "2025-03-05", wt: 70 },
+      { dt: "2025-03-15", wt: 71 },
+    ];
+    const result = calcMonthlyRecordingMap(records, 2025, 2); // March
+    expect(result.recordedCount).toBe(2);
+    const day5 = result.days.find((d) => d.day === 5);
+    const day10 = result.days.find((d) => d.day === 10);
+    expect(day5.recorded).toBe(true);
+    expect(day5.weight).toBe(70);
+    expect(day10.recorded).toBe(false);
+    expect(day10.weight).toBeNull();
+  });
+
+  it("ignores records from other months", () => {
+    const records = [
+      { dt: "2025-02-15", wt: 70 },
+      { dt: "2025-03-15", wt: 71 },
+    ];
+    const result = calcMonthlyRecordingMap(records, 2025, 2); // March
+    expect(result.recordedCount).toBe(1);
+  });
+
+  it("includes correct dayOfWeek values", () => {
+    const result = calcMonthlyRecordingMap([], 2025, 2); // March 2025
+    // March 1, 2025 is Saturday (dow=6)
+    expect(result.days[0].dayOfWeek).toBe(6);
   });
 });

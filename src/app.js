@@ -87,6 +87,7 @@ import {
   detectDuplicates,
   validateWeightEntry,
   calcWeeklyAverages,
+  calcMonthlyRecordingMap,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -714,6 +715,7 @@ function render() {
             ${renderWeightConfidence()}
             ${renderBodyFatStats()}
             ${renderWeeklyAverages()}
+            ${renderRecordingCalendar()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -1957,7 +1959,7 @@ function renderWeeklyAverages() {
     const changeClass = change !== null ? (change < 0 ? "down" : change > 0 ? "up" : "flat") : "";
     const startLabel = w.weekStart.slice(5).replace("-", "/");
     return `<div class="weekly-avg-bar-wrap">
-      <div class="weekly-avg-value">${w.avg}</div>
+      <div class="weekly-avg-value">${w.avg.toFixed(1)}</div>
       <div class="weekly-avg-bar ${changeClass}" style="height:${pct}%"></div>
       <div class="weekly-avg-label">${startLabel}</div>
       ${change !== null ? `<div class="weekly-avg-change ${changeClass}">${change > 0 ? "+" : ""}${change}</div>` : ""}
@@ -1967,6 +1969,31 @@ function renderWeeklyAverages() {
     <div class="weekly-avg-section">
       <div class="helper">${t("weeklyAvg.title")}</div>
       <div class="weekly-avg-chart">${bars.join("")}</div>
+    </div>
+  `;
+}
+
+function renderRecordingCalendar() {
+  if (state.records.length === 0) return "";
+  const cal = calcMonthlyRecordingMap(state.records);
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const dayHeaders = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
+    .map((d) => `<div class="rec-cal-header">${t("recCal." + d)}</div>`).join("");
+  const firstDow = cal.days[0].dayOfWeek;
+  const blanks = Array.from({ length: firstDow }, () => `<div class="rec-cal-blank"></div>`).join("");
+  const cells = cal.days.map((d) => {
+    const isFuture = d.date > todayStr;
+    const cls = isFuture ? "future" : d.recorded ? "recorded" : "missed";
+    const title = d.recorded ? `${d.day}: ${d.weight.toFixed(1)}kg` : `${d.day}`;
+    return `<div class="rec-cal-cell ${cls}" title="${title}"><span>${d.day}</span></div>`;
+  }).join("");
+  const rateText = t("recCal.rate").replace("{rate}", cal.rate).replace("{count}", cal.recordedCount).replace("{total}", cal.totalDays);
+  return `
+    <div class="rec-cal-section">
+      <div class="helper">${t("recCal.title")}</div>
+      <div class="rec-cal-grid">${dayHeaders}${blanks}${cells}</div>
+      <div class="helper hint-small" style="margin-top:6px">${rateText}</div>
     </div>
   `;
 }

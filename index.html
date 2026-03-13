@@ -2156,6 +2156,48 @@
       .weekly-avg-change.up { color: var(--accent-2); }
       .weekly-avg-change.flat { color: var(--muted); }
 
+      .rec-cal-section {
+        margin-top: 14px;
+      }
+      .rec-cal-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 3px;
+        margin-top: 8px;
+      }
+      .rec-cal-header {
+        text-align: center;
+        font-size: 0.65rem;
+        font-weight: 600;
+        color: var(--muted);
+        padding: 2px 0;
+      }
+      .rec-cal-blank {
+        aspect-ratio: 1;
+      }
+      .rec-cal-cell {
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        font-size: 0.7rem;
+        cursor: default;
+      }
+      .rec-cal-cell.recorded {
+        background: color-mix(in srgb, var(--accent-3) 25%, transparent);
+        color: var(--accent-3);
+        font-weight: 600;
+      }
+      .rec-cal-cell.missed {
+        background: color-mix(in srgb, var(--border) 20%, transparent);
+        color: var(--muted);
+      }
+      .rec-cal-cell.future {
+        opacity: 0.3;
+        color: var(--muted);
+      }
+
       .analytics-toggle-section {
         margin-top: 14px;
         padding-top: 12px;

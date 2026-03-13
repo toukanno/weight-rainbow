@@ -2220,3 +2220,46 @@ export function calcWeeklyAverages(records, numWeeks = 8) {
   }
   return weeks;
 }
+
+/**
+ * Build a recording frequency map for the current month.
+ * Returns { year, month, days[], recordedDates: Set, totalDays, recordedCount, rate }.
+ * Each day in days[]: { date, dayOfWeek, recorded, weight }
+ */
+export function calcMonthlyRecordingMap(records, year, month) {
+  const y = year ?? new Date().getFullYear();
+  const m = month ?? new Date().getMonth(); // 0-based
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const prefix = `${y}-${String(m + 1).padStart(2, "0")}`;
+
+  const dateMap = new Map();
+  for (const r of records) {
+    if (r.dt.startsWith(prefix)) {
+      dateMap.set(r.dt, r.wt);
+    }
+  }
+
+  const days = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt = `${prefix}-${String(d).padStart(2, "0")}`;
+    const dow = new Date(y, m, d).getDay();
+    days.push({
+      date: dt,
+      day: d,
+      dayOfWeek: dow,
+      recorded: dateMap.has(dt),
+      weight: dateMap.get(dt) ?? null,
+    });
+  }
+
+  const recordedCount = dateMap.size;
+  return {
+    year: y,
+    month: m,
+    monthName: `${y}-${String(m + 1).padStart(2, "0")}`,
+    days,
+    recordedCount,
+    totalDays: daysInMonth,
+    rate: daysInMonth > 0 ? Math.round((recordedCount / daysInMonth) * 100) : 0,
+  };
+}

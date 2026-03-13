@@ -2614,6 +2614,40 @@ function calcWeeklyAverages(records, numWeeks = 8) {
   }
   return weeks;
 }
+function calcMonthlyRecordingMap(records, year, month) {
+  const y = year ?? (/* @__PURE__ */ new Date()).getFullYear();
+  const m = month ?? (/* @__PURE__ */ new Date()).getMonth();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const prefix = `${y}-${String(m + 1).padStart(2, "0")}`;
+  const dateMap = /* @__PURE__ */ new Map();
+  for (const r of records) {
+    if (r.dt.startsWith(prefix)) {
+      dateMap.set(r.dt, r.wt);
+    }
+  }
+  const days2 = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt = `${prefix}-${String(d).padStart(2, "0")}`;
+    const dow = new Date(y, m, d).getDay();
+    days2.push({
+      date: dt,
+      day: d,
+      dayOfWeek: dow,
+      recorded: dateMap.has(dt),
+      weight: dateMap.get(dt) ?? null
+    });
+  }
+  const recordedCount = dateMap.size;
+  return {
+    year: y,
+    month: m,
+    monthName: `${y}-${String(m + 1).padStart(2, "0")}`,
+    days: days2,
+    recordedCount,
+    totalDays: daysInMonth,
+    rate: daysInMonth > 0 ? Math.round(recordedCount / daysInMonth * 100) : 0
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -3273,7 +3307,16 @@ var translations = {
     "weeklyAvg.avg": "\u5E73\u5747 {avg}kg",
     "weeklyAvg.noData": "\u30C7\u30FC\u30BF\u306A\u3057",
     "weeklyAvg.count": "{count}\u4EF6",
-    "weeklyAvg.change": "\u5148\u9031\u6BD4 {change}kg"
+    "weeklyAvg.change": "\u5148\u9031\u6BD4 {change}kg",
+    "recCal.title": "\u4ECA\u6708\u306E\u8A18\u9332\u30AB\u30EC\u30F3\u30C0\u30FC",
+    "recCal.rate": "\u8A18\u9332\u7387 {rate}%\uFF08{count}/{total}\u65E5\uFF09",
+    "recCal.sun": "\u65E5",
+    "recCal.mon": "\u6708",
+    "recCal.tue": "\u706B",
+    "recCal.wed": "\u6C34",
+    "recCal.thu": "\u6728",
+    "recCal.fri": "\u91D1",
+    "recCal.sat": "\u571F"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3931,7 +3974,16 @@ var translations = {
     "weeklyAvg.avg": "Avg {avg}kg",
     "weeklyAvg.noData": "No data",
     "weeklyAvg.count": "{count} entries",
-    "weeklyAvg.change": "{change}kg vs prev week"
+    "weeklyAvg.change": "{change}kg vs prev week",
+    "recCal.title": "This Month's Recording Calendar",
+    "recCal.rate": "Recording rate: {rate}% ({count}/{total} days)",
+    "recCal.sun": "Su",
+    "recCal.mon": "Mo",
+    "recCal.tue": "Tu",
+    "recCal.wed": "We",
+    "recCal.thu": "Th",
+    "recCal.fri": "Fr",
+    "recCal.sat": "Sa"
   }
 };
 function createTranslator(language) {
@@ -25016,6 +25068,7 @@ function render() {
             ${renderWeightConfidence()}
             ${renderBodyFatStats()}
             ${renderWeeklyAverages()}
+            ${renderRecordingCalendar()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -26199,7 +26252,7 @@ function renderWeeklyAverages() {
     const changeClass = change !== null ? change < 0 ? "down" : change > 0 ? "up" : "flat" : "";
     const startLabel = w.weekStart.slice(5).replace("-", "/");
     return `<div class="weekly-avg-bar-wrap">
-      <div class="weekly-avg-value">${w.avg}</div>
+      <div class="weekly-avg-value">${w.avg.toFixed(1)}</div>
       <div class="weekly-avg-bar ${changeClass}" style="height:${pct}%"></div>
       <div class="weekly-avg-label">${startLabel}</div>
       ${change !== null ? `<div class="weekly-avg-change ${changeClass}">${change > 0 ? "+" : ""}${change}</div>` : ""}
@@ -26209,6 +26262,29 @@ function renderWeeklyAverages() {
     <div class="weekly-avg-section">
       <div class="helper">${t("weeklyAvg.title")}</div>
       <div class="weekly-avg-chart">${bars.join("")}</div>
+    </div>
+  `;
+}
+function renderRecordingCalendar() {
+  if (state.records.length === 0) return "";
+  const cal = calcMonthlyRecordingMap(state.records);
+  const today = /* @__PURE__ */ new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const dayHeaders = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].map((d) => `<div class="rec-cal-header">${t("recCal." + d)}</div>`).join("");
+  const firstDow = cal.days[0].dayOfWeek;
+  const blanks = Array.from({ length: firstDow }, () => `<div class="rec-cal-blank"></div>`).join("");
+  const cells = cal.days.map((d) => {
+    const isFuture = d.date > todayStr;
+    const cls = isFuture ? "future" : d.recorded ? "recorded" : "missed";
+    const title = d.recorded ? `${d.day}: ${d.weight.toFixed(1)}kg` : `${d.day}`;
+    return `<div class="rec-cal-cell ${cls}" title="${title}"><span>${d.day}</span></div>`;
+  }).join("");
+  const rateText = t("recCal.rate").replace("{rate}", cal.rate).replace("{count}", cal.recordedCount).replace("{total}", cal.totalDays);
+  return `
+    <div class="rec-cal-section">
+      <div class="helper">${t("recCal.title")}</div>
+      <div class="rec-cal-grid">${dayHeaders}${blanks}${cells}</div>
+      <div class="helper hint-small" style="margin-top:6px">${rateText}</div>
     </div>
   `;
 }
