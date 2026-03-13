@@ -5304,3 +5304,186 @@ describe("Constants validation", () => {
     expect(validateWeight(String(WEIGHT_RANGE.max + 1)).valid).toBe(false);
   });
 });
+
+// ── calcWeightPlateau edge cases ──
+describe("calcWeightPlateau edge cases", () => {
+  it("returns null for fewer than 14 records", () => {
+    const records = Array.from({ length: 13 }, (_, i) => ({
+      dt: `2024-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    expect(calcWeightPlateau(records)).toBeNull();
+  });
+  it("detects plateau when weight is stable", () => {
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2024-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + (i % 2) * 0.2, // oscillates 70.0 - 70.2
+    }));
+    const result = calcWeightPlateau(records);
+    expect(result).not.toBeNull();
+    expect(result.isPlateau).toBe(true);
+  });
+  it("does not detect plateau when weight changes significantly", () => {
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2024-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 - i * 0.5,
+    }));
+    const result = calcWeightPlateau(records);
+    expect(result.isPlateau).toBe(false);
+  });
+});
+
+// ── calcRecordGaps edge cases ──
+describe("calcRecordGaps edge cases", () => {
+  it("returns null for fewer than 2 records", () => {
+    expect(calcRecordGaps([{ dt: "2024-01-01", wt: 70 }])).toBeNull();
+  });
+  it("returns 0 gaps for consecutive days", () => {
+    const records = [
+      { dt: "2024-01-01", wt: 70 },
+      { dt: "2024-01-02", wt: 70 },
+    ];
+    const result = calcRecordGaps(records);
+    expect(result.totalGaps).toBe(0);
+    expect(result.longestGap).toBe(0);
+  });
+  it("detects gaps correctly", () => {
+    const records = [
+      { dt: "2024-01-01", wt: 70 },
+      { dt: "2024-01-05", wt: 70 },
+      { dt: "2024-01-10", wt: 70 },
+    ];
+    const result = calcRecordGaps(records);
+    expect(result.totalGaps).toBe(2);
+    expect(result.longestGap).toBe(5);
+    expect(result.gaps[0].days).toBe(5);
+  });
+});
+
+// ── calcSeasonality edge cases ──
+describe("calcSeasonality edge cases", () => {
+  it("returns null for fewer than 30 records", () => {
+    const records = Array.from({ length: 29 }, (_, i) => ({
+      dt: `2024-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    expect(calcSeasonality(records)).toBeNull();
+  });
+  it("identifies heaviest and lightest months", () => {
+    const records = [];
+    // Jan records: heavier
+    for (let i = 1; i <= 10; i++) {
+      records.push({ dt: `2024-01-${String(i).padStart(2, "0")}`, wt: 75 });
+    }
+    // Apr records: mid
+    for (let i = 1; i <= 10; i++) {
+      records.push({ dt: `2024-04-${String(i).padStart(2, "0")}`, wt: 72 });
+    }
+    // Jul records: lighter
+    for (let i = 1; i <= 10; i++) {
+      records.push({ dt: `2024-07-${String(i).padStart(2, "0")}`, wt: 70 });
+    }
+    const result = calcSeasonality(records);
+    expect(result).not.toBeNull();
+    expect(result.heaviestMonth).toBe(0); // January
+    expect(result.lightestMonth).toBe(6); // July
+    expect(result.seasonalRange).toBe(5.0);
+  });
+});
+
+// ── calcDayOfWeekChange edge cases ──
+describe("calcDayOfWeekChange edge cases", () => {
+  it("returns null for fewer than 7 records", () => {
+    const records = Array.from({ length: 6 }, (_, i) => ({
+      dt: `2024-01-0${i + 1}`,
+      wt: 70,
+    }));
+    expect(calcDayOfWeekChange(records)).toBeNull();
+  });
+  it("returns null when fewer than 3 days have consecutive data", () => {
+    // Records with gaps - no consecutive days
+    const records = Array.from({ length: 7 }, (_, i) => ({
+      dt: `2024-01-${String(i * 3 + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    expect(calcDayOfWeekChange(records)).toBeNull();
+  });
+});
+
+// ── calcPersonalRecords edge cases ──
+describe("calcPersonalRecords edge cases", () => {
+  it("returns null for fewer than 3 records", () => {
+    expect(calcPersonalRecords([{ wt: 70, dt: "2024-01-01" }, { wt: 71, dt: "2024-01-02" }])).toBeNull();
+  });
+  it("identifies all-time low correctly", () => {
+    const records = [
+      { dt: "2024-01-01", wt: 72 },
+      { dt: "2024-01-02", wt: 68 },
+      { dt: "2024-01-03", wt: 70 },
+    ];
+    const result = calcPersonalRecords(records);
+    expect(result.allTimeLow).toBe(68);
+    expect(result.allTimeLowDate).toBe("2024-01-02");
+  });
+  it("calculates total change from first to last", () => {
+    const records = [
+      { dt: "2024-01-01", wt: 75 },
+      { dt: "2024-01-02", wt: 73 },
+      { dt: "2024-01-03", wt: 72 },
+    ];
+    const result = calcPersonalRecords(records);
+    expect(result.totalChange).toBe(-3);
+  });
+});
+
+// ── calcWeightRegression edge cases ──
+describe("calcWeightRegression edge cases", () => {
+  it("returns null for fewer than 5 records", () => {
+    const records = Array.from({ length: 4 }, (_, i) => ({
+      dt: `2024-01-0${i + 1}`,
+      wt: 70 - i * 0.1,
+    }));
+    expect(calcWeightRegression(records)).toBeNull();
+  });
+  it("returns null when all records have same date", () => {
+    const records = Array.from({ length: 5 }, () => ({
+      dt: "2024-01-01",
+      wt: 70,
+    }));
+    expect(calcWeightRegression(records)).toBeNull();
+  });
+  it("detects losing trend", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2024-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 75 - i * 0.3,
+    }));
+    const result = calcWeightRegression(records);
+    expect(result.direction).toBe("losing");
+    expect(result.slope).toBeLessThan(0);
+    expect(result.r2).toBeGreaterThan(0.9);
+  });
+  it("detects gaining trend", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2024-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 65 + i * 0.3,
+    }));
+    const result = calcWeightRegression(records);
+    expect(result.direction).toBe("gaining");
+  });
+});
+
+// ── calcWeightDistribution edge cases (expanded) ──
+describe("calcWeightDistribution expanded", () => {
+  it("returns null when all weights are identical", () => {
+    const records = Array.from({ length: 5 }, () => ({ wt: 70 }));
+    expect(calcWeightDistribution(records)).toBeNull();
+  });
+  it("correctly assigns latestBucket", () => {
+    const records = [
+      { wt: 70.1 }, { wt: 70.5 }, { wt: 71.3 }, { wt: 72.0 }, { wt: 70.2 },
+    ];
+    const result = calcWeightDistribution(records);
+    expect(result.latestBucket).toBeGreaterThanOrEqual(0);
+    expect(result.modeBucket).toBeGreaterThanOrEqual(0);
+  });
+});
