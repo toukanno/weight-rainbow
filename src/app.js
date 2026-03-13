@@ -75,6 +75,7 @@ import {
   calcBMIHistory,
   calcWeightHeatmap,
   calcStreakRewards,
+  calcWeightConfidence,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -226,8 +227,8 @@ function showFirstLaunchModal() {
         <h2 id="langModalTitle">ようこそ / Welcome</h2>
         <p>言語を選択してください<br>Choose your language</p>
         <div class="lang-modal-buttons">
-          <button type="button" data-lang="ja">🇯🇵 日本語</button>
-          <button type="button" data-lang="en">🇬🇧 English</button>
+          <button type="button" data-lang="ja" aria-label="日本語を選択">🇯🇵 日本語</button>
+          <button type="button" data-lang="en" aria-label="Select English">🇬🇧 English</button>
         </div>
       </div>
     </div>
@@ -682,6 +683,7 @@ function render() {
             ${renderBMIDistribution()}
             ${renderWeightVelocity()}
             ${renderCalorieEstimate()}
+            ${renderWeightConfidence()}
             ${renderBodyFatStats()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
@@ -1160,7 +1162,7 @@ function renderWeekdayWeekend() {
           <div class="wdwe-value">${wdwe.weekdayAvg.toFixed(1)}kg</div>
           <div class="hint-small">${wdwe.weekdayCount} ${t("chart.records")}</div>
         </div>
-        <div class="wdwe-vs">vs</div>
+        <div class="wdwe-vs">${t("wdwe.vs")}</div>
         <div class="wdwe-col">
           <div class="wdwe-label">${t("wdwe.weekend")}</div>
           <div class="wdwe-value">${wdwe.weekendAvg.toFixed(1)}kg</div>
@@ -1656,6 +1658,31 @@ function renderStreakRewards() {
       </div>
       ${sr.next ? `<div class="streak-reward-next">${t("streakReward.next").replace("{next}", sr.next).replace("{remaining}", sr.nextRemaining)}</div>` : ""}
       <div class="helper hint-small">${t("streakReward.hint")}</div>
+    </div>
+  `;
+}
+
+function renderWeightConfidence() {
+  const fc = calcWeightConfidence(state.records);
+  if (!fc) return "";
+  const confColors = { high: "#10b981", medium: "#f59e0b", low: "#ef4444" };
+  const confColor = confColors[fc.confidence] || confColors.low;
+  const rows = fc.forecasts.map((f) => `
+    <div class="forecast-row">
+      <span class="forecast-label">${t("forecast.days").replace("{days}", f.days)}</span>
+      <span class="forecast-value">${t("forecast.predicted").replace("{wt}", f.predicted)}</span>
+      <span class="forecast-range">${t("forecast.range").replace("{low}", f.low).replace("{high}", f.high)}</span>
+    </div>
+  `).join("");
+  return `
+    <div class="forecast-section">
+      <div class="helper">${t("forecast.title")}</div>
+      <div class="forecast-meta">
+        <span class="forecast-rate">${t("forecast.rate").replace("{rate}", fc.weeklyRate > 0 ? "+" + fc.weeklyRate : String(fc.weeklyRate))}</span>
+        <span class="forecast-conf" style="color:${confColor};">${t("forecast.confidence")}: ${t("forecast." + fc.confidence)}</span>
+      </div>
+      <div class="forecast-table">${rows}</div>
+      <div class="helper hint-small">${t("forecast.hint").replace("{n}", fc.dataPoints)}</div>
     </div>
   `;
 }
@@ -2398,6 +2425,7 @@ async function pickNativePhoto() {
     if (photo.webPath) {
       try {
         const response = await fetch(photo.webPath);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const blob = await response.blob();
         const candidates = await detectWeightsFromImage(blob);
         detectedWeights = candidates;
@@ -2614,6 +2642,10 @@ function handleCSVImport(e) {
     setStatus(msg);
     e.target.value = "";
     render();
+  };
+  reader.onerror = () => {
+    setStatus(t("import.error"), "error");
+    e.target.value = "";
   };
   reader.readAsText(file);
 }

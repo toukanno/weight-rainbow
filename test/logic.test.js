@@ -72,6 +72,7 @@ import {
   calcBMIHistory,
   calcWeightHeatmap,
   calcStreakRewards,
+  calcWeightConfidence,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -4671,6 +4672,54 @@ describe("calcStreakRewards", () => {
   });
 });
 
+describe("calcWeightConfidence", () => {
+  it("returns null for fewer than 7 records", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i * 0.1,
+    }));
+    expect(calcWeightConfidence(records)).toBeNull();
+  });
+
+  it("calculates forecasts for sufficient data", () => {
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 - i * 0.1,
+    }));
+    const result = calcWeightConfidence(records);
+    expect(result).not.toBeNull();
+    expect(result.forecasts.length).toBe(3);
+    expect(result.forecasts[0].days).toBe(7);
+    expect(result.forecasts[1].days).toBe(14);
+    expect(result.forecasts[2].days).toBe(30);
+    expect(result.dailyRate).toBeLessThan(0); // losing weight
+  });
+
+  it("provides confidence intervals with margin", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + Math.sin(i) * 2,
+    }));
+    const result = calcWeightConfidence(records);
+    expect(result).not.toBeNull();
+    for (const f of result.forecasts) {
+      expect(f.low).toBeLessThanOrEqual(f.predicted);
+      expect(f.high).toBeGreaterThanOrEqual(f.predicted);
+    }
+  });
+
+  it("returns confidence level and r2", () => {
+    const records = Array.from({ length: 20 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 - i * 0.15,
+    }));
+    const result = calcWeightConfidence(records);
+    expect(["high", "medium", "low"]).toContain(result.confidence);
+    expect(typeof result.r2).toBe("number");
+    expect(result.dataPoints).toBe(20);
+  });
+});
+
 describe("buildRecord edge cases", () => {
   it("truncates note to 100 characters", () => {
     const longNote = "x".repeat(150);
@@ -5000,5 +5049,208 @@ describe("calcStreakRewards", () => {
     const result = calcStreakRewards(records);
     expect(result.streak).toBe(30);
     expect(result.level).toBe("dedicated");
+  });
+});
+
+// ── calcWeightRangePosition edge cases ──
+describe("calcWeightRangePosition edge cases", () => {
+  it("returns null for fewer than 3 records", () => {
+    expect(calcWeightRangePosition([{ wt: 70 }, { wt: 71 }])).toBeNull();
+  });
+  it("returns position 50 when all weights identical", () => {
+    const records = [{ wt: 70 }, { wt: 70 }, { wt: 70 }];
+    const result = calcWeightRangePosition(records);
+    expect(result.position).toBe(50);
+    expect(result.zone).toBe("middle");
+  });
+  it("returns zone low when latest is at minimum", () => {
+    const records = [{ wt: 75 }, { wt: 73 }, { wt: 70 }];
+    const result = calcWeightRangePosition(records);
+    expect(result.position).toBe(0);
+    expect(result.zone).toBe("low");
+  });
+  it("returns zone high when latest is at maximum", () => {
+    const records = [{ wt: 70 }, { wt: 73 }, { wt: 75 }];
+    const result = calcWeightRangePosition(records);
+    expect(result.position).toBe(100);
+    expect(result.zone).toBe("high");
+  });
+});
+
+// ── calcTagImpact edge cases ──
+describe("calcTagImpact edge cases", () => {
+  it("returns null for fewer than 5 records", () => {
+    expect(calcTagImpact([{ wt: 70 }, { wt: 71 }, { wt: 72 }, { wt: 73 }])).toBeNull();
+  });
+  it("returns null when no tags present", () => {
+    const records = Array.from({ length: 6 }, (_, i) => ({ wt: 70 + i * 0.1, note: "plain text" }));
+    expect(calcTagImpact(records)).toBeNull();
+  });
+  it("returns null when tags appear less than 2 times", () => {
+    const records = Array.from({ length: 6 }, (_, i) => ({ wt: 70 + i * 0.1, note: "" }));
+    records[3].note = "#運動";
+    expect(calcTagImpact(records)).toBeNull();
+  });
+});
+
+// ── calcBestPeriod edge cases ──
+describe("calcBestPeriod edge cases", () => {
+  it("returns null for fewer than 7 records", () => {
+    const records = Array.from({ length: 6 }, (_, i) => ({ dt: `2024-01-0${i + 1}`, wt: 70 - i * 0.1 }));
+    expect(calcBestPeriod(records)).toBeNull();
+  });
+  it("identifies best 7-day window", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2024-01-${String(i + 1).padStart(2, "0")}`,
+      wt: i < 5 ? 75 - i * 0.5 : 73 + (i - 5) * 0.3,
+    }));
+    const result = calcBestPeriod(records);
+    expect(result[7]).toBeDefined();
+    expect(result[7].change).toBeLessThanOrEqual(0);
+  });
+});
+
+// ── calcWeeklyFrequency edge cases ──
+describe("calcWeeklyFrequency edge cases", () => {
+  it("returns null for empty records", () => {
+    expect(calcWeeklyFrequency([])).toBeNull();
+  });
+  it("returns correct structure with buckets", () => {
+    const today = new Date();
+    const dt = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const result = calcWeeklyFrequency([{ dt, wt: 70 }]);
+    expect(result.buckets).toHaveLength(8);
+    expect(result.avgPerWeek).toBeGreaterThan(0);
+    expect(result.weeks).toBe(8);
+  });
+});
+
+// ── calcWeightVelocity edge cases ──
+describe("calcWeightVelocity edge cases", () => {
+  it("returns null for fewer than 3 records", () => {
+    expect(calcWeightVelocity([{ dt: "2024-01-01", wt: 70 }, { dt: "2024-01-02", wt: 71 }])).toBeNull();
+  });
+});
+
+// ── calcCalorieEstimate edge cases ──
+describe("calcCalorieEstimate edge cases", () => {
+  it("returns null for fewer than 3 records", () => {
+    expect(calcCalorieEstimate([{ dt: "2024-01-01", wt: 70 }, { dt: "2024-01-02", wt: 71 }])).toBeNull();
+  });
+  it("returns null when records are too old for 7-day and 30-day windows", () => {
+    const records = [
+      { dt: "2020-01-01", wt: 70 },
+      { dt: "2020-01-05", wt: 69.5 },
+      { dt: "2020-01-10", wt: 69 },
+    ];
+    expect(calcCalorieEstimate(records)).toBeNull();
+  });
+});
+
+// ── calcMomentumScore edge cases ──
+describe("calcMomentumScore edge cases", () => {
+  it("returns null for fewer than 7 records", () => {
+    const records = Array.from({ length: 6 }, (_, i) => ({ dt: `2024-01-0${i + 1}`, wt: 70 }));
+    expect(calcMomentumScore(records)).toBeNull();
+  });
+  it("score is clamped between 0 and 100", () => {
+    const today = new Date();
+    const records = Array.from({ length: 10 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (9 - i));
+      return {
+        dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+        wt: 70 - i * 0.5,
+      };
+    });
+    const result = calcMomentumScore(records, 65);
+    expect(result.score).toBeGreaterThanOrEqual(0);
+    expect(result.score).toBeLessThanOrEqual(100);
+    expect(["great", "good", "fair", "low"]).toContain(result.level);
+  });
+});
+
+// ── calcNextMilestones edge cases ──
+describe("calcNextMilestones edge cases", () => {
+  it("returns null for empty records", () => {
+    expect(calcNextMilestones([])).toBeNull();
+  });
+  it("includes round-number milestones", () => {
+    const result = calcNextMilestones([{ wt: 72.3 }]);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result.some((m) => m.type === "roundDown" || m.type === "fiveDown")).toBe(true);
+  });
+  it("includes BMI milestones when heightCm provided and BMI > boundary", () => {
+    // 85kg at 170cm = BMI 29.4, above 25 threshold
+    const result = calcNextMilestones([{ wt: 85 }], 170);
+    expect(result.some((m) => m.type === "bmiZone")).toBe(true);
+  });
+});
+
+// ── calcWeightDistribution edge cases ──
+describe("calcWeightDistribution edge cases", () => {
+  it("returns null for empty records", () => {
+    expect(calcWeightDistribution([])).toBeNull();
+  });
+  it("creates correct bucket structure", () => {
+    const records = [{ wt: 70.1 }, { wt: 70.5 }, { wt: 71.0 }, { wt: 71.5 }, { wt: 72.0 }];
+    const result = calcWeightDistribution(records);
+    expect(result.buckets.length).toBeGreaterThan(0);
+    expect(result.maxCount).toBeGreaterThan(0);
+  });
+});
+
+// ── calcWeightConfidence edge cases ──
+describe("calcWeightConfidence edge cases", () => {
+  it("returns null for fewer than 7 records", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({ dt: `2024-01-0${i + 1}`, wt: 70 }));
+    expect(calcWeightConfidence(records)).toBeNull();
+  });
+  it("returns forecasts for 7, 14, and 30 days", () => {
+    const records = Array.from({ length: 15 }, (_, i) => ({
+      dt: `2024-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 - i * 0.1,
+    }));
+    const result = calcWeightConfidence(records);
+    expect(result).not.toBeNull();
+    expect(result.forecasts).toHaveLength(3);
+    expect(result.forecasts[0].days).toBe(7);
+    expect(result.forecasts[1].days).toBe(14);
+    expect(result.forecasts[2].days).toBe(30);
+  });
+  it("returns null when all records on same date (denom=0)", () => {
+    const records = Array.from({ length: 10 }, () => ({ dt: "2024-01-01", wt: 70 }));
+    expect(calcWeightConfidence(records)).toBeNull();
+  });
+});
+
+// ── Constants validation ──
+describe("Constants validation", () => {
+  it("STORAGE_KEYS has required keys", () => {
+    expect(STORAGE_KEYS.records).toBeDefined();
+    expect(STORAGE_KEYS.settings).toBeDefined();
+    expect(STORAGE_KEYS.profile).toBeDefined();
+  });
+  it("THEME_LIST is non-empty array with id and color", () => {
+    expect(THEME_LIST.length).toBeGreaterThan(0);
+    for (const theme of THEME_LIST) {
+      expect(theme.id).toBeDefined();
+      expect(theme.color).toBeDefined();
+    }
+  });
+  it("MAX_RECORDS is a positive number", () => {
+    expect(MAX_RECORDS).toBeGreaterThan(0);
+  });
+  it("Range constants have valid min/max", () => {
+    expect(WEIGHT_RANGE.min).toBeLessThan(WEIGHT_RANGE.max);
+    expect(HEIGHT_RANGE.min).toBeLessThan(HEIGHT_RANGE.max);
+    expect(AGE_RANGE.min).toBeLessThan(AGE_RANGE.max);
+    expect(BODY_FAT_RANGE.min).toBeLessThan(BODY_FAT_RANGE.max);
+  });
+  it("validateWeight respects WEIGHT_RANGE boundaries", () => {
+    expect(validateWeight(String(WEIGHT_RANGE.min)).valid).toBe(true);
+    expect(validateWeight(String(WEIGHT_RANGE.max)).valid).toBe(true);
+    expect(validateWeight(String(WEIGHT_RANGE.min - 1)).valid).toBe(false);
+    expect(validateWeight(String(WEIGHT_RANGE.max + 1)).valid).toBe(false);
   });
 });

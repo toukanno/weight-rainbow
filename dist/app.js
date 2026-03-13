@@ -2195,6 +2195,55 @@ function calcStreakRewards(records) {
   else if (streak >= 3) level = "beginner";
   return { streak, level, earned, next, nextRemaining, totalRecords: records.length };
 }
+function calcWeightConfidence(records) {
+  if (records.length < 7) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-30);
+  if (recent.length < 7) return null;
+  const firstDate = new Date(recent[0].dt);
+  const xs = recent.map((r) => (new Date(r.dt) - firstDate) / 864e5);
+  const ys = recent.map((r) => r.wt);
+  const n = xs.length;
+  const sumX = xs.reduce((a, b) => a + b, 0);
+  const sumY = ys.reduce((a, b) => a + b, 0);
+  const sumXY = xs.reduce((a, x, i) => a + x * ys[i], 0);
+  const sumX2 = xs.reduce((a, x) => a + x * x, 0);
+  const denom = n * sumX2 - sumX * sumX;
+  if (denom === 0) return null;
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  const residuals = xs.map((x, i) => ys[i] - (intercept + slope * x));
+  const residualSq = residuals.reduce((a, r) => a + r * r, 0);
+  const stdDev = Math.sqrt(residualSq / (n - 2));
+  const latest = recent[recent.length - 1].wt;
+  const lastDay = xs[xs.length - 1];
+  const forecasts = [7, 14, 30].map((days2) => {
+    const futureX = lastDay + days2;
+    const predicted = intercept + slope * futureX;
+    const margin = stdDev * 1.96;
+    return {
+      days: days2,
+      predicted: Math.round(predicted * 10) / 10,
+      low: Math.round((predicted - margin) * 10) / 10,
+      high: Math.round((predicted + margin) * 10) / 10,
+      margin: Math.round(margin * 10) / 10
+    };
+  });
+  const r2 = 1 - residualSq / ys.reduce((a, y) => a + (y - sumY / n) ** 2, 0);
+  let confidence = "low";
+  if (r2 > 0.7 && n >= 14) confidence = "high";
+  else if (r2 > 0.4 && n >= 7) confidence = "medium";
+  return {
+    dailyRate: Math.round(slope * 100) / 100,
+    weeklyRate: Math.round(slope * 7 * 100) / 100,
+    stdDev: Math.round(stdDev * 100) / 100,
+    confidence,
+    r2: Math.round(r2 * 100) / 100,
+    forecasts,
+    latest,
+    dataPoints: n
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -2416,6 +2465,7 @@ var translations = {
     "wdwe.weekday": "\u5E73\u65E5\u5E73\u5747",
     "wdwe.weekend": "\u9031\u672B\u5E73\u5747",
     "wdwe.diff": "\u5DEE",
+    "wdwe.vs": "vs",
     "wdwe.heavier.weekend": "\u9031\u672B\u304C\u3084\u3084\u91CD\u3044\u50BE\u5411",
     "wdwe.heavier.weekday": "\u5E73\u65E5\u304C\u3084\u3084\u91CD\u3044\u50BE\u5411",
     "wdwe.heavier.similar": "\u5E73\u65E5\u30FB\u9031\u672B\u3067\u307B\u307C\u540C\u3058",
@@ -2761,7 +2811,17 @@ var translations = {
     "streakReward.expert": "\u30A8\u30AD\u30B9\u30D1\u30FC\u30C8",
     "streakReward.master": "\u30DE\u30B9\u30BF\u30FC",
     "streakReward.legend": "\u30EC\u30B8\u30A7\u30F3\u30C9",
-    "streakReward.hint": "\u6BCE\u65E5\u8A18\u9332\u3057\u3066\u6B21\u306E\u30D0\u30C3\u30B8\u3092\u76EE\u6307\u305D\u3046\uFF01"
+    "streakReward.hint": "\u6BCE\u65E5\u8A18\u9332\u3057\u3066\u6B21\u306E\u30D0\u30C3\u30B8\u3092\u76EE\u6307\u305D\u3046\uFF01",
+    "forecast.title": "\u4F53\u91CD\u4E88\u6E2C",
+    "forecast.days": "{days}\u65E5\u5F8C",
+    "forecast.predicted": "{wt}kg",
+    "forecast.range": "{low} ~ {high}kg",
+    "forecast.confidence": "\u4FE1\u983C\u5EA6",
+    "forecast.high": "\u9AD8\u3044",
+    "forecast.medium": "\u4E2D\u7A0B\u5EA6",
+    "forecast.low": "\u4F4E\u3044",
+    "forecast.rate": "\u9031{rate}kg",
+    "forecast.hint": "\u904E\u53BB{n}\u4EF6\u306E\u30C7\u30FC\u30BF\u306B\u57FA\u3065\u304F\u4E88\u6E2C\uFF0895%\u4FE1\u983C\u533A\u9593\uFF09"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2984,6 +3044,7 @@ var translations = {
     "wdwe.weekday": "Weekday avg",
     "wdwe.weekend": "Weekend avg",
     "wdwe.diff": "Diff",
+    "wdwe.vs": "vs",
     "wdwe.heavier.weekend": "Slightly heavier on weekends",
     "wdwe.heavier.weekday": "Slightly heavier on weekdays",
     "wdwe.heavier.similar": "Similar on weekdays and weekends",
@@ -3326,7 +3387,17 @@ var translations = {
     "streakReward.expert": "Expert",
     "streakReward.master": "Master",
     "streakReward.legend": "Legend",
-    "streakReward.hint": "Record daily to earn the next badge!"
+    "streakReward.hint": "Record daily to earn the next badge!",
+    "forecast.title": "Weight Forecast",
+    "forecast.days": "In {days} days",
+    "forecast.predicted": "{wt}kg",
+    "forecast.range": "{low} \u2013 {high}kg",
+    "forecast.confidence": "Confidence",
+    "forecast.high": "High",
+    "forecast.medium": "Medium",
+    "forecast.low": "Low",
+    "forecast.rate": "{rate}kg/week",
+    "forecast.hint": "Based on {n} data points (95% confidence interval)"
   }
 };
 function createTranslator(language) {
@@ -23972,8 +24043,8 @@ function showFirstLaunchModal() {
         <h2 id="langModalTitle">\u3088\u3046\u3053\u305D / Welcome</h2>
         <p>\u8A00\u8A9E\u3092\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044<br>Choose your language</p>
         <div class="lang-modal-buttons">
-          <button type="button" data-lang="ja">\u{1F1EF}\u{1F1F5} \u65E5\u672C\u8A9E</button>
-          <button type="button" data-lang="en">\u{1F1EC}\u{1F1E7} English</button>
+          <button type="button" data-lang="ja" aria-label="\u65E5\u672C\u8A9E\u3092\u9078\u629E">\u{1F1EF}\u{1F1F5} \u65E5\u672C\u8A9E</button>
+          <button type="button" data-lang="en" aria-label="Select English">\u{1F1EC}\u{1F1E7} English</button>
         </div>
       </div>
     </div>
@@ -24391,6 +24462,7 @@ function render() {
             ${renderBMIDistribution()}
             ${renderWeightVelocity()}
             ${renderCalorieEstimate()}
+            ${renderWeightConfidence()}
             ${renderBodyFatStats()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
@@ -24857,7 +24929,7 @@ function renderWeekdayWeekend() {
           <div class="wdwe-value">${wdwe.weekdayAvg.toFixed(1)}kg</div>
           <div class="hint-small">${wdwe.weekdayCount} ${t("chart.records")}</div>
         </div>
-        <div class="wdwe-vs">vs</div>
+        <div class="wdwe-vs">${t("wdwe.vs")}</div>
         <div class="wdwe-col">
           <div class="wdwe-label">${t("wdwe.weekend")}</div>
           <div class="wdwe-value">${wdwe.weekendAvg.toFixed(1)}kg</div>
@@ -25324,6 +25396,30 @@ function renderStreakRewards() {
       </div>
       ${sr.next ? `<div class="streak-reward-next">${t("streakReward.next").replace("{next}", sr.next).replace("{remaining}", sr.nextRemaining)}</div>` : ""}
       <div class="helper hint-small">${t("streakReward.hint")}</div>
+    </div>
+  `;
+}
+function renderWeightConfidence() {
+  const fc = calcWeightConfidence(state.records);
+  if (!fc) return "";
+  const confColors = { high: "#10b981", medium: "#f59e0b", low: "#ef4444" };
+  const confColor = confColors[fc.confidence] || confColors.low;
+  const rows = fc.forecasts.map((f) => `
+    <div class="forecast-row">
+      <span class="forecast-label">${t("forecast.days").replace("{days}", f.days)}</span>
+      <span class="forecast-value">${t("forecast.predicted").replace("{wt}", f.predicted)}</span>
+      <span class="forecast-range">${t("forecast.range").replace("{low}", f.low).replace("{high}", f.high)}</span>
+    </div>
+  `).join("");
+  return `
+    <div class="forecast-section">
+      <div class="helper">${t("forecast.title")}</div>
+      <div class="forecast-meta">
+        <span class="forecast-rate">${t("forecast.rate").replace("{rate}", fc.weeklyRate > 0 ? "+" + fc.weeklyRate : String(fc.weeklyRate))}</span>
+        <span class="forecast-conf" style="color:${confColor};">${t("forecast.confidence")}: ${t("forecast." + fc.confidence)}</span>
+      </div>
+      <div class="forecast-table">${rows}</div>
+      <div class="helper hint-small">${t("forecast.hint").replace("{n}", fc.dataPoints)}</div>
     </div>
   `;
 }
@@ -25997,6 +26093,7 @@ async function pickNativePhoto() {
     if (photo.webPath) {
       try {
         const response = await fetch(photo.webPath);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const blob = await response.blob();
         const candidates = await detectWeightsFromImage(blob);
         detectedWeights = candidates;
@@ -26186,6 +26283,10 @@ function handleCSVImport(e) {
     setStatus(msg);
     e.target.value = "";
     render();
+  };
+  reader.onerror = () => {
+    setStatus(t("import.error"), "error");
+    e.target.value = "";
   };
   reader.readAsText(file);
 }
