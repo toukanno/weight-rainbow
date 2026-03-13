@@ -3444,4 +3444,111 @@ describe("calcNextMilestones", () => {
     expect(result).not.toBeNull();
     expect(result.length).toBeLessThanOrEqual(3);
   });
+
+  it("returns null when at exact round number", () => {
+    const records = [{ dt: "2025-01-01", wt: 70.0 }];
+    const result = calcNextMilestones(records);
+    // At exactly 70, no round-down milestone (70 is not < 70)
+    expect(result).toBeNull();
+  });
+});
+
+describe("getBMIStatus edge cases", () => {
+  it("returns unknown for NaN", () => {
+    expect(getBMIStatus(NaN)).toBe("bmi.unknown");
+  });
+
+  it("returns under for BMI < 18.5", () => {
+    expect(getBMIStatus(17)).toBe("bmi.under");
+  });
+
+  it("returns normal for BMI 18.5-24.9", () => {
+    expect(getBMIStatus(22)).toBe("bmi.normal");
+  });
+
+  it("returns over for BMI 25-29.9", () => {
+    expect(getBMIStatus(27)).toBe("bmi.over");
+  });
+
+  it("returns obese for BMI >= 30", () => {
+    expect(getBMIStatus(35)).toBe("bmi.obese");
+  });
+
+  it("handles boundary at 18.5", () => {
+    expect(getBMIStatus(18.5)).toBe("bmi.normal");
+  });
+
+  it("handles boundary at 25", () => {
+    expect(getBMIStatus(25)).toBe("bmi.over");
+  });
+});
+
+describe("calcStreak edge cases", () => {
+  it("returns 0 for empty records", () => {
+    expect(calcStreak([])).toBe(0);
+  });
+
+  it("returns 1 for today's record only", () => {
+    const today = new Date();
+    const dt = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    expect(calcStreak([{ dt, wt: 70 }])).toBe(1);
+  });
+
+  it("counts consecutive days", () => {
+    const today = new Date();
+    const records = Array.from({ length: 5 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      return { dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, wt: 70 };
+    });
+    expect(calcStreak(records)).toBe(5);
+  });
+
+  it("breaks streak on gap", () => {
+    const today = new Date();
+    const d1 = new Date(today);
+    const d3 = new Date(today);
+    d3.setDate(d3.getDate() - 3);
+    const records = [
+      { dt: `${d1.getFullYear()}-${String(d1.getMonth() + 1).padStart(2, "0")}-${String(d1.getDate()).padStart(2, "0")}`, wt: 70 },
+      { dt: `${d3.getFullYear()}-${String(d3.getMonth() + 1).padStart(2, "0")}-${String(d3.getDate()).padStart(2, "0")}`, wt: 70 },
+    ];
+    expect(calcStreak(records)).toBe(1);
+  });
+});
+
+describe("calcTrendForecast edge cases", () => {
+  it("returns null for fewer than 7 records", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 70,
+    }));
+    expect(calcTrendForecast(records)).toBeNull();
+  });
+
+  it("returns forecast with slope for sufficient data", () => {
+    const today = new Date();
+    const records = Array.from({ length: 10 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (9 - i));
+      return { dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, wt: 75 - i * 0.2 };
+    });
+    const result = calcTrendForecast(records);
+    expect(result).not.toBeNull();
+    expect(result.slope).toBeLessThan(0); // decreasing trend
+    expect(result.forecast.length).toBeGreaterThan(0);
+  });
+});
+
+describe("createDefaultSettings edge cases", () => {
+  it("returns default settings object", () => {
+    const settings = createDefaultSettings();
+    expect(settings).toHaveProperty("language");
+    expect(settings).toHaveProperty("theme");
+    expect(settings).toHaveProperty("chartStyle");
+  });
+
+  it("has valid default language", () => {
+    const settings = createDefaultSettings();
+    expect(["ja", "en"]).toContain(settings.language);
+  });
 });
