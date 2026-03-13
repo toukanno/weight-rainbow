@@ -617,40 +617,6 @@
         opacity: 0.7;
       }
 
-      .note-tags-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-      }
-
-      .note-tag {
-        padding: 3px 8px;
-        border-radius: 8px;
-        border: 1px solid var(--border);
-        background: var(--surface);
-        color: var(--muted);
-        font-size: 0.7rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.15s;
-      }
-
-      .note-tag:hover {
-        color: var(--accent);
-        border-color: color-mix(in srgb, var(--accent) 30%, transparent);
-      }
-
-      .note-tag.active {
-        background: color-mix(in srgb, var(--accent) 14%, transparent);
-        color: var(--accent);
-        border-color: color-mix(in srgb, var(--accent) 30%, transparent);
-      }
-
-      body[data-theme="midnight"] .note-tag {
-        background: rgba(30, 35, 55, 0.6);
-        border-color: rgba(139, 146, 176, 0.18);
-      }
-
       .full-width-btn {
         margin-top: 10px;
         width: 100%;
@@ -718,10 +684,32 @@
         outline-offset: -1px;
       }
 
-      .record-list {
+      .note-tags-row {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .note-tag {
+        font-size: 0.72rem;
+        padding: 3px 10px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--muted);
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .note-tag:hover {
+        color: var(--accent);
+        border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+      }
+      .note-tag.active {
+        background: color-mix(in srgb, var(--accent) 16%, transparent);
+        color: var(--accent);
+        border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+        font-weight: 700;
       }
 
       .chip {
@@ -732,6 +720,10 @@
 
       .hidden {
         display: none !important;
+      }
+
+      @media (hover: none) {
+        .desktop-only { display: none; }
       }
 
       canvas {
@@ -1923,6 +1915,17 @@
         background: rgba(30, 35, 55, 0.7);
         border-color: rgba(139, 146, 176, 0.24);
         color: #e4e7f0;
+      }
+
+      body[data-theme="midnight"] .note-tag {
+        background: rgba(30, 35, 55, 0.6);
+        border-color: rgba(139, 146, 176, 0.2);
+        color: #c4c8d8;
+      }
+      body[data-theme="midnight"] .note-tag.active {
+        background: color-mix(in srgb, var(--accent) 20%, rgba(30, 35, 55, 0.6));
+        color: var(--accent);
+        border-color: color-mix(in srgb, var(--accent) 30%, transparent);
       }
 
       body[data-theme="midnight"] .data-actions label.btn.secondary {

@@ -467,7 +467,7 @@ function render() {
                 <div>
                   <div class="helper">${state.profile.heightCm ? `${t("entry.bmiReady")}: ${formatBMI(currentBMI)}` : t("bmi.unknown")}</div>
                   <div class="helper hint-small">${t("record.dailyLimit")}</div>
-                  <div class="helper hint-small">⌘+Enter</div>
+                  <div class="helper hint-small desktop-only">⌘+Enter</div>
                 </div>
               </div>
             </div>
