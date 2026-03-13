@@ -1019,7 +1019,7 @@ function renderCalendar() {
       const intensity = d.intensity !== null ? d.intensity : 0;
       bg = `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)`;
     }
-    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${d.wt}kg${changeLabel}` : ""}">
+    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${d.wt}kg${changeLabel}` : ""}"${hasRecord ? ` aria-label="${d.day}${t("calendar.dayUnit")} ${d.wt}kg${changeLabel}"` : ""}>
       <span class="calendar-day">${d.day}</span>
       ${hasRecord ? `<span class="calendar-wt">${d.wt}</span>` : ""}
     </div>`;

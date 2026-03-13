@@ -1919,6 +1919,7 @@ var translations = {
     "calendar.fri": "\u91D1",
     "calendar.sat": "\u571F",
     "calendar.records": "{count}\u4EF6\u306E\u8A18\u9332",
+    "calendar.dayUnit": "\u65E5",
     "calendar.decreased": "\u6E1B\u5C11",
     "calendar.increased": "\u5897\u52A0",
     "achievement.records_1": "\u521D\u8A18\u9332",
@@ -2324,6 +2325,7 @@ var translations = {
     "calendar.fri": "Fri",
     "calendar.sat": "Sat",
     "calendar.records": "{count} records",
+    "calendar.dayUnit": ",",
     "calendar.decreased": "Decreased",
     "calendar.increased": "Increased",
     "achievement.records_1": "First record",
@@ -23813,7 +23815,7 @@ function renderCalendar() {
       const intensity = d.intensity !== null ? d.intensity : 0;
       bg = `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)`;
     }
-    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${d.wt}kg${changeLabel}` : ""}">
+    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${d.wt}kg${changeLabel}` : ""}"${hasRecord ? ` aria-label="${d.day}${t("calendar.dayUnit")} ${d.wt}kg${changeLabel}"` : ""}>
       <span class="calendar-day">${d.day}</span>
       ${hasRecord ? `<span class="calendar-wt">${d.wt}</span>` : ""}
     </div>`;
