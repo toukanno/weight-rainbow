@@ -72,6 +72,8 @@ import {
   calcDayOfWeekChange,
   calcPersonalRecords,
   calcWeightRegression,
+  calcBMIHistory,
+  calcWeightHeatmap,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -702,6 +704,8 @@ function render() {
                 ${renderDayOfWeekChange()}
                 ${renderPersonalRecords()}
                 ${renderWeightRegression()}
+                ${renderBMIHistory()}
+                ${renderWeightHeatmap()}
               </div>
               ` : ""}
             </div>
@@ -1560,6 +1564,71 @@ function renderWeightRegression() {
         </div>
       </div>
       <div class="helper hint-small">${t("regression.hint")}</div>
+    </div>
+  `;
+}
+
+function renderBMIHistory() {
+  const bh = calcBMIHistory(state.records);
+  if (!bh) return "";
+  const zoneColors = { under: "#3b82f6", normal: "#10b981", over: "#f59e0b", obese: "#ef4444" };
+  const zoneBar = ["under", "normal", "over", "obese"]
+    .filter((z) => bh.zones[z] > 0)
+    .map((z) => `<div class="bmi-hist-seg" style="width:${bh.zones[z]}%;background:${zoneColors[z]};" title="${t("bmi." + z)} ${bh.zones[z]}%"></div>`)
+    .join("");
+  const changeStr = bh.change > 0 ? "+" + bh.change : String(bh.change);
+  return `
+    <div class="bmi-hist-section">
+      <div class="helper">${t("bmiHist.title")}</div>
+      <div class="bmi-hist-stats">
+        <span>${t("bmiHist.first").replace("{bmi}", bh.first)}</span>
+        <span>${t("bmiHist.latest").replace("{bmi}", bh.latest)}</span>
+        <span>${t("bmiHist.change").replace("{change}", changeStr)}</span>
+      </div>
+      <div class="bmi-hist-bar">${zoneBar}</div>
+      <div class="bmi-hist-detail">
+        <span>${t("bmiHist.range").replace("{min}", bh.min).replace("{max}", bh.max)}</span>
+        <span>${t("bmiHist.avg").replace("{avg}", bh.avg)}</span>
+      </div>
+      ${bh.improving ? `<div class="bmi-hist-improving">${t("bmiHist.improving")}</div>` : ""}
+      <div class="helper hint-small">${t("bmiHist.hint")}</div>
+    </div>
+  `;
+}
+
+function renderWeightHeatmap() {
+  const hm = calcWeightHeatmap(state.records);
+  if (!hm) return "";
+  const dayLabels = ["S", "M", "T", "W", "T", "F", "S"];
+  const rows = dayLabels.map((label, dayIdx) => {
+    const cells = hm.weeks.map((week) => {
+      const day = week[dayIdx];
+      if (day.isFuture) return `<div class="heatmap-cell" data-level="0"></div>`;
+      const dir = day.direction || "";
+      const title = day.weight != null
+        ? `${day.date}: ${day.weight}kg${day.change != null ? ` (${day.change > 0 ? "+" : ""}${day.change}kg)` : ""}`
+        : `${day.date}: ${t("heatmap.noData")}`;
+      return `<div class="heatmap-cell ${dir}" data-level="${day.level}" title="${title}"></div>`;
+    }).join("");
+    return `<div class="heatmap-row"><span class="heatmap-label">${label}</span>${cells}</div>`;
+  }).join("");
+  return `
+    <div class="heatmap-section">
+      <div class="helper">${t("heatmap.title")}</div>
+      <div class="heatmap-grid">${rows}</div>
+      <div class="heatmap-legend">
+        <span class="heatmap-legend-text">${t("heatmap.low")}</span>
+        <div class="heatmap-cell" data-level="1"></div>
+        <div class="heatmap-cell" data-level="2"></div>
+        <div class="heatmap-cell" data-level="3"></div>
+        <div class="heatmap-cell" data-level="4"></div>
+        <span class="heatmap-legend-text">${t("heatmap.high")}</span>
+      </div>
+      <div class="heatmap-legend" style="margin-top:2px;">
+        <span class="heatmap-legend-text loss-text">${t("heatmap.loss")}</span>
+        <span class="heatmap-legend-text gain-text">${t("heatmap.gain")}</span>
+      </div>
+      <div class="helper hint-small">${t("heatmap.hint").replace("{days}", hm.daysWithData)}</div>
     </div>
   `;
 }
@@ -3220,6 +3289,12 @@ async function googleBackup() {
       records: state.records.map((r) => ({
         dt: r.dt, wt: r.wt, bmi: r.bmi, bf: r.bf ?? null, source: r.source, note: r.note ?? "", createdAt: r.createdAt,
       })),
+      profile: {
+        name: state.profile.name,
+        heightCm: state.profile.heightCm,
+        age: state.profile.age,
+        gender: state.profile.gender,
+      },
       settings: {
         goalWeight: state.settings.goalWeight,
         theme: state.settings.theme,
@@ -3291,6 +3366,10 @@ async function googleRestore() {
     state.records = trimRecords(m, MAX_RECORDS);
     const newCount = state.records.length - beforeCount;
     if (bd.settings?.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;
+    // Import profile if present and current one is empty
+    if (bd.profile && !state.profile.name && !state.profile.heightCm) {
+      state.profile = { ...createDefaultProfile(), ...bd.profile };
+    }
     if (!persist()) { setStatus(t("status.storageError"), "error"); return; }
     setStatus(t("google.restoreDone") + ` (${validBackupRecords.length} ${t("chart.records")}${newCount > 0 ? `, +${newCount} ${t("import.new")}` : ""})`);
     render();

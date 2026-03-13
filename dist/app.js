@@ -2109,6 +2109,58 @@ function calcBMIHistory(records) {
   const improving = change < 0 && first > 18.5;
   return { first, latest, min, max, change, avg, zones: zonePcts, currentZone, improving, count: total };
 }
+function calcWeightHeatmap(records) {
+  if (records.length < 7) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const byDate = new Map(sorted.map((r) => [r.dt, r.wt]));
+  const today = /* @__PURE__ */ new Date();
+  const dayOfWeek = today.getDay();
+  const startOffset = dayOfWeek + 7 * 11;
+  const weeks = [];
+  let totalChanges = 0;
+  let changeCount = 0;
+  for (let w = 0; w < 12; w++) {
+    const week = [];
+    for (let d = 0; d < 7; d++) {
+      const daysBack = startOffset - (w * 7 + d);
+      const date = new Date(today);
+      date.setDate(date.getDate() - daysBack);
+      const ds = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      const wt = byDate.get(ds) ?? null;
+      const prevDate = new Date(date);
+      prevDate.setDate(prevDate.getDate() - 1);
+      const prevDs = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}-${String(prevDate.getDate()).padStart(2, "0")}`;
+      const prevWt = byDate.get(prevDs) ?? null;
+      let change = null;
+      if (wt != null && prevWt != null) {
+        change = Math.round((wt - prevWt) * 100) / 100;
+        totalChanges += Math.abs(change);
+        changeCount++;
+      }
+      week.push({ date: ds, weight: wt, change, isFuture: daysBack < 0 });
+    }
+    weeks.push(week);
+  }
+  const avgChange = changeCount > 0 ? totalChanges / changeCount : 0.3;
+  const threshold = Math.max(avgChange, 0.1);
+  for (const week of weeks) {
+    for (const day of week) {
+      if (day.isFuture || day.weight == null) {
+        day.level = 0;
+      } else if (day.change == null) {
+        day.level = 1;
+      } else {
+        const absChange = Math.abs(day.change);
+        if (absChange < threshold * 0.5) day.level = 1;
+        else if (absChange < threshold) day.level = 2;
+        else if (absChange < threshold * 2) day.level = 3;
+        else day.level = 4;
+        day.direction = day.change < 0 ? "loss" : day.change > 0 ? "gain" : "same";
+      }
+    }
+  }
+  return { weeks, threshold: Math.round(threshold * 100) / 100, daysWithData: changeCount };
+}
 
 // src/i18n.js
 var translations = {
@@ -2656,7 +2708,14 @@ var translations = {
     "bmiHist.range": "\u7BC4\u56F2: {min} \u301C {max}",
     "bmiHist.avg": "\u5E73\u5747: {avg}",
     "bmiHist.improving": "\u6539\u5584\u50BE\u5411\u3067\u3059\uFF01",
-    "bmiHist.hint": "BMI\u306E\u5909\u9077\u3092\u8FFD\u8DE1"
+    "bmiHist.hint": "BMI\u306E\u5909\u9077\u3092\u8FFD\u8DE1",
+    "heatmap.title": "\u4F53\u91CD\u5909\u52D5\u30D2\u30FC\u30C8\u30DE\u30C3\u30D7",
+    "heatmap.hint": "\u904E\u53BB12\u9031\u9593\u306E\u4F53\u91CD\u5909\u52D5\u30D1\u30BF\u30FC\u30F3\uFF08{days}\u65E5\u5206\u306E\u30C7\u30FC\u30BF\uFF09",
+    "heatmap.loss": "\u6E1B\u5C11",
+    "heatmap.gain": "\u5897\u52A0",
+    "heatmap.noData": "\u30C7\u30FC\u30BF\u306A\u3057",
+    "heatmap.low": "\u5C0F",
+    "heatmap.high": "\u5927"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3202,7 +3261,14 @@ var translations = {
     "bmiHist.range": "Range: {min} \u2013 {max}",
     "bmiHist.avg": "Average: {avg}",
     "bmiHist.improving": "BMI is improving!",
-    "bmiHist.hint": "Track your BMI journey"
+    "bmiHist.hint": "Track your BMI journey",
+    "heatmap.title": "Weight Change Heatmap",
+    "heatmap.hint": "Weight change patterns over 12 weeks ({days} days of data)",
+    "heatmap.loss": "Loss",
+    "heatmap.gain": "Gain",
+    "heatmap.noData": "No data",
+    "heatmap.low": "Low",
+    "heatmap.high": "High"
   }
 };
 function createTranslator(language) {
@@ -24291,6 +24357,7 @@ function render() {
                 ${renderPersonalRecords()}
                 ${renderWeightRegression()}
                 ${renderBMIHistory()}
+                ${renderWeightHeatmap()}
               </div>
               ` : ""}
             </div>
@@ -25140,6 +25207,40 @@ function renderBMIHistory() {
       </div>
       ${bh.improving ? `<div class="bmi-hist-improving">${t("bmiHist.improving")}</div>` : ""}
       <div class="helper hint-small">${t("bmiHist.hint")}</div>
+    </div>
+  `;
+}
+function renderWeightHeatmap() {
+  const hm = calcWeightHeatmap(state.records);
+  if (!hm) return "";
+  const dayLabels = ["S", "M", "T", "W", "T", "F", "S"];
+  const rows = dayLabels.map((label, dayIdx) => {
+    const cells = hm.weeks.map((week) => {
+      const day = week[dayIdx];
+      if (day.isFuture) return `<div class="heatmap-cell" data-level="0"></div>`;
+      const dir = day.direction || "";
+      const title = day.weight != null ? `${day.date}: ${day.weight}kg${day.change != null ? ` (${day.change > 0 ? "+" : ""}${day.change}kg)` : ""}` : `${day.date}: ${t("heatmap.noData")}`;
+      return `<div class="heatmap-cell ${dir}" data-level="${day.level}" title="${title}"></div>`;
+    }).join("");
+    return `<div class="heatmap-row"><span class="heatmap-label">${label}</span>${cells}</div>`;
+  }).join("");
+  return `
+    <div class="heatmap-section">
+      <div class="helper">${t("heatmap.title")}</div>
+      <div class="heatmap-grid">${rows}</div>
+      <div class="heatmap-legend">
+        <span class="heatmap-legend-text">${t("heatmap.low")}</span>
+        <div class="heatmap-cell" data-level="1"></div>
+        <div class="heatmap-cell" data-level="2"></div>
+        <div class="heatmap-cell" data-level="3"></div>
+        <div class="heatmap-cell" data-level="4"></div>
+        <span class="heatmap-legend-text">${t("heatmap.high")}</span>
+      </div>
+      <div class="heatmap-legend" style="margin-top:2px;">
+        <span class="heatmap-legend-text loss-text">${t("heatmap.loss")}</span>
+        <span class="heatmap-legend-text gain-text">${t("heatmap.gain")}</span>
+      </div>
+      <div class="helper hint-small">${t("heatmap.hint").replace("{days}", hm.daysWithData)}</div>
     </div>
   `;
 }
@@ -26642,6 +26743,12 @@ async function googleBackup() {
         note: r.note ?? "",
         createdAt: r.createdAt
       })),
+      profile: {
+        name: state.profile.name,
+        heightCm: state.profile.heightCm,
+        age: state.profile.age,
+        gender: state.profile.gender
+      },
       settings: {
         goalWeight: state.settings.goalWeight,
         theme: state.settings.theme,
@@ -26726,6 +26833,9 @@ async function googleRestore() {
     state.records = trimRecords(m, MAX_RECORDS);
     const newCount = state.records.length - beforeCount;
     if (bd.settings?.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;
+    if (bd.profile && !state.profile.name && !state.profile.heightCm) {
+      state.profile = { ...createDefaultProfile(), ...bd.profile };
+    }
     if (!persist()) {
       setStatus(t("status.storageError"), "error");
       return;
