@@ -46,6 +46,8 @@ import {
   calcTrendForecast,
   calcSmoothedWeight,
   calcCalendarChangeMap,
+  calcBMIDistribution,
+  calcWeightPercentile,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -246,7 +248,7 @@ function formatBMI(bmi) {
 }
 
 function formatNote(note) {
-  return escapeAttr(note).replace(/#(\w+)/g, '<span class="note-hashtag">#$1</span>');
+  return escapeAttr(note).replace(/#([\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF66-\uFF9F]+)/g, '<span class="note-hashtag">#$1</span>');
 }
 
 function getMotivationalMessage(streak, trend, records, goalProgress) {
@@ -368,7 +370,7 @@ function render() {
             <div class="label">${t("goal.title")}: ${Number.isFinite(goalWeight) ? formatWeight(goalWeight) : t("goal.notSet")}</div>
             ${goalProgress
               ? `<div class="progress-percent">${goalProgress.percent}%</div>
-                <div class="progress-bar-track">
+                <div class="progress-bar-track" role="progressbar" aria-valuenow="${goalProgress.percent}" aria-valuemin="0" aria-valuemax="100" aria-label="${t("goal.title")}">
                   <div class="progress-bar-fill" style="width: ${goalProgress.percent}%"></div>
                 </div>
                 <div class="progress-text">
@@ -618,6 +620,8 @@ function render() {
             </div>` : ""}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
+            ${renderBMIDistribution()}
+            ${renderWeightPercentile()}
             ${renderBodyFatStats()}
           </section>
 
@@ -945,9 +949,9 @@ function renderCalendar() {
   const now = new Date();
   const isCurrentMonthView = calendarYear === now.getFullYear() && calendarMonth === now.getMonth();
   let html = `<div class="calendar-nav">
-    <button type="button" data-action="cal-prev">${t("calendar.prev")}</button>
+    <button type="button" data-action="cal-prev" aria-label="${t("calendar.prev")}">${t("calendar.prev")}</button>
     <span class="calendar-label">${new Date(calendarYear, calendarMonth).toLocaleDateString(state.settings.language === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "long" })}</span>
-    <button type="button" data-action="cal-next">${t("calendar.next")}</button>
+    <button type="button" data-action="cal-next" aria-label="${t("calendar.next")}">${t("calendar.next")}</button>
     ${!isCurrentMonthView ? `<button type="button" class="btn ghost" data-action="cal-today" style="margin-left:4px;font-size:0.72rem;">${t("diff.today")}</button>` : ""}
   </div>`;
   html += `<div class="calendar-grid">`;
@@ -1067,6 +1071,53 @@ function renderStability() {
           <div class="stability-label ${level}">${t("stability." + level)}</div>
           <div class="helper">${t("stability.stddev")}: ${stability.stdDev.toFixed(2)}kg</div>
           <div class="helper">${t("chart.avg")}: ${stability.avg.toFixed(1)}kg (${stability.count} ${t("chart.records")})</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderBMIDistribution() {
+  const dist = calcBMIDistribution(state.records);
+  if (!dist) return "";
+  const zones = [
+    { key: "under", color: "var(--info, #3b82f6)" },
+    { key: "normal", color: "var(--ok, #10b981)" },
+    { key: "over", color: "var(--warn, #f59e0b)" },
+    { key: "obese", color: "var(--danger, #ef4444)" },
+  ];
+  const bars = zones
+    .filter((z) => dist[z.key].pct > 0)
+    .map((z) => `<div class="bmi-dist-segment" style="width:${dist[z.key].pct}%;background:${z.color}" title="${t("bmiDist." + z.key)}: ${dist[z.key].count} (${dist[z.key].pct}%)"></div>`)
+    .join("");
+  const legend = zones
+    .map((z) => `<span class="bmi-dist-legend-item"><span class="bmi-dist-dot" style="background:${z.color}"></span>${t("bmiDist." + z.key)} ${dist[z.key].pct}%</span>`)
+    .join("");
+  return `
+    <div class="bmi-dist-section">
+      <div class="helper">${t("bmiDist.title")}</div>
+      <div class="bmi-dist-bar">${bars}</div>
+      <div class="bmi-dist-legend">${legend}</div>
+      <div class="helper hint-small" style="margin-top:4px;">${t("bmiDist.total").replace("{count}", dist.total)}</div>
+    </div>
+  `;
+}
+
+function renderWeightPercentile() {
+  const pctl = calcWeightPercentile(state.records);
+  if (!pctl) return "";
+  const level = pctl.percentile <= 20 ? "excellent" : pctl.percentile <= 40 ? "good" : "neutral";
+  return `
+    <div class="percentile-section">
+      <div class="helper">${t("percentile.title")}</div>
+      <div class="percentile-display">
+        <div class="percentile-ring ${level}">
+          <span class="percentile-value">${pctl.percentile}%</span>
+        </div>
+        <div class="percentile-details">
+          <div class="percentile-label">${t("percentile.value").replace("{pct}", pctl.percentile)}</div>
+          <div class="helper hint-small">${t("percentile.rank").replace("{rank}", pctl.rank).replace("{total}", pctl.total)}</div>
+          ${pctl.percentile <= 10 ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("percentile.best")}</div>` : ""}
         </div>
       </div>
     </div>
@@ -2676,7 +2727,10 @@ function handlePhotoZoom() {
   im.src = imagePreviewUrl;
   im.style.cssText = "max-width:95vw;max-height:95vh;object-fit:contain;border-radius:12px";
   ov.appendChild(im);
-  ov.addEventListener("click", () => ov.remove());
+  const dismiss = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") dismiss(); };
+  ov.addEventListener("click", dismiss);
+  document.addEventListener("keydown", onKey);
   document.body.appendChild(ov);
 }
 

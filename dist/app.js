@@ -1429,6 +1429,25 @@ function calcCalendarChangeMap(records) {
   }
   return map;
 }
+function calcBMIDistribution(records) {
+  const withBMI = records.filter((r) => r.bmi != null && Number.isFinite(r.bmi));
+  if (!withBMI.length) return null;
+  const zones = { under: 0, normal: 0, over: 0, obese: 0 };
+  for (const r of withBMI) {
+    if (r.bmi < 18.5) zones.under++;
+    else if (r.bmi < 25) zones.normal++;
+    else if (r.bmi < 30) zones.over++;
+    else zones.obese++;
+  }
+  const total = withBMI.length;
+  return {
+    under: { count: zones.under, pct: Math.round(zones.under / total * 100) },
+    normal: { count: zones.normal, pct: Math.round(zones.normal / total * 100) },
+    over: { count: zones.over, pct: Math.round(zones.over / total * 100) },
+    obese: { count: zones.obese, pct: Math.round(zones.obese / total * 100) },
+    total
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -1605,6 +1624,16 @@ var translations = {
     "smoothed.value": "\u30C8\u30EC\u30F3\u30C9\u4F53\u91CD",
     "smoothed.trend": "7\u56DE\u5206\u306E\u5909\u5316",
     "smoothed.hint": "\u65E5\u3005\u306E\u5909\u52D5\u3092\u9664\u3044\u305F\u672C\u5F53\u306E\u4F53\u91CD\u30C8\u30EC\u30F3\u30C9",
+    "bmiDist.title": "BMI\u30BE\u30FC\u30F3\u5206\u5E03",
+    "bmiDist.under": "\u4F4E\u4F53\u91CD",
+    "bmiDist.normal": "\u6A19\u6E96",
+    "bmiDist.over": "\u904E\u4F53\u91CD",
+    "bmiDist.obese": "\u80A5\u6E80",
+    "bmiDist.total": "BMI\u8A18\u9332\u6570: {count}\u4EF6",
+    "percentile.title": "\u4F53\u91CD\u30D1\u30FC\u30BB\u30F3\u30BF\u30A4\u30EB",
+    "percentile.value": "\u5168\u8A18\u9332\u306E{pct}%\u3088\u308A\u8EFD\u3044",
+    "percentile.rank": "{rank}\u4F4D / {total}\u4EF6\u4E2D\uFF08\u8EFD\u3044\u9806\uFF09",
+    "percentile.best": "\u904E\u53BB\u6700\u8EFD\u91CF\u306B\u8FD1\u3044\uFF01",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
     "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01\uFF08-{diff}kg\uFF09",
     "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
@@ -1969,6 +1998,12 @@ var translations = {
     "smoothed.value": "Trend Weight",
     "smoothed.trend": "7-record change",
     "smoothed.hint": "Your true weight trend, filtering daily fluctuations",
+    "bmiDist.title": "BMI Zone Distribution",
+    "bmiDist.under": "Underweight",
+    "bmiDist.normal": "Normal",
+    "bmiDist.over": "Overweight",
+    "bmiDist.obese": "Obese",
+    "bmiDist.total": "BMI records: {count}",
     "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
@@ -22844,7 +22879,7 @@ function formatBMI(bmi) {
   return bmi ? bmi.toFixed(1) : t("chart.none");
 }
 function formatNote(note) {
-  return escapeAttr(note).replace(/#(\w+)/g, '<span class="note-hashtag">#$1</span>');
+  return escapeAttr(note).replace(/#([\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF66-\uFF9F]+)/g, '<span class="note-hashtag">#$1</span>');
 }
 function getMotivationalMessage(streak, trend, records, goalProgress) {
   if (records.length === 1) return t("motivation.firstRecord");
@@ -22956,7 +22991,7 @@ function render() {
           <div class="goal-box">
             <div class="label">${t("goal.title")}: ${Number.isFinite(goalWeight) ? formatWeight(goalWeight) : t("goal.notSet")}</div>
             ${goalProgress ? `<div class="progress-percent">${goalProgress.percent}%</div>
-                <div class="progress-bar-track">
+                <div class="progress-bar-track" role="progressbar" aria-valuenow="${goalProgress.percent}" aria-valuemin="0" aria-valuemax="100" aria-label="${t("goal.title")}">
                   <div class="progress-bar-fill" style="width: ${goalProgress.percent}%"></div>
                 </div>
                 <div class="progress-text">
@@ -23190,6 +23225,7 @@ function render() {
             </div>` : ""}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
+            ${renderBMIDistribution()}
             ${renderBodyFatStats()}
           </section>
 
@@ -23511,9 +23547,9 @@ function renderCalendar() {
   const now = /* @__PURE__ */ new Date();
   const isCurrentMonthView = calendarYear === now.getFullYear() && calendarMonth === now.getMonth();
   let html = `<div class="calendar-nav">
-    <button type="button" data-action="cal-prev">${t("calendar.prev")}</button>
+    <button type="button" data-action="cal-prev" aria-label="${t("calendar.prev")}">${t("calendar.prev")}</button>
     <span class="calendar-label">${new Date(calendarYear, calendarMonth).toLocaleDateString(state.settings.language === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "long" })}</span>
-    <button type="button" data-action="cal-next">${t("calendar.next")}</button>
+    <button type="button" data-action="cal-next" aria-label="${t("calendar.next")}">${t("calendar.next")}</button>
     ${!isCurrentMonthView ? `<button type="button" class="btn ghost" data-action="cal-today" style="margin-left:4px;font-size:0.72rem;">${t("diff.today")}</button>` : ""}
   </div>`;
   html += `<div class="calendar-grid">`;
@@ -23629,6 +23665,26 @@ function renderStability() {
           <div class="helper">${t("chart.avg")}: ${stability.avg.toFixed(1)}kg (${stability.count} ${t("chart.records")})</div>
         </div>
       </div>
+    </div>
+  `;
+}
+function renderBMIDistribution() {
+  const dist = calcBMIDistribution(state.records);
+  if (!dist) return "";
+  const zones = [
+    { key: "under", color: "var(--info, #3b82f6)" },
+    { key: "normal", color: "var(--ok, #10b981)" },
+    { key: "over", color: "var(--warn, #f59e0b)" },
+    { key: "obese", color: "var(--danger, #ef4444)" }
+  ];
+  const bars = zones.filter((z) => dist[z.key].pct > 0).map((z) => `<div class="bmi-dist-segment" style="width:${dist[z.key].pct}%;background:${z.color}" title="${t("bmiDist." + z.key)}: ${dist[z.key].count} (${dist[z.key].pct}%)"></div>`).join("");
+  const legend = zones.map((z) => `<span class="bmi-dist-legend-item"><span class="bmi-dist-dot" style="background:${z.color}"></span>${t("bmiDist." + z.key)} ${dist[z.key].pct}%</span>`).join("");
+  return `
+    <div class="bmi-dist-section">
+      <div class="helper">${t("bmiDist.title")}</div>
+      <div class="bmi-dist-bar">${bars}</div>
+      <div class="bmi-dist-legend">${legend}</div>
+      <div class="helper hint-small" style="margin-top:4px;">${t("bmiDist.total").replace("{count}", dist.total)}</div>
     </div>
   `;
 }
@@ -25100,7 +25156,15 @@ function handlePhotoZoom() {
   im.src = imagePreviewUrl;
   im.style.cssText = "max-width:95vw;max-height:95vh;object-fit:contain;border-radius:12px";
   ov.appendChild(im);
-  ov.addEventListener("click", () => ov.remove());
+  const dismiss = () => {
+    ov.remove();
+    document.removeEventListener("keydown", onKey);
+  };
+  const onKey = (e) => {
+    if (e.key === "Escape") dismiss();
+  };
+  ov.addEventListener("click", dismiss);
+  document.addEventListener("keydown", onKey);
   document.body.appendChild(ov);
 }
 var resizeTimer;

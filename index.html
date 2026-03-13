@@ -786,6 +786,84 @@
       .dow-diff.gain { color: var(--warn, #f59e0b); }
       .dow-diff.neutral { color: var(--muted); }
 
+      .bmi-dist-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .bmi-dist-bar {
+        display: flex;
+        height: 18px;
+        border-radius: 9px;
+        overflow: hidden;
+        margin: 8px 0 6px;
+      }
+      .bmi-dist-segment {
+        min-width: 2px;
+        transition: width 0.3s ease;
+      }
+      .bmi-dist-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        font-size: 0.75rem;
+        color: var(--text);
+      }
+      .bmi-dist-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .bmi-dist-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      .percentile-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .percentile-display {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 8px;
+      }
+      .percentile-ring {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 0.9rem;
+        flex-shrink: 0;
+      }
+      .percentile-ring.excellent {
+        background: color-mix(in srgb, var(--ok, #10b981) 18%, transparent);
+        color: var(--ok, #10b981);
+        border: 2.5px solid var(--ok, #10b981);
+      }
+      .percentile-ring.good {
+        background: color-mix(in srgb, var(--accent) 18%, transparent);
+        color: var(--accent);
+        border: 2.5px solid var(--accent);
+      }
+      .percentile-ring.neutral {
+        background: color-mix(in srgb, var(--muted) 18%, transparent);
+        color: var(--muted);
+        border: 2.5px solid var(--muted);
+      }
+      .percentile-label {
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: var(--text);
+      }
+
       .bodyfat-stats-section {
         margin-top: 14px;
         padding-top: 12px;
@@ -2389,6 +2467,82 @@
 
         .google-actions {
           flex-direction: column;
+        }
+      }
+
+      @media (max-width: 360px) {
+        .app-shell {
+          width: calc(100% - 12px);
+          padding-top: 12px;
+        }
+
+        .hero,
+        .panel {
+          border-radius: 16px;
+          padding: 14px;
+        }
+
+        h1 {
+          font-size: 1.4rem;
+        }
+
+        .bmi-score {
+          font-size: 2rem;
+        }
+
+        .pill-row {
+          gap: 4px;
+        }
+
+        .pill,
+        .streak-badge,
+        .trend-indicator {
+          font-size: 10px;
+          padding: 3px 8px;
+        }
+
+        .hero-bottom {
+          gap: 8px;
+        }
+
+        .tab-row {
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 4px;
+        }
+
+        .tab-row .tab {
+          padding: 8px 4px;
+          font-size: 12px;
+        }
+
+        .quick-buttons button {
+          padding: 8px 6px;
+          font-size: 12px;
+        }
+
+        .stat-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .theme-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+
+        .calendar-grid {
+          font-size: 10px;
+        }
+
+        .calendar-wt {
+          font-size: 8px;
+        }
+
+        .summary-tabs {
+          gap: 4px;
+        }
+
+        .summary-tab {
+          padding: 6px 8px;
+          font-size: 11px;
         }
       }
     </style>
