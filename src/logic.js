@@ -3356,3 +3356,38 @@ export function calcTrendStreak(records) {
     endDate: sorted[endIdx].dt,
   };
 }
+
+/**
+ * Calculate BMI trend data points over time.
+ * Returns { points: [{ dt, bmi }], change, direction, current, min, max }
+ * Only works if records have BMI data.
+ */
+export function calcBMITrend(records) {
+  if (!records || records.length < 2) {
+    return { points: [], change: 0, direction: "neutral", current: null, min: null, max: null };
+  }
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const points = sorted
+    .filter((r) => r.bmi != null && Number.isFinite(r.bmi))
+    .map((r) => ({ dt: r.dt, bmi: +r.bmi.toFixed(1) }));
+
+  if (points.length < 2) {
+    return { points: [], change: 0, direction: "neutral", current: null, min: null, max: null };
+  }
+
+  const current = points[points.length - 1].bmi;
+  const first = points[0].bmi;
+  const change = +(current - first).toFixed(1);
+  const direction = change < -0.1 ? "down" : change > 0.1 ? "up" : "neutral";
+  const bmis = points.map((p) => p.bmi);
+
+  return {
+    points: points.slice(-30),
+    change,
+    direction,
+    current,
+    min: +Math.min(...bmis).toFixed(1),
+    max: +Math.max(...bmis).toFixed(1),
+  };
+}

@@ -3480,6 +3480,29 @@ function calcTrendStreak(records) {
     endDate: sorted[endIdx].dt
   };
 }
+function calcBMITrend(records) {
+  if (!records || records.length < 2) {
+    return { points: [], change: 0, direction: "neutral", current: null, min: null, max: null };
+  }
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const points = sorted.filter((r) => r.bmi != null && Number.isFinite(r.bmi)).map((r) => ({ dt: r.dt, bmi: +r.bmi.toFixed(1) }));
+  if (points.length < 2) {
+    return { points: [], change: 0, direction: "neutral", current: null, min: null, max: null };
+  }
+  const current = points[points.length - 1].bmi;
+  const first = points[0].bmi;
+  const change = +(current - first).toFixed(1);
+  const direction = change < -0.1 ? "down" : change > 0.1 ? "up" : "neutral";
+  const bmis = points.map((p) => p.bmi);
+  return {
+    points: points.slice(-30),
+    change,
+    direction,
+    current,
+    min: +Math.min(...bmis).toFixed(1),
+    max: +Math.max(...bmis).toFixed(1)
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -4318,7 +4341,15 @@ var translations = {
     "tstreak.up": "\u{1F4C8} {count}\u56DE\u9023\u7D9A\u3067\u5897\u52A0\u4E2D",
     "tstreak.flat": "\u27A1\uFE0F {count}\u56DE\u9023\u7D9A\u3067\u6A2A\u3070\u3044",
     "tstreak.change": "\u5909\u52D5",
-    "tstreak.period": "\u671F\u9593"
+    "tstreak.period": "\u671F\u9593",
+    "bmiTrend.title": "BMI\u63A8\u79FB",
+    "bmiTrend.current": "\u73FE\u5728",
+    "bmiTrend.change": "\u5909\u5316",
+    "bmiTrend.range": "\u7BC4\u56F2",
+    "bmiTrend.down": "\u6539\u5584\u50BE\u5411",
+    "bmiTrend.up": "\u4E0A\u6607\u50BE\u5411",
+    "bmiTrend.neutral": "\u5B89\u5B9A",
+    "bmiTrend.nodata": "BMI\u30C7\u30FC\u30BF\u304C\u4E0D\u8DB3\u3057\u3066\u3044\u307E\u3059"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5155,7 +5186,15 @@ var translations = {
     "tstreak.up": "\u{1F4C8} {count} consecutive rises",
     "tstreak.flat": "\u27A1\uFE0F {count} consecutive flat",
     "tstreak.change": "Change",
-    "tstreak.period": "Period"
+    "tstreak.period": "Period",
+    "bmiTrend.title": "BMI Trend",
+    "bmiTrend.current": "Current",
+    "bmiTrend.change": "Change",
+    "bmiTrend.range": "Range",
+    "bmiTrend.down": "Improving",
+    "bmiTrend.up": "Rising",
+    "bmiTrend.neutral": "Stable",
+    "bmiTrend.nodata": "Insufficient BMI data"
   }
 };
 function createTranslator(language) {
@@ -26299,6 +26338,7 @@ function render() {
             ${renderConsistencyScore()}
             ${renderWeightRangeSummary()}
             ${renderTrendStreak()}
+            ${renderBMITrend()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -26382,7 +26422,7 @@ function render() {
                 ${recordDateFrom || recordDateTo ? `<button type="button" class="btn ghost" data-action="clear-date-range">${t("records.clearRange")}</button>` : ""}
               </div>
             </div>` : ""}
-            ${state.records.length ? `<div class="export-row"><button type="button" class="btn ghost" data-action="export-csv">\u{1F4E5} ${t("export.csv")}</button><button type="button" class="btn ghost" data-action="import-csv">\u{1F4E4} ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>` : `<div class="export-row"><button type="button" class="btn ghost" data-action="import-csv">\u{1F4E4} ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>`}
+            ${state.records.length ? `<div class="export-row"><button type="button" class="btn ghost" data-action="export-csv">\u{1F4E4} ${t("export.csv")}</button><button type="button" class="btn ghost" data-action="import-csv">\u{1F4E5} ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>` : `<div class="export-row"><button type="button" class="btn ghost" data-action="import-csv">\u{1F4E5} ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>`}
             <div class="record-list">
               ${state.records.length ? renderRecordList() : `<div class="empty-state">
                 <span class="empty-emoji" aria-hidden="true">\u{1F4CA}</span>
@@ -27958,6 +27998,39 @@ function renderTrendStreak() {
       <div class="ts-detail">
         <span>${t("tstreak.change")}: <strong>${changeSign}${data.totalChange.toFixed(1)}kg</strong></span>
         <span>${t("tstreak.period")}: ${data.startDate.slice(5).replace("-", "/")} \u2192 ${data.endDate.slice(5).replace("-", "/")}</span>
+      </div>
+    </div>
+  `;
+}
+function renderBMITrend() {
+  const data = calcBMITrend(state.records);
+  if (!data.current) return "";
+  const dirLabel = t(`bmiTrend.${data.direction}`);
+  const dirCls = data.direction === "down" ? "bt-down" : data.direction === "up" ? "bt-up" : "bt-neutral";
+  const changeSign = data.change > 0 ? "+" : "";
+  const pts = data.points;
+  const svgW = 200, svgH = 40;
+  const bMin = data.min - 0.5, bMax = data.max + 0.5, bRange = bMax - bMin || 1;
+  const pathD = pts.map((p, i) => {
+    const x = i / Math.max(pts.length - 1, 1) * svgW;
+    const y = svgH - (p.bmi - bMin) / bRange * svgH;
+    return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  return `
+    <div class="bt-section">
+      <div class="helper">${t("bmiTrend.title")}</div>
+      <div class="bt-top">
+        <div class="bt-current">
+          <span class="bt-big">${data.current.toFixed(1)}</span>
+          <span class="bt-badge ${dirCls}">${changeSign}${data.change.toFixed(1)} ${dirLabel}</span>
+        </div>
+        <svg class="bt-spark" viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none">
+          <path d="${pathD}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/>
+        </svg>
+      </div>
+      <div class="bt-meta">
+        <span>${t("bmiTrend.range")}: ${data.min.toFixed(1)} \u2013 ${data.max.toFixed(1)}</span>
+        <span>${pts.length} ${t("chart.records")}</span>
       </div>
     </div>
   `;

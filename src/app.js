@@ -112,6 +112,7 @@ import {
   calcConsistencyScore,
   calcWeightRangeSummary,
   calcTrendStreak,
+  calcBMITrend,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -799,6 +800,7 @@ function render() {
             ${renderConsistencyScore()}
             ${renderWeightRangeSummary()}
             ${renderTrendStreak()}
+            ${renderBMITrend()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -882,7 +884,7 @@ function render() {
                 ${recordDateFrom || recordDateTo ? `<button type="button" class="btn ghost" data-action="clear-date-range">${t("records.clearRange")}</button>` : ""}
               </div>
             </div>` : ""}
-            ${state.records.length ? `<div class="export-row"><button type="button" class="btn ghost" data-action="export-csv">📥 ${t("export.csv")}</button><button type="button" class="btn ghost" data-action="import-csv">📤 ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>` : `<div class="export-row"><button type="button" class="btn ghost" data-action="import-csv">📤 ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>`}
+            ${state.records.length ? `<div class="export-row"><button type="button" class="btn ghost" data-action="export-csv">📤 ${t("export.csv")}</button><button type="button" class="btn ghost" data-action="import-csv">📥 ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>` : `<div class="export-row"><button type="button" class="btn ghost" data-action="import-csv">📥 ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>`}
             <div class="record-list">
               ${state.records.length ? renderRecordList() : `<div class="empty-state">
                 <span class="empty-emoji" aria-hidden="true">📊</span>
@@ -2570,6 +2572,44 @@ function renderTrendStreak() {
       <div class="ts-detail">
         <span>${t("tstreak.change")}: <strong>${changeSign}${data.totalChange.toFixed(1)}kg</strong></span>
         <span>${t("tstreak.period")}: ${data.startDate.slice(5).replace("-", "/")} → ${data.endDate.slice(5).replace("-", "/")}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderBMITrend() {
+  const data = calcBMITrend(state.records);
+  if (!data.current) return "";
+
+  const dirLabel = t(`bmiTrend.${data.direction}`);
+  const dirCls = data.direction === "down" ? "bt-down" : data.direction === "up" ? "bt-up" : "bt-neutral";
+  const changeSign = data.change > 0 ? "+" : "";
+
+  // Sparkline: render as inline SVG
+  const pts = data.points;
+  const svgW = 200, svgH = 40;
+  const bMin = data.min - 0.5, bMax = data.max + 0.5, bRange = bMax - bMin || 1;
+  const pathD = pts.map((p, i) => {
+    const x = (i / Math.max(pts.length - 1, 1)) * svgW;
+    const y = svgH - ((p.bmi - bMin) / bRange) * svgH;
+    return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+
+  return `
+    <div class="bt-section">
+      <div class="helper">${t("bmiTrend.title")}</div>
+      <div class="bt-top">
+        <div class="bt-current">
+          <span class="bt-big">${data.current.toFixed(1)}</span>
+          <span class="bt-badge ${dirCls}">${changeSign}${data.change.toFixed(1)} ${dirLabel}</span>
+        </div>
+        <svg class="bt-spark" viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none">
+          <path d="${pathD}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/>
+        </svg>
+      </div>
+      <div class="bt-meta">
+        <span>${t("bmiTrend.range")}: ${data.min.toFixed(1)} – ${data.max.toFixed(1)}</span>
+        <span>${pts.length} ${t("chart.records")}</span>
       </div>
     </div>
   `;
