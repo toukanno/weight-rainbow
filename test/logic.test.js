@@ -122,6 +122,7 @@ import {
   calcGoalStreak,
   calcThenVsNow,
   calcQuickWeightPresets,
+  calcRecordCompleteness,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -1215,7 +1216,7 @@ describe("parseCSVImport", () => {
     expect(result.records).toHaveLength(1);
     expect(result.records[0].dt).toBe("2025-01-01");
     expect(result.records[0].wt).toBe(70.5);
-    expect(result.records[0].source).toBe("import");
+    expect(result.records[0].source).toBe("manual");
     expect(result.records[0].note).toBe("test note");
     expect(result.errors).toHaveLength(0);
   });
@@ -9073,5 +9074,72 @@ describe("calcQuickWeightPresets", () => {
     // Trend would predict 20.0, which is at the boundary
     // No prediction below 20 should appear
     expect(result.every((p) => p.label !== "trend" || p.weight >= 20)).toBe(true);
+  });
+});
+
+describe("calcRecordCompleteness", () => {
+  it("returns null for null or empty records", () => {
+    expect(calcRecordCompleteness(null)).toBeNull();
+    expect(calcRecordCompleteness([])).toBeNull();
+  });
+
+  it("returns basic level for weight-only records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69 },
+      { dt: "2025-01-03", wt: 68 },
+    ];
+    const result = calcRecordCompleteness(records);
+    expect(result.total).toBe(3);
+    expect(result.withBodyFat).toBe(0);
+    expect(result.withNote).toBe(0);
+    expect(result.level).toBe("basic");
+    expect(result.completePct).toBe(0);
+  });
+
+  it("counts records with body fat", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bodyFat: 20 },
+      { dt: "2025-01-02", wt: 69, bodyFat: 19 },
+      { dt: "2025-01-03", wt: 68 },
+    ];
+    const result = calcRecordCompleteness(records);
+    expect(result.withBodyFat).toBe(2);
+    expect(result.bodyFatPct).toBe(67);
+  });
+
+  it("counts records with notes and tags", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, note: "Felt good" },
+      { dt: "2025-01-02", wt: 69, note: "#exercise morning run" },
+      { dt: "2025-01-03", wt: 68 },
+    ];
+    const result = calcRecordCompleteness(records);
+    expect(result.withNote).toBe(2);
+    expect(result.withTag).toBe(1);
+    expect(result.notePct).toBe(67);
+    expect(result.tagPct).toBe(33);
+  });
+
+  it("returns excellent for fully complete records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bodyFat: 20, note: "#exercise" },
+      { dt: "2025-01-02", wt: 69, bodyFat: 19, note: "Good day" },
+      { dt: "2025-01-03", wt: 68, bodyFat: 18, note: "#diet clean eating" },
+    ];
+    const result = calcRecordCompleteness(records);
+    expect(result.level).toBe("excellent");
+    expect(result.completePct).toBe(100);
+  });
+
+  it("ignores empty notes and zero body fat", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bodyFat: 0, note: "" },
+      { dt: "2025-01-02", wt: 69, bodyFat: null, note: "  " },
+      { dt: "2025-01-03", wt: 68 },
+    ];
+    const result = calcRecordCompleteness(records);
+    expect(result.withBodyFat).toBe(0);
+    expect(result.withNote).toBe(0);
   });
 });

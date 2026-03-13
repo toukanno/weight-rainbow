@@ -705,7 +705,10 @@ export function parseCSVImport(csvText) {
     const bf = row[3]?.trim() ? Number(row[3]) : null;
     const note = row[5]?.trim() || "";
 
-    records.push({ dt, wt, bmi: Number.isFinite(bmi) ? bmi : null, bf: Number.isFinite(bf) ? bf : null, source: "import", note: note.slice(0, 100), createdAt: new Date().toISOString() });
+    const VALID_SOURCES = ["manual", "voice", "photo", "quick", "import"];
+    const rawSource = row[4]?.trim().toLowerCase() || "";
+    const source = VALID_SOURCES.includes(rawSource) ? rawSource : "import";
+    records.push({ dt, wt, bmi: Number.isFinite(bmi) ? bmi : null, bf: Number.isFinite(bf) ? bf : null, source, note: note.slice(0, 100), createdAt: new Date().toISOString() });
   }
 
   return { records, errors };
@@ -4001,4 +4004,37 @@ export function calcQuickWeightPresets(records) {
   }
 
   return [...presets.values()].sort((a, b) => a.weight - b.weight);
+}
+
+/**
+ * Analyze record completeness — how many records include body fat, notes, tags.
+ * Encourages users to enter richer data.
+ * Returns { total, withBodyFat, withNote, withTag, completePct, bodyFatPct, notePct, tagPct, level }
+ */
+export function calcRecordCompleteness(records) {
+  if (!records || records.length === 0) return null;
+
+  let withBodyFat = 0;
+  let withNote = 0;
+  let withTag = 0;
+
+  for (const r of records) {
+    if (r.bodyFat != null && r.bodyFat > 0) withBodyFat++;
+    if (r.note && r.note.trim().length > 0) withNote++;
+    if (r.note && /#\w+/.test(r.note)) withTag++;
+  }
+
+  const total = records.length;
+  const bodyFatPct = Math.round((withBodyFat / total) * 100);
+  const notePct = Math.round((withNote / total) * 100);
+  const tagPct = Math.round((withTag / total) * 100);
+  const completePct = Math.round(((withBodyFat + withNote) / (total * 2)) * 100);
+
+  let level;
+  if (completePct >= 75) level = "excellent";
+  else if (completePct >= 50) level = "good";
+  else if (completePct >= 25) level = "fair";
+  else level = "basic";
+
+  return { total, withBodyFat, withNote, withTag, completePct, bodyFatPct, notePct, tagPct, level };
 }
