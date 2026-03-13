@@ -1471,13 +1471,11 @@ export const translations = {
     "monthAvg.title": "Monthly Averages",
     "monthAvg.noData": "No data",
     "ltp.title": "Long-term Progress",
-    "progress.1m": "1 month ago",
-    "progress.3m": "3 months ago",
-    "progress.6m": "6 months ago",
-    "progress.1y": "1 year ago",
-    "progress.all": "Start",
-    "progress.noData": "No data",
-    "progress.vs": "vs",
+    "ltp.1m": "1 month ago",
+    "ltp.3m": "3 months ago",
+    "ltp.6m": "6 months ago",
+    "ltp.1y": "1 year ago",
+    "ltp.all": "Start",
   },
 };
 

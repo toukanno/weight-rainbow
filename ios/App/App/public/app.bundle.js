@@ -3809,13 +3809,11 @@ var translations = {
     "monthAvg.title": "\u6708\u5225\u5E73\u5747\u4F53\u91CD",
     "monthAvg.noData": "\u30C7\u30FC\u30BF\u306A\u3057",
     "ltp.title": "\u9577\u671F\u30D7\u30ED\u30B0\u30EC\u30B9",
-    "progress.1m": "1\u30F6\u6708\u524D",
-    "progress.3m": "3\u30F6\u6708\u524D",
-    "progress.6m": "6\u30F6\u6708\u524D",
-    "progress.1y": "1\u5E74\u524D",
-    "progress.all": "\u958B\u59CB\u6642",
-    "progress.noData": "\u30C7\u30FC\u30BF\u306A\u3057",
-    "progress.vs": "\u6BD4\u8F03"
+    "ltp.1m": "1\u30F6\u6708\u524D",
+    "ltp.3m": "3\u30F6\u6708\u524D",
+    "ltp.6m": "6\u30F6\u6708\u524D",
+    "ltp.1y": "1\u5E74\u524D",
+    "ltp.all": "\u958B\u59CB\u6642"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4563,13 +4561,11 @@ var translations = {
     "monthAvg.title": "Monthly Averages",
     "monthAvg.noData": "No data",
     "ltp.title": "Long-term Progress",
-    "progress.1m": "1 month ago",
-    "progress.3m": "3 months ago",
-    "progress.6m": "6 months ago",
-    "progress.1y": "1 year ago",
-    "progress.all": "Start",
-    "progress.noData": "No data",
-    "progress.vs": "vs"
+    "ltp.1m": "1 month ago",
+    "ltp.3m": "3 months ago",
+    "ltp.6m": "6 months ago",
+    "ltp.1y": "1 year ago",
+    "ltp.all": "Start"
   }
 };
 function createTranslator(language) {
@@ -27011,7 +27007,7 @@ function renderMonthlyAverages() {
 function renderLongTermProgress() {
   const progress = calcLongTermProgress(state.records);
   if (!progress || progress.periods.every((p) => !p.hasData)) return "";
-  const labelMap = { "1m": "progress.1m", "3m": "progress.3m", "6m": "progress.6m", "1y": "progress.1y", "all": "progress.all" };
+  const labelMap = { "1m": "ltp.1m", "3m": "ltp.3m", "6m": "ltp.6m", "1y": "ltp.1y", "all": "ltp.all" };
   const rows = progress.periods.filter((p) => p.hasData).map((p) => {
     const sign = p.change > 0 ? "+" : "";
     const cls = p.change < 0 ? "down" : p.change > 0 ? "up" : "";

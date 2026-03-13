@@ -95,6 +95,7 @@ import {
   calcDashboardSummary,
   getRecentEntries,
   calcMonthlyAverages,
+  calcLongTermProgress,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -7334,5 +7335,54 @@ describe("calcMonthlyAverages", () => {
     expect(result[0].avg).toBe(65.5);
     expect(result[0].min).toBe(65.5);
     expect(result[0].max).toBe(65.5);
+  });
+});
+
+describe("calcLongTermProgress", () => {
+  it("returns null for fewer than 2 records", () => {
+    expect(calcLongTermProgress([])).toBeNull();
+    expect(calcLongTermProgress([{ dt: "2026-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("calculates change between two records", () => {
+    const records = [
+      { dt: "2025-12-01", wt: 72.0 },
+      { dt: "2026-03-01", wt: 70.0 },
+    ];
+    const result = calcLongTermProgress(records);
+    expect(result.current).toBe(70.0);
+    const allPeriod = result.periods.find((p) => p.label === "all");
+    expect(allPeriod.hasData).toBe(true);
+    expect(allPeriod.change).toBe(-2.0);
+    expect(allPeriod.pastWeight).toBe(72.0);
+  });
+
+  it("marks period as no data when no record is within 15 days", () => {
+    const records = [
+      { dt: "2026-03-01", wt: 70.0 },
+      { dt: "2026-03-10", wt: 69.5 },
+    ];
+    const result = calcLongTermProgress(records);
+    const threeMonth = result.periods.find((p) => p.label === "3m");
+    expect(threeMonth.hasData).toBe(false);
+  });
+
+  it("calculates percentage change correctly", () => {
+    const records = [
+      { dt: "2025-09-14", wt: 80.0 },
+      { dt: "2026-03-14", wt: 72.0 },
+    ];
+    const result = calcLongTermProgress(records);
+    const allPeriod = result.periods.find((p) => p.label === "all");
+    expect(allPeriod.pctChange).toBe(-10.0);
+  });
+
+  it("includes the latest date in result", () => {
+    const records = [
+      { dt: "2025-12-01", wt: 70.0 },
+      { dt: "2026-03-14", wt: 68.0 },
+    ];
+    const result = calcLongTermProgress(records);
+    expect(result.date).toBe("2026-03-14");
   });
 });

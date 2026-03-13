@@ -2152,7 +2152,7 @@ function renderMonthlyAverages() {
 function renderLongTermProgress() {
   const progress = calcLongTermProgress(state.records);
   if (!progress || progress.periods.every((p) => !p.hasData)) return "";
-  const labelMap = { "1m": "progress.1m", "3m": "progress.3m", "6m": "progress.6m", "1y": "progress.1y", "all": "progress.all" };
+  const labelMap = { "1m": "ltp.1m", "3m": "ltp.3m", "6m": "ltp.6m", "1y": "ltp.1y", "all": "ltp.all" };
   const rows = progress.periods
     .filter((p) => p.hasData)
     .map((p) => {

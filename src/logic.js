@@ -2745,3 +2745,57 @@ export function calcMonthlyAverages(records, numMonths = 6) {
   }
   return months;
 }
+
+/**
+ * Calculate long-term progress comparing current weight to past periods.
+ * Returns { current, periods: [{ label, days, pastWeight, change, pctChange, hasData }] }
+ */
+export function calcLongTermProgress(records) {
+  if (records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1];
+  const latestDate = new Date(latest.dt + "T00:00:00");
+  const periods = [
+    { label: "1m", days: 30 },
+    { label: "3m", days: 90 },
+    { label: "6m", days: 180 },
+    { label: "1y", days: 365 },
+    { label: "all", days: null },
+  ];
+  const result = periods.map((p) => {
+    let target;
+    if (p.days === null) {
+      target = sorted[0];
+    } else {
+      const cutoff = new Date(latestDate);
+      cutoff.setDate(cutoff.getDate() - p.days);
+      const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+      // Find closest record to cutoff date
+      let closest = null;
+      let closestDiff = Infinity;
+      for (const r of sorted) {
+        const diff = Math.abs(new Date(r.dt + "T00:00:00") - cutoff);
+        if (diff < closestDiff) {
+          closestDiff = diff;
+          closest = r;
+        }
+      }
+      // Only use if within 15 days of target
+      if (closestDiff > 15 * 86400000) {
+        return { label: p.label, days: p.days, pastWeight: null, change: null, pctChange: null, hasData: false };
+      }
+      target = closest;
+    }
+    const change = Math.round((latest.wt - target.wt) * 10) / 10;
+    const pctChange = Math.round((change / target.wt) * 1000) / 10;
+    return {
+      label: p.label,
+      days: p.days,
+      pastWeight: target.wt,
+      change,
+      pctChange,
+      hasData: true,
+    };
+  });
+  return { current: latest.wt, date: latest.dt, periods: result };
+}
