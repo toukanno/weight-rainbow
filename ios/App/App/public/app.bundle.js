@@ -27989,7 +27989,7 @@ function renderWeeklyAverages() {
     const pct = Math.max(10, (w.avg - minAvg) / range * 80 + 10);
     const prev = i > 0 ? weeks[i - 1] : null;
     const change = prev && prev.avg !== null ? Math.round((w.avg - prev.avg) * 10) / 10 : null;
-    const changeClass = change !== null ? change < 0 ? "down" : change > 0 ? "up" : "flat" : "";
+    const changeClass = change !== null ? change < -0.1 ? "down" : change > 0.1 ? "up" : "flat" : "";
     const startLabel = w.weekStart.slice(5).replace("-", "/");
     return `<div class="weekly-avg-bar-wrap">
       <div class="weekly-avg-value">${w.avg.toFixed(1)}</div>
@@ -28016,7 +28016,7 @@ function renderRecordingCalendar() {
     const isToday = d.date === todayStr;
     const isFuture = d.date > todayStr;
     const cls = isFuture ? "future" : d.recorded ? "recorded" : "missed";
-    const title = d.recorded ? `${d.day}: ${d.weight.toFixed(1)}kg` : `${d.day}`;
+    const title = d.recorded ? `${d.date}: ${d.weight.toFixed(1)}kg` : d.date;
     return `<div class="rec-cal-cell ${cls}${isToday ? " today" : ""}" title="${title}"><span>${d.day}</span></div>`;
   }).join("");
   const elapsed = cal.days.filter((d) => d.date <= todayStr).length;
