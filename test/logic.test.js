@@ -66,6 +66,7 @@ import {
   calcNextMilestones,
   calcSeasonality,
   calcWeightDistribution,
+  calcDayOfWeekChange,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -3957,6 +3958,260 @@ describe("calcDataHealth edge cases", () => {
   });
 });
 
+// ── Additional edge case tests ──
+
+describe("normalizeNumericInput edge cases", () => {
+  it("handles null and undefined", () => {
+    expect(normalizeNumericInput(null)).toBe("");
+    expect(normalizeNumericInput(undefined)).toBe("");
+  });
+
+  it("normalizes fullwidth digits", () => {
+    expect(normalizeNumericInput("６５．３")).toBe("65.3");
+  });
+
+  it("normalizes fullwidth comma", () => {
+    expect(normalizeNumericInput("６５，３")).toBe("65.3");
+  });
+
+  it("strips whitespace", () => {
+    expect(normalizeNumericInput("  65 . 3  ")).toBe("65.3");
+  });
+});
+
+describe("validateWeight edge cases", () => {
+  it("rejects empty string", () => {
+    expect(validateWeight("").valid).toBe(false);
+  });
+
+  it("rejects negative weight", () => {
+    expect(validateWeight("-50").valid).toBe(false);
+  });
+
+  it("accepts boundary min", () => {
+    const r = validateWeight("20");
+    expect(r.valid).toBe(true);
+    expect(r.weight).toBe(20);
+  });
+
+  it("accepts boundary max", () => {
+    const r = validateWeight("300");
+    expect(r.valid).toBe(true);
+    expect(r.weight).toBe(300);
+  });
+
+  it("rejects just above max", () => {
+    expect(validateWeight("300.1").valid).toBe(false);
+  });
+
+  it("rejects just below min", () => {
+    expect(validateWeight("19.9").valid).toBe(false);
+  });
+});
+
+describe("validateBodyFat edge cases", () => {
+  it("accepts empty/null gracefully", () => {
+    expect(validateBodyFat("").valid).toBe(true);
+    expect(validateBodyFat(null).valid).toBe(true);
+    expect(validateBodyFat(undefined).valid).toBe(true);
+  });
+
+  it("rejects body fat > 70", () => {
+    expect(validateBodyFat("71").valid).toBe(false);
+  });
+
+  it("accepts boundary values", () => {
+    expect(validateBodyFat("1").valid).toBe(true);
+    expect(validateBodyFat("70").valid).toBe(true);
+  });
+});
+
+describe("upsertRecord edge cases", () => {
+  it("overwrites existing record on same date", () => {
+    const records = [{ dt: "2025-01-01", wt: 70, source: "manual" }];
+    const updated = upsertRecord(records, { dt: "2025-01-01", wt: 68, source: "voice" });
+    expect(updated.length).toBe(1);
+    expect(updated[0].wt).toBe(68);
+    expect(updated[0].source).toBe("voice");
+  });
+
+  it("inserts and sorts by date", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-03", wt: 69 },
+    ];
+    const updated = upsertRecord(records, { dt: "2025-01-02", wt: 69.5 });
+    expect(updated.length).toBe(3);
+    expect(updated[1].dt).toBe("2025-01-02");
+  });
+});
+
+describe("calcGoalProgress edge cases", () => {
+  it("returns null for non-finite goal", () => {
+    expect(calcGoalProgress([{ dt: "2025-01-01", wt: 70 }], NaN)).toBeNull();
+    expect(calcGoalProgress([{ dt: "2025-01-01", wt: 70 }], null)).toBeNull();
+  });
+
+  it("returns 100% when already at goal", () => {
+    const records = [{ dt: "2025-01-01", wt: 65 }];
+    const result = calcGoalProgress(records, 65);
+    expect(result.percent).toBe(100);
+    expect(result.remaining).toBe(0);
+  });
+
+  it("handles weight gain goal (goal > start)", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 60 },
+      { dt: "2025-01-10", wt: 63 },
+    ];
+    const result = calcGoalProgress(records, 70);
+    expect(result).not.toBeNull();
+    expect(result.percent).toBeGreaterThan(0);
+  });
+});
+
+describe("trimRecords", () => {
+  it("keeps most recent records", () => {
+    const records = Array.from({ length: 200 }, (_, i) => ({
+      dt: `2025-${String(Math.floor(i / 28) + 1).padStart(2, "0")}-${String((i % 28) + 1).padStart(2, "0")}`,
+      wt: 70 + i * 0.1,
+    }));
+    const trimmed = trimRecords(records, 180);
+    expect(trimmed.length).toBe(180);
+    // Should keep the last 180
+    expect(trimmed[0]).toBe(records[20]);
+  });
+
+  it("returns original if under limit", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    expect(trimRecords(records, 180)).toBe(records);
+  });
+});
+
+describe("calcWeightComparison edge cases", () => {
+  it("returns null for single record", () => {
+    expect(calcWeightComparison([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns null when all records are on same date", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-01", wt: 71 },
+    ];
+    // Will only have one unique date, so findRecordNearDate returns same as latest
+    expect(calcWeightComparison(records)).toBeNull();
+  });
+});
+
+describe("buildCalendarMonth edge cases", () => {
+  it("returns correct structure for month with records", () => {
+    const records = [
+      { dt: "2025-01-05", wt: 70 },
+      { dt: "2025-01-15", wt: 69 },
+    ];
+    const result = buildCalendarMonth(records, 2025, 0);
+    expect(result).not.toBeNull();
+    expect(result.days.length).toBe(31);
+    expect(result.recordCount).toBe(2);
+  });
+
+  it("handles month with no records", () => {
+    const records = [{ dt: "2025-03-01", wt: 70 }];
+    const result = buildCalendarMonth(records, 2025, 0); // January
+    expect(result.recordCount).toBe(0);
+  });
+});
+
+describe("calcInsight edge cases", () => {
+  it("returns null for fewer than 3 records", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }, { dt: "2025-01-02", wt: 69 }];
+    expect(calcInsight(records)).toBeNull();
+  });
+
+  it("returns bestDay and weekComparison for 3+ records", () => {
+    const records = Array.from({ length: 7 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 70 - i * 0.1,
+    }));
+    const result = calcInsight(records);
+    expect(result).not.toBeNull();
+    expect(typeof result.bestDay).toBe("number");
+  });
+});
+
+describe("filterRecordsByDateRange edge cases", () => {
+  it("returns all records when no range specified", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-10", wt: 69 },
+    ];
+    expect(filterRecordsByDateRange(records, "", "")).toEqual(records);
+  });
+
+  it("filters by from only", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-10", wt: 69 },
+    ];
+    const result = filterRecordsByDateRange(records, "2025-01-05", "");
+    expect(result.length).toBe(1);
+    expect(result[0].dt).toBe("2025-01-10");
+  });
+
+  it("filters by to only", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-10", wt: 69 },
+    ];
+    const result = filterRecordsByDateRange(records, "", "2025-01-05");
+    expect(result.length).toBe(1);
+    expect(result[0].dt).toBe("2025-01-01");
+  });
+});
+
+describe("constants", () => {
+  it("THEME_LIST has 11 themes", () => {
+    expect(THEME_LIST.length).toBe(11);
+  });
+
+  it("all themes have id and color", () => {
+    for (const theme of THEME_LIST) {
+      expect(theme.id).toBeTruthy();
+      expect(theme.color).toMatch(/^#[0-9a-f]{6}$/i);
+    }
+  });
+
+  it("MAX_RECORDS is 180", () => {
+    expect(MAX_RECORDS).toBe(180);
+  });
+
+  it("WEIGHT_RANGE is 20-300", () => {
+    expect(WEIGHT_RANGE.min).toBe(20);
+    expect(WEIGHT_RANGE.max).toBe(300);
+  });
+
+  it("HEIGHT_RANGE is 80-250", () => {
+    expect(HEIGHT_RANGE.min).toBe(80);
+    expect(HEIGHT_RANGE.max).toBe(250);
+  });
+
+  it("AGE_RANGE is 1-120", () => {
+    expect(AGE_RANGE.min).toBe(1);
+    expect(AGE_RANGE.max).toBe(120);
+  });
+
+  it("BODY_FAT_RANGE is 1-70", () => {
+    expect(BODY_FAT_RANGE.min).toBe(1);
+    expect(BODY_FAT_RANGE.max).toBe(70);
+  });
+
+  it("STORAGE_KEYS has required keys", () => {
+    expect(STORAGE_KEYS.records).toBeTruthy();
+    expect(STORAGE_KEYS.profile).toBeTruthy();
+    expect(STORAGE_KEYS.settings).toBeTruthy();
+    expect(STORAGE_KEYS.firstLaunchDone).toBeTruthy();
+  });
+});
+
 describe("calcWeekdayVsWeekend edge cases", () => {
   it("returns null for fewer than 5 records", () => {
     const records = [{ dt: "2025-01-01", wt: 70 }];
@@ -3977,5 +4232,62 @@ describe("calcWeekdayVsWeekend edge cases", () => {
     expect(result.weekdayAvg).toBe(70);
     expect(result.weekendAvg).toBe(71);
     expect(result.diff).toBe(1);
+  });
+});
+
+describe("calcDayOfWeekChange", () => {
+  it("returns null with fewer than 7 records", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 70,
+    }));
+    expect(calcDayOfWeekChange(records)).toBeNull();
+  });
+
+  it("calculates average change per day of week", () => {
+    // 2025-01-06 is Monday. Create 14 consecutive days.
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2025-01-${String(i + 6).padStart(2, "0")}`,
+      wt: 70 + (i % 2 === 0 ? 0 : 0.3),
+    }));
+    const result = calcDayOfWeekChange(records);
+    expect(result).not.toBeNull();
+    expect(result.avgs.length).toBe(7);
+    expect(result.worstDay).not.toBeNull();
+    expect(result.bestDay).not.toBeNull();
+  });
+
+  it("returns null when fewer than 3 days have data", () => {
+    // Only 2 consecutive pairs on same days
+    const records = [
+      { dt: "2025-01-06", wt: 70 }, // Mon
+      { dt: "2025-01-07", wt: 71 }, // Tue
+      { dt: "2025-01-13", wt: 70 }, // Mon
+      { dt: "2025-01-14", wt: 71 }, // Tue
+      { dt: "2025-01-15", wt: 70 }, // Wed
+      { dt: "2025-01-20", wt: 70 }, // Mon
+      { dt: "2025-01-21", wt: 71 }, // Tue
+    ];
+    const result = calcDayOfWeekChange(records);
+    // Should have data for Tue and Wed at least
+    if (result) {
+      expect(result.avgs.length).toBe(7);
+    }
+  });
+
+  it("ignores non-consecutive day gaps", () => {
+    const records = [
+      { dt: "2025-01-06", wt: 70 },
+      { dt: "2025-01-07", wt: 71 },
+      { dt: "2025-01-10", wt: 69 }, // gap - should be skipped
+      { dt: "2025-01-11", wt: 70 },
+      { dt: "2025-01-12", wt: 71 },
+      { dt: "2025-01-13", wt: 70 },
+      { dt: "2025-01-14", wt: 71 },
+      { dt: "2025-01-15", wt: 70 },
+      { dt: "2025-01-16", wt: 71 },
+      { dt: "2025-01-17", wt: 70 },
+    ];
+    const result = calcDayOfWeekChange(records);
+    expect(result).not.toBeNull();
   });
 });

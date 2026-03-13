@@ -1985,6 +1985,27 @@ function calcWeightDistribution(records, bucketSize = 1) {
     total: records.length
   };
 }
+function calcDayOfWeekChange(records) {
+  if (records.length < 7) return null;
+  const sums = [0, 0, 0, 0, 0, 0, 0];
+  const counts = [0, 0, 0, 0, 0, 0, 0];
+  for (let i = 1; i < records.length; i++) {
+    const prev = /* @__PURE__ */ new Date(records[i - 1].dt + "T00:00:00");
+    const curr = /* @__PURE__ */ new Date(records[i].dt + "T00:00:00");
+    const gap = (curr - prev) / 864e5;
+    if (gap !== 1) continue;
+    const dow = curr.getDay();
+    const diff = records[i].wt - records[i - 1].wt;
+    sums[dow] += diff;
+    counts[dow]++;
+  }
+  const avgs = sums.map((s, i) => counts[i] > 0 ? Math.round(s / counts[i] * 100) / 100 : null);
+  const valid = avgs.filter((a) => a !== null);
+  if (valid.length < 3) return null;
+  const worstDay = avgs.reduce((best, a, i) => a !== null && (best === null || a > avgs[best]) ? i : best, null);
+  const bestDay = avgs.reduce((best, a, i) => a !== null && (best === null || a < avgs[best]) ? i : best, null);
+  return { avgs, counts, worstDay, bestDay };
+}
 
 // src/i18n.js
 var translations = {
@@ -2503,7 +2524,11 @@ var translations = {
     "dist.title": "\u4F53\u91CD\u5206\u5E03",
     "dist.mode": "\u6700\u983B\u5024\u5E2F: {range}kg ({count}\u56DE)",
     "dist.current": "\u25BC \u73FE\u5728",
-    "dist.hint": "\u4F53\u91CD\u304C\u3069\u306E\u7BC4\u56F2\u306B\u96C6\u4E2D\u3057\u3066\u3044\u308B\u304B\u3092\u8868\u793A"
+    "dist.hint": "\u4F53\u91CD\u304C\u3069\u306E\u7BC4\u56F2\u306B\u96C6\u4E2D\u3057\u3066\u3044\u308B\u304B\u3092\u8868\u793A",
+    "dowChange.title": "\u66DC\u65E5\u5225 \u4F53\u91CD\u5909\u5316",
+    "dowChange.best": "\u6700\u3082\u6E1B\u308B\u66DC\u65E5: {day}\uFF08\u5E73\u5747 {avg}kg\uFF09",
+    "dowChange.worst": "\u6700\u3082\u5897\u3048\u308B\u66DC\u65E5: {day}\uFF08\u5E73\u5747 +{avg}kg\uFF09",
+    "dowChange.hint": "\u9023\u7D9A\u3057\u305F\u65E5\u306E\u4F53\u91CD\u5909\u5316\u3092\u66DC\u65E5\u5225\u306B\u96C6\u8A08"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3020,7 +3045,11 @@ var translations = {
     "dist.title": "Weight Distribution",
     "dist.mode": "Most common: {range}kg ({count} times)",
     "dist.current": "\u25BC Current",
-    "dist.hint": "Shows where your weights cluster"
+    "dist.hint": "Shows where your weights cluster",
+    "dowChange.title": "Weight Change by Day",
+    "dowChange.best": "Best day: {day} (avg {avg}kg)",
+    "dowChange.worst": "Worst day: {day} (avg +{avg}kg)",
+    "dowChange.hint": "Average daily weight change by day of week"
   }
 };
 function createTranslator(language) {
@@ -24103,6 +24132,7 @@ function render() {
                 ${renderRecordGaps()}
                 ${renderSeasonality()}
                 ${renderWeightDistribution()}
+                ${renderDayOfWeekChange()}
               </div>
               ` : ""}
             </div>
@@ -24849,6 +24879,38 @@ function renderWeightDistribution() {
       <div class="dist-chart">${bars}</div>
       <div class="dist-info">${t("dist.mode").replace("{range}", d.modeRange).replace("{count}", d.buckets[d.modeBucket].count)}</div>
       <div class="helper hint-small">${t("dist.hint")}</div>
+    </div>
+  `;
+}
+function renderDayOfWeekChange() {
+  const d = calcDayOfWeekChange(state.records);
+  if (!d) return "";
+  const dayKeys = [0, 1, 2, 3, 4, 5, 6];
+  const maxAbs = Math.max(...d.avgs.filter((a) => a !== null).map((a) => Math.abs(a)), 0.1);
+  const bars = dayKeys.map((i) => {
+    const avg = d.avgs[i];
+    if (avg === null) return `<div class="dow-change-col"><div class="dow-change-label">${t("day." + i)}</div></div>`;
+    const pct = Math.round(Math.abs(avg) / maxAbs * 50);
+    const isGain = avg > 0.01;
+    const isLoss = avg < -0.01;
+    const color = isLoss ? "var(--ok, #10b981)" : isGain ? "var(--warn, #f59e0b)" : "var(--text)";
+    const isBest = i === d.bestDay;
+    const isWorst = i === d.worstDay;
+    return `<div class="dow-change-col ${isBest ? "best" : ""} ${isWorst ? "worst" : ""}">
+      <div class="dow-change-val" style="color:${color};">${avg > 0 ? "+" : ""}${avg}</div>
+      <div class="dow-change-bar-track"><div class="dow-change-bar" style="height:${pct}%;background:${color};"></div></div>
+      <div class="dow-change-label">${t("day." + i)}</div>
+    </div>`;
+  }).join("");
+  return `
+    <div class="dow-change-section">
+      <div class="helper">${t("dowChange.title")}</div>
+      <div class="dow-change-chart">${bars}</div>
+      <div class="dow-change-info">
+        ${d.bestDay !== null ? `<div>${t("dowChange.best").replace("{day}", t("day." + d.bestDay)).replace("{avg}", d.avgs[d.bestDay])}</div>` : ""}
+        ${d.worstDay !== null ? `<div>${t("dowChange.worst").replace("{day}", t("day." + d.worstDay)).replace("{avg}", d.avgs[d.worstDay])}</div>` : ""}
+      </div>
+      <div class="helper hint-small">${t("dowChange.hint")}</div>
     </div>
   `;
 }
