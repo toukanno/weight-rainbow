@@ -27671,7 +27671,7 @@ function bindEvents() {
       } else if (activeEntryMode === "voice") {
         app.querySelector("[data-action='toggle-voice']")?.focus();
       } else if (activeEntryMode === "photo") {
-        app.querySelector("[data-action='pick-photo']")?.focus();
+        (app.querySelector("[data-action='pick-native-photo']") || app.querySelector("label[for='photoInput']"))?.focus();
       }
     });
   });
