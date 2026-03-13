@@ -1385,7 +1385,7 @@ export function calcWeightDistribution(records, bucketSize = 1) {
   return {
     buckets,
     maxCount,
-    latestBucket: latestBucket >= 0 ? latestBucket : buckets.length - 1,
+    latestBucket,
     modeBucket,
     modeRange: `${buckets[modeBucket].start}-${buckets[modeBucket].end}`,
     total: records.length,

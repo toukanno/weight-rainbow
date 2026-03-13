@@ -1976,12 +1976,13 @@ function calcWeightDistribution(records, bucketSize = 1) {
   lastBucket.count += weights.filter((w) => w === max).length;
   const maxCount = Math.max(...buckets.map((b) => b.count));
   const latest = weights[weights.length - 1];
-  const latestBucket = buckets.findIndex((b) => latest >= b.start && latest < b.end) ?? buckets.length - 1;
+  const latestBucketIdx = buckets.findIndex((b) => latest >= b.start && latest < b.end);
+  const latestBucket = latestBucketIdx >= 0 ? latestBucketIdx : buckets.length - 1;
   const modeBucket = buckets.reduce((best, b, i) => b.count > buckets[best].count ? i : best, 0);
   return {
     buckets,
     maxCount,
-    latestBucket: latestBucket >= 0 ? latestBucket : buckets.length - 1,
+    latestBucket,
     modeBucket,
     modeRange: `${buckets[modeBucket].start}-${buckets[modeBucket].end}`,
     total: records.length
