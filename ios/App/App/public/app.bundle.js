@@ -23893,6 +23893,8 @@ function drawChart() {
   context.scale(dpr, dpr);
   const width = rect.width;
   const height = rect.height;
+  const cs = getComputedStyle(document.body);
+  const isMidnight = state.settings.theme === "midnight";
   let chartRecords = state.records;
   if (chartPeriod !== "all") {
     const days2 = parseInt(chartPeriod, 10);
@@ -23900,7 +23902,7 @@ function drawChart() {
     chartRecords = state.records.filter((r) => r.dt >= cutoff);
   }
   if (!chartRecords.length) {
-    context.fillStyle = getComputedStyle(document.body).getPropertyValue("--muted").trim() || "#7c7f9b";
+    context.fillStyle = cs.getPropertyValue("--muted").trim() || "#7c7f9b";
     context.textAlign = "center";
     context.font = "32px sans-serif";
     context.fillText("\u{1F4CA}", width / 2, height / 2 - 16);
@@ -23917,10 +23919,10 @@ function drawChart() {
   const toX = (index) => padX + index / Math.max(chartRecords.length - 1, 1) * (width - padX * 2);
   const toY = (weight) => height - padY - (weight - min) / range * (height - padY * 2);
   const gradient = context.createLinearGradient(0, 0, width, height);
-  gradient.addColorStop(0, getComputedStyle(document.body).getPropertyValue("--accent"));
-  gradient.addColorStop(0.5, getComputedStyle(document.body).getPropertyValue("--accent-2"));
-  gradient.addColorStop(1, getComputedStyle(document.body).getPropertyValue("--accent-3"));
-  context.strokeStyle = "rgba(120,130,180,0.18)";
+  gradient.addColorStop(0, cs.getPropertyValue("--accent"));
+  gradient.addColorStop(0.5, cs.getPropertyValue("--accent-2"));
+  gradient.addColorStop(1, cs.getPropertyValue("--accent-3"));
+  context.strokeStyle = isMidnight ? "rgba(139,146,176,0.14)" : "rgba(120,130,180,0.18)";
   context.lineWidth = 1;
   for (let index = 0; index < 5; index += 1) {
     const y = padY + index / 4 * (height - padY * 2);
@@ -23929,18 +23931,19 @@ function drawChart() {
     context.lineTo(width - padX, y);
     context.stroke();
     const weightLabel = (max - index / 4 * range).toFixed(1);
-    context.fillStyle = getComputedStyle(document.body).getPropertyValue("--muted");
+    context.fillStyle = cs.getPropertyValue("--muted");
     context.font = "11px sans-serif";
     context.textAlign = "right";
     context.fillText(weightLabel, padX - 6, y + 4);
   }
   const bmiZones = calcBMIZoneWeights(state.profile.heightCm);
   if (bmiZones) {
+    const zoneAlpha = isMidnight ? 0.12 : 0.08;
     const zones = [
-      { from: min, to: Math.min(bmiZones.underMax, max), color: "rgba(59, 130, 246, 0.08)", label: t("bmi.under") },
-      { from: Math.max(bmiZones.underMax, min), to: Math.min(bmiZones.normalMax, max), color: "rgba(16, 185, 129, 0.08)", label: t("bmi.normal") },
-      { from: Math.max(bmiZones.normalMax, min), to: Math.min(bmiZones.overMax, max), color: "rgba(245, 158, 11, 0.08)", label: t("bmi.over") },
-      { from: Math.max(bmiZones.overMax, min), to: max, color: "rgba(239, 68, 68, 0.08)", label: t("bmi.obese") }
+      { from: min, to: Math.min(bmiZones.underMax, max), color: `rgba(59, 130, 246, ${zoneAlpha})`, label: t("bmi.under") },
+      { from: Math.max(bmiZones.underMax, min), to: Math.min(bmiZones.normalMax, max), color: `rgba(16, 185, 129, ${zoneAlpha})`, label: t("bmi.normal") },
+      { from: Math.max(bmiZones.normalMax, min), to: Math.min(bmiZones.overMax, max), color: `rgba(245, 158, 11, ${zoneAlpha})`, label: t("bmi.over") },
+      { from: Math.max(bmiZones.overMax, min), to: max, color: `rgba(239, 68, 68, ${zoneAlpha})`, label: t("bmi.obese") }
     ];
     context.save();
     for (const zone of zones) {
@@ -23949,7 +23952,7 @@ function drawChart() {
       const y2 = toY(zone.from);
       context.fillStyle = zone.color;
       context.fillRect(padX, y1, width - padX * 2, y2 - y1);
-      context.fillStyle = "rgba(120,130,180,0.5)";
+      context.fillStyle = isMidnight ? "rgba(139,146,176,0.6)" : "rgba(120,130,180,0.5)";
       context.font = "9px sans-serif";
       context.textAlign = "right";
       const labelY = (y1 + y2) / 2 + 3;
@@ -23972,7 +23975,7 @@ function drawChart() {
   });
   context.stroke();
   const fillGradient = context.createLinearGradient(0, 0, 0, height);
-  fillGradient.addColorStop(0, getComputedStyle(document.body).getPropertyValue("--accent").trim() + "30");
+  fillGradient.addColorStop(0, cs.getPropertyValue("--accent").trim() + "30");
   fillGradient.addColorStop(1, "transparent");
   context.fillStyle = fillGradient;
   context.beginPath();
@@ -23992,7 +23995,7 @@ function drawChart() {
     const y = toY(record.wt);
     context.beginPath();
     context.arc(x, y, 6, 0, Math.PI * 2);
-    context.fillStyle = getComputedStyle(document.body).getPropertyValue("--surface-strong").trim() || "white";
+    context.fillStyle = cs.getPropertyValue("--surface-strong").trim() || "white";
     context.fill();
     context.beginPath();
     context.arc(x, y, 4, 0, Math.PI * 2);
@@ -24009,7 +24012,7 @@ function drawChart() {
     }
     context.save();
     context.setLineDash([4, 4]);
-    context.strokeStyle = getComputedStyle(document.body).getPropertyValue("--accent-3").trim() || "#0ea5e9";
+    context.strokeStyle = cs.getPropertyValue("--accent-3").trim() || "#0ea5e9";
     context.lineWidth = 1.5;
     context.globalAlpha = 0.6;
     context.beginPath();
@@ -24027,14 +24030,14 @@ function drawChart() {
     const goalY = toY(goalWeight);
     context.save();
     context.setLineDash([8, 6]);
-    context.strokeStyle = getComputedStyle(document.body).getPropertyValue("--ok") || "#10b981";
+    context.strokeStyle = cs.getPropertyValue("--ok") || "#10b981";
     context.lineWidth = 2;
     context.beginPath();
     context.moveTo(padX, goalY);
     context.lineTo(width - padX, goalY);
     context.stroke();
     context.setLineDash([]);
-    context.fillStyle = getComputedStyle(document.body).getPropertyValue("--ok") || "#10b981";
+    context.fillStyle = cs.getPropertyValue("--ok") || "#10b981";
     context.font = "bold 11px sans-serif";
     context.textAlign = "left";
     context.fillText(`${t("goal.title")} ${goalWeight.toFixed(1)}`, padX + 4, goalY - 6);
@@ -24046,7 +24049,7 @@ function drawChart() {
     const tx = toX(todayIdx);
     context.save();
     context.setLineDash([2, 3]);
-    context.strokeStyle = getComputedStyle(document.body).getPropertyValue("--accent") || "#ff5f6d";
+    context.strokeStyle = cs.getPropertyValue("--accent") || "#ff5f6d";
     context.lineWidth = 1;
     context.globalAlpha = 0.4;
     context.beginPath();
@@ -24055,7 +24058,7 @@ function drawChart() {
     context.stroke();
     context.restore();
   }
-  context.fillStyle = getComputedStyle(document.body).getPropertyValue("--muted");
+  context.fillStyle = cs.getPropertyValue("--muted");
   context.font = "12px sans-serif";
   context.textAlign = "center";
   [0, Math.floor((chartRecords.length - 1) / 2), chartRecords.length - 1].filter((value, index, array) => array.indexOf(value) === index).forEach((index) => {
