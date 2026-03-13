@@ -1795,3 +1795,58 @@ describe("calcMovingAverages", () => {
     expect(ma.diff).toBe(0);
   });
 });
+
+describe("calcMovingAverages crossing detection", () => {
+  it("detects crossDown when short avg crosses below long avg", () => {
+    // First 23 records at 75, then 7 records at 72 to create a crossDown
+    // Need 31 records total to detect crossing (longWindow + 1)
+    const records = [
+      ...Array.from({ length: 23 }, (_, i) => ({
+        dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+        wt: 75,
+      })),
+      ...Array.from({ length: 8 }, (_, i) => ({
+        dt: `2025-01-${String(i + 24).padStart(2, "0")}`,
+        wt: 70,
+      })),
+    ];
+    const ma = calcMovingAverages(records);
+    expect(ma).not.toBeNull();
+    expect(ma.shortAvg).toBeLessThan(ma.longAvg);
+  });
+});
+
+describe("buildCalendarMonth edge cases", () => {
+  it("returns correct startDow for February 2025", () => {
+    const records = [{ dt: "2025-02-15", wt: 70 }];
+    const data = buildCalendarMonth(records, 2025, 1); // Feb is month index 1
+    expect(data).not.toBeNull();
+    expect(data.daysInMonth).toBe(28); // 2025 is not a leap year
+    expect(data.recordCount).toBe(1);
+  });
+
+  it("handles leap year February correctly", () => {
+    const records = [{ dt: "2024-02-29", wt: 70 }];
+    const data = buildCalendarMonth(records, 2024, 1); // Feb 2024 is a leap year
+    expect(data).not.toBeNull();
+    expect(data.daysInMonth).toBe(29);
+    expect(data.recordCount).toBe(1);
+  });
+});
+
+describe("parseVoiceWeight", () => {
+  it("extracts weight from Japanese speech", () => {
+    const result = parseVoiceWeight("体重は65.3キロです");
+    expect(result).toBe(65.3);
+  });
+
+  it("returns null for speech with no numbers", () => {
+    const result = parseVoiceWeight("こんにちは");
+    expect(result).toBeNull();
+  });
+
+  it("picks closest to fallback", () => {
+    const result = parseVoiceWeight("65.5 or 100.2", 66);
+    expect(result).toBe(65.5);
+  });
+});
