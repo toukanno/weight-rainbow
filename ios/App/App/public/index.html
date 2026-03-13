@@ -941,6 +941,34 @@
         font-weight: 600;
       }
 
+      .date-shortcuts {
+        display: flex;
+        gap: 6px;
+        margin-top: 4px;
+      }
+
+      .date-shortcut {
+        padding: 4px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 0.72rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.12s, color 0.12s;
+      }
+
+      .date-shortcut:hover {
+        color: var(--accent);
+        transform: translateY(-1px);
+      }
+
+      body[data-theme="midnight"] .date-shortcut {
+        background: rgba(30, 35, 55, 0.6);
+        border-color: rgba(139, 146, 176, 0.18);
+      }
+
       /* Quick Record */
       .quick-section {
         margin-top: 16px;

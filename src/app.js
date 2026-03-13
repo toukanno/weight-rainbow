@@ -391,6 +391,10 @@ function render() {
                 <div class="field">
                   <label for="recordDate">${t("entry.date")}</label>
                   <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" />
+                  <div class="date-shortcuts">
+                    <button type="button" class="date-shortcut" data-date-shortcut="today">${t("diff.today")}</button>
+                    <button type="button" class="date-shortcut" data-date-shortcut="yesterday">${t("diff.yesterday")}</button>
+                  </div>
                 </div>
                 <div class="field">
                   <label for="bodyFat">${t("bodyFat.label")}</label>
@@ -1020,6 +1024,15 @@ function bindEvents() {
     });
   });
 
+  app.querySelectorAll("[data-date-shortcut]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const key = button.dataset.dateShortcut;
+      const d = key === "yesterday" ? new Date(Date.now() - 86400000) : new Date();
+      state.form.date = d.toISOString().slice(0, 10);
+      render();
+    });
+  });
+
   app.querySelectorAll("[data-delete-date]").forEach((button) => {
     button.addEventListener("click", () => {
       if (!window.confirm(t("confirm.deleteRecord"))) return;
@@ -1638,6 +1651,7 @@ function spawnConfetti() {
   if (!container) return;
   const colors = ["#ff0000", "#ff9a00", "#d0de21", "#4fdc4a", "#3fdad8", "#2f6bec", "#8b45db", "#ec4899"];
   const shapes = ["circle", "square", "star"];
+  const fragment = document.createDocumentFragment();
   for (let i = 0; i < 80; i++) {
     const el = document.createElement("div");
     el.className = "confetti";
@@ -1656,8 +1670,11 @@ function spawnConfetti() {
       el.style.transform = `rotate(${Math.random() * 360}deg)`;
     }
     el.style.opacity = `${0.7 + Math.random() * 0.3}`;
-    container.appendChild(el);
+    fragment.appendChild(el);
   }
+  container.appendChild(fragment);
+  // Clean up confetti after animation completes
+  setTimeout(() => { container.innerHTML = ""; }, 4000);
 }
 
 function exportData() {
