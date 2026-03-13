@@ -762,6 +762,7 @@ function render() {
             ${renderMomentumScore()}
             ${renderStreakRewards()}
             ${renderGoalCountdown()}
+            ${renderGoalScenarios()}
             ${renderNextMilestones()}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
@@ -1296,7 +1297,7 @@ function renderDataHealth() {
     ? `<div class="helper hint-small" style="color:var(--ok);font-weight:600;">${t("health.perfect")}</div>`
     : health.issues.slice(0, 3).map((issue) => {
       if (issue.type === "gap") return `<div class="health-issue">📅 ${t("health.gap").replace("{days}", issue.days).replace("{from}", issue.from).replace("{to}", issue.to)}</div>`;
-      if (issue.type === "outlier") return `<div class="health-issue">📊 ${t("health.outlier").replace("{date}", issue.date).replace("{weight}", issue.weight).replace("{expected}", issue.expected)}</div>`;
+      if (issue.type === "outlier") return `<div class="health-issue">📊 ${t("health.outlier").replace("{date}", issue.date).replace("{weight}", Number(issue.weight).toFixed(1)).replace("{expected}", Number(issue.expected).toFixed(1))}</div>`;
       if (issue.type === "noBMI") return `<div class="health-issue">📏 ${t("health.noBMI")}</div>`;
       return "";
     }).join("");
@@ -2346,6 +2347,28 @@ function renderWeightJourney() {
       <div class="helper">${t("journey.title")}</div>
       ${rows}
       <div class="jny-total">${t("journey.total")}: ${totalSign}${journey.totalChange.toFixed(1)}kg</div>
+    </div>
+  `;
+}
+
+function renderGoalScenarios() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const scenarios = calcGoalScenarios(state.records, goalWeight);
+  if (!scenarios) return "";
+  const labelMap = { gentle: "scenario.gentle", moderate: "scenario.moderate", aggressive: "scenario.aggressive" };
+  const rows = scenarios.scenarios.map((s) => {
+    const weeksText = t("scenario.weeks").replace("{weeks}", s.weeks);
+    return `<div class="scn-row">
+      <span class="scn-label">${t(labelMap[s.label])}</span>
+      <span class="scn-rate">${Math.abs(s.pace).toFixed(2)}kg${t("scenario.perWeek")}</span>
+      <span class="scn-weeks">${weeksText}</span>
+      <span class="scn-date">${s.date.slice(2).replace(/-/g, "/")}</span>
+    </div>`;
+  }).join("");
+  return `
+    <div class="scn-section">
+      <div class="helper">${t("scenario.title")}</div>
+      ${rows}
     </div>
   `;
 }

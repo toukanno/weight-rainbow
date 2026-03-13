@@ -3028,3 +3028,38 @@ export function calcWeightJourney(records) {
   const totalChange = Math.round((sorted[sorted.length - 1].wt - sorted[0].wt) * 10) / 10;
   return { phases, totalChange };
 }
+
+/**
+ * Calculate goal weight scenarios with different paces.
+ * Returns { current, goal, remaining, scenarios: [{ pace, label, weeks, date }] } or null.
+ */
+export function calcGoalScenarios(records, goalWeight) {
+  if (records.length < 1 || !Number.isFinite(goalWeight) || goalWeight <= 0) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const current = sorted[sorted.length - 1].wt;
+  const remaining = Math.round(Math.abs(current - goalWeight) * 10) / 10;
+  if (remaining < 0.1) return null;
+  const direction = current > goalWeight ? -1 : 1;
+
+  const paces = [
+    { label: "gentle", rate: 0.25 },
+    { label: "moderate", rate: 0.5 },
+    { label: "aggressive", rate: 1.0 },
+  ];
+
+  const today = new Date();
+  const scenarios = paces.map((p) => {
+    const weeks = Math.ceil(remaining / p.rate);
+    const targetDate = new Date(today);
+    targetDate.setDate(targetDate.getDate() + weeks * 7);
+    const dateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, "0")}-${String(targetDate.getDate()).padStart(2, "0")}`;
+    return {
+      pace: p.rate * direction,
+      label: p.label,
+      weeks,
+      date: dateStr,
+    };
+  });
+
+  return { current, goal: goalWeight, remaining, scenarios };
+}

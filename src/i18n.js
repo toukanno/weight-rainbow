@@ -766,6 +766,12 @@ export const translations = {
     "journey.maintain": "維持期",
     "journey.total": "全体変化",
     "scroll.top": "トップへ戻る",
+    "scenario.title": "目標達成シナリオ",
+    "scenario.gentle": "ゆるやか",
+    "scenario.moderate": "標準",
+    "scenario.aggressive": "積極的",
+    "scenario.weeks": "{weeks}週間",
+    "scenario.perWeek": "/週",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1534,6 +1540,12 @@ export const translations = {
     "journey.maintain": "Maintain",
     "journey.total": "Total change",
     "scroll.top": "Back to top",
+    "scenario.title": "Goal Scenarios",
+    "scenario.gentle": "Gentle",
+    "scenario.moderate": "Moderate",
+    "scenario.aggressive": "Aggressive",
+    "scenario.weeks": "{weeks} weeks",
+    "scenario.perWeek": "/wk",
   },
 };
 

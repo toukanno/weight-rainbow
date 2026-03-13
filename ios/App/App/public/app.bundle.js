@@ -3239,6 +3239,33 @@ function calcWeightJourney(records) {
   const totalChange = Math.round((sorted[sorted.length - 1].wt - sorted[0].wt) * 10) / 10;
   return { phases, totalChange };
 }
+function calcGoalScenarios(records, goalWeight) {
+  if (records.length < 1 || !Number.isFinite(goalWeight) || goalWeight <= 0) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const current = sorted[sorted.length - 1].wt;
+  const remaining = Math.round(Math.abs(current - goalWeight) * 10) / 10;
+  if (remaining < 0.1) return null;
+  const direction = current > goalWeight ? -1 : 1;
+  const paces = [
+    { label: "gentle", rate: 0.25 },
+    { label: "moderate", rate: 0.5 },
+    { label: "aggressive", rate: 1 }
+  ];
+  const today = /* @__PURE__ */ new Date();
+  const scenarios = paces.map((p) => {
+    const weeks = Math.ceil(remaining / p.rate);
+    const targetDate = new Date(today);
+    targetDate.setDate(targetDate.getDate() + weeks * 7);
+    const dateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, "0")}-${String(targetDate.getDate()).padStart(2, "0")}`;
+    return {
+      pace: p.rate * direction,
+      label: p.label,
+      weeks,
+      date: dateStr
+    };
+  });
+  return { current, goal: goalWeight, remaining, scenarios };
+}
 
 // src/i18n.js
 var translations = {
@@ -25929,6 +25956,7 @@ function render() {
             ${renderMomentumScore()}
             ${renderStreakRewards()}
             ${renderGoalCountdown()}
+            ${renderGoalScenarios()}
             ${renderNextMilestones()}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
@@ -26448,7 +26476,7 @@ function renderDataHealth() {
   const level = health.score >= 80 ? "high" : health.score >= 50 ? "medium" : "low";
   const issueHtml = health.issues.length === 0 ? `<div class="helper hint-small" style="color:var(--ok);font-weight:600;">${t("health.perfect")}</div>` : health.issues.slice(0, 3).map((issue) => {
     if (issue.type === "gap") return `<div class="health-issue">\u{1F4C5} ${t("health.gap").replace("{days}", issue.days).replace("{from}", issue.from).replace("{to}", issue.to)}</div>`;
-    if (issue.type === "outlier") return `<div class="health-issue">\u{1F4CA} ${t("health.outlier").replace("{date}", issue.date).replace("{weight}", issue.weight).replace("{expected}", issue.expected)}</div>`;
+    if (issue.type === "outlier") return `<div class="health-issue">\u{1F4CA} ${t("health.outlier").replace("{date}", issue.date).replace("{weight}", Number(issue.weight).toFixed(1)).replace("{expected}", Number(issue.expected).toFixed(1))}</div>`;
     if (issue.type === "noBMI") return `<div class="health-issue">\u{1F4CF} ${t("health.noBMI")}</div>`;
     return "";
   }).join("");
@@ -27429,6 +27457,27 @@ function renderWeightJourney() {
       <div class="helper">${t("journey.title")}</div>
       ${rows}
       <div class="jny-total">${t("journey.total")}: ${totalSign}${journey.totalChange.toFixed(1)}kg</div>
+    </div>
+  `;
+}
+function renderGoalScenarios() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const scenarios = calcGoalScenarios(state.records, goalWeight);
+  if (!scenarios) return "";
+  const labelMap = { gentle: "scenario.gentle", moderate: "scenario.moderate", aggressive: "scenario.aggressive" };
+  const rows = scenarios.scenarios.map((s) => {
+    const weeksText = t("scenario.weeks").replace("{weeks}", s.weeks);
+    return `<div class="scn-row">
+      <span class="scn-label">${t(labelMap[s.label])}</span>
+      <span class="scn-rate">${Math.abs(s.pace).toFixed(2)}kg${t("scenario.perWeek")}</span>
+      <span class="scn-weeks">${weeksText}</span>
+      <span class="scn-date">${s.date.slice(2).replace(/-/g, "/")}</span>
+    </div>`;
+  }).join("");
+  return `
+    <div class="scn-section">
+      <div class="helper">${t("scenario.title")}</div>
+      ${rows}
     </div>
   `;
 }
