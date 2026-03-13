@@ -3059,6 +3059,30 @@ function calcLongTermProgress(records) {
   });
   return { current: latest.wt, date: latest.dt, periods: result };
 }
+function calcWeightFluctuation(records) {
+  if (records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1];
+  const latestDate = /* @__PURE__ */ new Date(latest.dt + "T00:00:00");
+  const windows = [
+    { label: "7d", days: 7 },
+    { label: "30d", days: 30 }
+  ];
+  const periods = windows.map((w) => {
+    const cutoff = new Date(latestDate);
+    cutoff.setDate(cutoff.getDate() - w.days);
+    const cutoffStr = localDateStr(cutoff);
+    const inRange = sorted.filter((r) => r.dt >= cutoffStr);
+    if (inRange.length < 2) return { label: w.label, days: w.days, min: null, max: null, range: null, position: null, hasData: false };
+    const weights = inRange.map((r) => r.wt);
+    const min = Math.round(Math.min(...weights) * 10) / 10;
+    const max = Math.round(Math.max(...weights) * 10) / 10;
+    const range = Math.round((max - min) * 10) / 10;
+    const position = range > 0 ? Math.round((latest.wt - min) / range * 100) : 50;
+    return { label: w.label, days: w.days, min, max, range, position, hasData: true };
+  });
+  return { latest: latest.wt, periods };
+}
 
 // src/i18n.js
 var translations = {
@@ -25682,6 +25706,7 @@ function render() {
             ${renderWeeklyAverages()}
             ${renderRecordingCalendar()}
             ${renderLongTermProgress()}
+            ${renderWeightFluctuation()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -27031,6 +27056,33 @@ function renderLongTermProgress() {
   return `
     <div class="ltp-section">
       <div class="helper">${t("ltp.title")}</div>
+      ${rows}
+    </div>
+  `;
+}
+function renderWeightFluctuation() {
+  const fluct = calcWeightFluctuation(state.records);
+  if (!fluct) return "";
+  const withData = fluct.periods.filter((p) => p.hasData);
+  if (withData.length === 0) return "";
+  const labelMap = { "7d": "fluct.7d", "30d": "fluct.30d" };
+  const rows = withData.map((p) => {
+    const pos = Math.max(0, Math.min(100, p.position));
+    return `<div class="fluct-row">
+      <span class="fluct-label">${t(labelMap[p.label])}</span>
+      <div class="fluct-bar-wrap">
+        <span class="fluct-min">${p.min.toFixed(1)}</span>
+        <div class="fluct-bar">
+          <div class="fluct-marker" style="left:${pos}%"></div>
+        </div>
+        <span class="fluct-max">${p.max.toFixed(1)}</span>
+      </div>
+      <span class="fluct-range">${t("fluct.range")} ${p.range.toFixed(1)}kg</span>
+    </div>`;
+  }).join("");
+  return `
+    <div class="fluct-section">
+      <div class="helper">${t("fluct.title")}</div>
       ${rows}
     </div>
   `;

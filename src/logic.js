@@ -2769,7 +2769,6 @@ export function calcLongTermProgress(records) {
     } else {
       const cutoff = new Date(latestDate);
       cutoff.setDate(cutoff.getDate() - p.days);
-      const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
       // Find closest record to cutoff date
       let closest = null;
       let closestDiff = Infinity;
@@ -2798,4 +2797,34 @@ export function calcLongTermProgress(records) {
     };
   });
   return { current: latest.wt, date: latest.dt, periods: result };
+}
+
+/**
+ * Calculate weight fluctuation range for recent periods (7d, 30d).
+ * Returns { latest, periods: [{ label, days, min, max, range, position }] }
+ * position: 0-100 indicating where latest weight falls within the range.
+ */
+export function calcWeightFluctuation(records) {
+  if (records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1];
+  const latestDate = new Date(latest.dt + "T00:00:00");
+  const windows = [
+    { label: "7d", days: 7 },
+    { label: "30d", days: 30 },
+  ];
+  const periods = windows.map((w) => {
+    const cutoff = new Date(latestDate);
+    cutoff.setDate(cutoff.getDate() - w.days);
+    const cutoffStr = localDateStr(cutoff);
+    const inRange = sorted.filter((r) => r.dt >= cutoffStr);
+    if (inRange.length < 2) return { label: w.label, days: w.days, min: null, max: null, range: null, position: null, hasData: false };
+    const weights = inRange.map((r) => r.wt);
+    const min = Math.round(Math.min(...weights) * 10) / 10;
+    const max = Math.round(Math.max(...weights) * 10) / 10;
+    const range = Math.round((max - min) * 10) / 10;
+    const position = range > 0 ? Math.round(((latest.wt - min) / range) * 100) : 50;
+    return { label: w.label, days: w.days, min, max, range, position, hasData: true };
+  });
+  return { latest: latest.wt, periods };
 }

@@ -96,6 +96,7 @@ import {
   getRecentEntries,
   calcMonthlyAverages,
   calcLongTermProgress,
+  calcWeightFluctuation,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -7384,5 +7385,61 @@ describe("calcLongTermProgress", () => {
     ];
     const result = calcLongTermProgress(records);
     expect(result.date).toBe("2026-03-14");
+  });
+});
+
+describe("calcWeightFluctuation", () => {
+  it("returns null for fewer than 2 records", () => {
+    expect(calcWeightFluctuation([])).toBeNull();
+    expect(calcWeightFluctuation([{ dt: "2026-03-14", wt: 70 }])).toBeNull();
+  });
+
+  it("calculates min, max, range for records within 7 days", () => {
+    const records = [
+      { dt: "2026-03-10", wt: 68.0 },
+      { dt: "2026-03-12", wt: 70.0 },
+      { dt: "2026-03-14", wt: 69.0 },
+    ];
+    const result = calcWeightFluctuation(records);
+    expect(result.latest).toBe(69.0);
+    const p7 = result.periods.find((p) => p.label === "7d");
+    expect(p7.hasData).toBe(true);
+    expect(p7.min).toBe(68.0);
+    expect(p7.max).toBe(70.0);
+    expect(p7.range).toBe(2.0);
+  });
+
+  it("calculates position as percentage within range", () => {
+    const records = [
+      { dt: "2026-03-10", wt: 60.0 },
+      { dt: "2026-03-14", wt: 70.0 },
+    ];
+    const result = calcWeightFluctuation(records);
+    const p7 = result.periods.find((p) => p.label === "7d");
+    expect(p7.position).toBe(100); // latest is at max
+  });
+
+  it("marks period as no data when insufficient records", () => {
+    const records = [
+      { dt: "2026-02-01", wt: 70.0 },
+      { dt: "2026-03-14", wt: 69.0 },
+    ];
+    const result = calcWeightFluctuation(records);
+    const p7 = result.periods.find((p) => p.label === "7d");
+    expect(p7.hasData).toBe(false);
+  });
+
+  it("handles 30-day window correctly", () => {
+    const records = [
+      { dt: "2026-02-20", wt: 72.0 },
+      { dt: "2026-03-01", wt: 68.0 },
+      { dt: "2026-03-14", wt: 70.0 },
+    ];
+    const result = calcWeightFluctuation(records);
+    const p30 = result.periods.find((p) => p.label === "30d");
+    expect(p30.hasData).toBe(true);
+    expect(p30.min).toBe(68.0);
+    expect(p30.max).toBe(72.0);
+    expect(p30.range).toBe(4.0);
   });
 });
