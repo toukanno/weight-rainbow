@@ -1850,3 +1850,55 @@ describe("parseVoiceWeight", () => {
     expect(result).toBe(65.5);
   });
 });
+
+describe("detectMilestone round number and BMI", () => {
+  it("detects round number crossing (e.g., 70.5 → 69.8)", () => {
+    // Ensure newWeight is NOT an all-time low (69.0 is lower)
+    const records = [
+      { dt: "2025-01-01", wt: 69.0 },
+      { dt: "2025-01-02", wt: 71.0 },
+      { dt: "2025-01-03", wt: 70.5 },
+    ];
+    const result = detectMilestone(records, 69.8, 170);
+    expect(result).not.toBeNull();
+    expect(result.type).toBe("roundNumber");
+    expect(result.value).toBe(70);
+  });
+
+  it("detects BMI threshold crossing below 25", () => {
+    // 170cm: BMI 25 = 72.25kg. Ensure newWeight is NOT an all-time low.
+    const records = [
+      { dt: "2025-01-01", wt: 71.0 },
+      { dt: "2025-01-02", wt: 73.0 },
+      { dt: "2025-01-03", wt: 72.5 }, // BMI ~25.1
+    ];
+    const result = detectMilestone(records, 72.0, 170); // BMI ~24.9
+    expect(result).not.toBeNull();
+    expect(result.type).toBe("bmiCrossing");
+    expect(result.threshold).toBe(25);
+  });
+
+  it("prioritizes allTimeLow over roundNumber", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 71 },
+      { dt: "2025-01-02", wt: 70.2 },
+    ];
+    // 69.5 is both below the round number 70 AND a new all-time low
+    const result = detectMilestone(records, 69.5, 170);
+    expect(result).not.toBeNull();
+    expect(result.type).toBe("allTimeLow");
+  });
+});
+
+describe("calcBodyFatStats edge cases", () => {
+  it("handles body fat change of exactly zero", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, bf: 20.0 },
+      { dt: "2025-01-02", wt: 69, bf: 20.0 },
+    ];
+    const stats = calcBodyFatStats(records);
+    expect(stats).not.toBeNull();
+    expect(stats.change).toBe(0);
+    expect(stats.latest).toBe(20.0);
+  });
+});
