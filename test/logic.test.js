@@ -67,6 +67,7 @@ import {
   calcSeasonality,
   calcWeightDistribution,
   calcDayOfWeekChange,
+  calcPersonalRecords,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -4289,5 +4290,190 @@ describe("calcDayOfWeekChange", () => {
     ];
     const result = calcDayOfWeekChange(records);
     expect(result).not.toBeNull();
+  });
+});
+
+describe("calcPersonalRecords", () => {
+  it("returns null with fewer than 3 records", () => {
+    expect(calcPersonalRecords([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("finds all-time low", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72 },
+      { dt: "2025-01-02", wt: 70 },
+      { dt: "2025-01-03", wt: 71 },
+    ];
+    const result = calcPersonalRecords(records);
+    expect(result).not.toBeNull();
+    expect(result.allTimeLow).toBe(70);
+    expect(result.allTimeLowDate).toBe("2025-01-02");
+  });
+
+  it("finds biggest single-day drop", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 73 },
+      { dt: "2025-01-02", wt: 71 },
+      { dt: "2025-01-03", wt: 70.5 },
+    ];
+    const result = calcPersonalRecords(records);
+    expect(result.biggestDrop).toBe(2);
+    expect(result.biggestDropDate).toBe("2025-01-02");
+  });
+
+  it("calculates total change", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-01-02", wt: 73 },
+      { dt: "2025-01-03", wt: 72 },
+    ];
+    const result = calcPersonalRecords(records);
+    expect(result.totalChange).toBe(-3);
+    expect(result.totalRecords).toBe(3);
+  });
+});
+
+describe("calcAchievements edge cases", () => {
+  it("returns empty for no records", () => {
+    expect(calcAchievements([], 0, null)).toEqual([]);
+  });
+
+  it("returns records_1 for first record", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    const result = calcAchievements(records, 0, null);
+    expect(result.some((a) => a.id === "records_1")).toBe(true);
+  });
+
+  it("returns goal_achieved when at goal weight", () => {
+    const records = [{ dt: "2025-01-01", wt: 80 }, { dt: "2025-01-10", wt: 65 }];
+    const result = calcAchievements(records, 0, 65);
+    expect(result.some((a) => a.id === "goal_achieved")).toBe(true);
+  });
+
+  it("returns loss milestones", () => {
+    const records = [{ dt: "2025-01-01", wt: 80 }, { dt: "2025-02-01", wt: 69 }];
+    const result = calcAchievements(records, 0, null);
+    expect(result.some((a) => a.id === "loss_10")).toBe(true);
+    expect(result.some((a) => a.id === "loss_5")).toBe(true);
+  });
+
+  it("returns streak milestones", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    const result = calcAchievements(records, 7, null);
+    expect(result.some((a) => a.id === "streak_7")).toBe(true);
+    expect(result.some((a) => a.id === "streak_3")).toBe(true);
+  });
+});
+
+describe("calcGoalMilestones edge cases", () => {
+  it("returns null for no records", () => {
+    expect(calcGoalMilestones([], 65)).toBeNull();
+  });
+
+  it("returns null for non-finite goal", () => {
+    expect(calcGoalMilestones([{ dt: "2025-01-01", wt: 70 }], NaN)).toBeNull();
+  });
+
+  it("returns null when goal >= start weight", () => {
+    expect(calcGoalMilestones([{ dt: "2025-01-01", wt: 65 }], 70)).toBeNull();
+  });
+
+  it("returns 4 checkpoints", () => {
+    const records = [{ dt: "2025-01-01", wt: 80 }, { dt: "2025-02-01", wt: 75 }];
+    const result = calcGoalMilestones(records, 60);
+    expect(result.length).toBe(4);
+    expect(result[0].pct).toBe(25);
+    expect(result[3].pct).toBe(100);
+    expect(result[0].reached).toBe(true); // 80-60=20, 25% = 75kg, current 75 <= 75
+  });
+});
+
+describe("calcMonthlyStats edge cases", () => {
+  it("returns empty for no records", () => {
+    expect(calcMonthlyStats([])).toEqual([]);
+  });
+
+  it("groups by month and sorts reverse", () => {
+    const records = [
+      { dt: "2025-01-05", wt: 70 },
+      { dt: "2025-01-15", wt: 68 },
+      { dt: "2025-02-01", wt: 67 },
+    ];
+    const result = calcMonthlyStats(records);
+    expect(result.length).toBe(2);
+    expect(result[0].month).toBe("2025-02"); // most recent first
+    expect(result[1].month).toBe("2025-01");
+    expect(result[1].count).toBe(2);
+  });
+});
+
+describe("calcWeightTrend edge cases", () => {
+  it("returns null for single record", () => {
+    expect(calcWeightTrend([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns flat for stable weight", () => {
+    const today = new Date();
+    const records = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (6 - i));
+      return { dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, wt: 70 };
+    });
+    expect(calcWeightTrend(records)).toBe("flat");
+  });
+});
+
+describe("calcGoalPrediction edge cases", () => {
+  it("returns insufficient for single record", () => {
+    const result = calcGoalPrediction([{ dt: "2025-01-01", wt: 70 }], 65);
+    expect(result.insufficient).toBe(true);
+  });
+
+  it("returns achieved when already at goal", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }, { dt: "2025-01-10", wt: 65 }];
+    const result = calcGoalPrediction(records, 65);
+    expect(result).not.toBeNull();
+    expect(result.achieved).toBe(true);
+  });
+});
+
+describe("calcCalendarChangeMap edge cases", () => {
+  it("returns empty for single record", () => {
+    const map = calcCalendarChangeMap([{ dt: "2025-01-01", wt: 70 }]);
+    expect(Object.keys(map).length).toBe(0);
+  });
+
+  it("returns changes for consecutive records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69 },
+    ];
+    const map = calcCalendarChangeMap(records);
+    expect(map["2025-01-02"]).toBeCloseTo(-1.0, 1);
+  });
+});
+
+describe("validateProfile edge cases", () => {
+  it("defaults gender to unspecified for invalid value", () => {
+    const result = validateProfile({ name: "test", heightCm: "170", age: "30", gender: "invalid" });
+    expect(result.valid).toBe(true);
+    expect(result.profile.gender).toBe("unspecified");
+  });
+
+  it("truncates name to 40 characters", () => {
+    const longName = "a".repeat(50);
+    const result = validateProfile({ name: longName, heightCm: "", age: "", gender: "male" });
+    expect(result.valid).toBe(true);
+    expect(result.profile.name.length).toBe(40);
+  });
+
+  it("rejects height below min", () => {
+    const result = validateProfile({ name: "", heightCm: "79", age: "", gender: "" });
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects age above max", () => {
+    const result = validateProfile({ name: "", heightCm: "", age: "121", gender: "" });
+    expect(result.valid).toBe(false);
   });
 });
