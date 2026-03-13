@@ -614,6 +614,58 @@ export function filterRecordsByDateRange(records, fromDate, toDate) {
   });
 }
 
+export function parseCSVImport(csvText) {
+  if (!csvText || !csvText.trim()) return { records: [], errors: [] };
+  const lines = csvText.trim().split(/\r?\n/);
+  if (lines.length < 2) return { records: [], errors: ["No data rows found"] };
+
+  // Skip header row
+  const records = [];
+  const errors = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    // Simple CSV parse (handles quoted fields)
+    const fields = [];
+    let current = "";
+    let inQuotes = false;
+    for (let j = 0; j < line.length; j++) {
+      const ch = line[j];
+      if (inQuotes) {
+        if (ch === '"' && line[j + 1] === '"') { current += '"'; j++; }
+        else if (ch === '"') { inQuotes = false; }
+        else { current += ch; }
+      } else {
+        if (ch === '"') { inQuotes = true; }
+        else if (ch === ",") { fields.push(current); current = ""; }
+        else { current += ch; }
+      }
+    }
+    fields.push(current);
+
+    const dt = fields[0]?.trim();
+    const wt = Number(fields[1]?.trim());
+
+    if (!dt || !/^\d{4}-\d{2}-\d{2}$/.test(dt)) {
+      errors.push(`Row ${i + 1}: invalid date "${fields[0]}"`);
+      continue;
+    }
+    if (!Number.isFinite(wt) || wt < WEIGHT_RANGE.min || wt > WEIGHT_RANGE.max) {
+      errors.push(`Row ${i + 1}: invalid weight "${fields[1]}"`);
+      continue;
+    }
+
+    const bmi = fields[2]?.trim() ? Number(fields[2]) : null;
+    const bf = fields[3]?.trim() ? Number(fields[3]) : null;
+    const note = fields[5]?.trim() || "";
+
+    records.push({ dt, wt, bmi: Number.isFinite(bmi) ? bmi : null, bf: Number.isFinite(bf) ? bf : null, source: "import", note: note.slice(0, 100), createdAt: new Date().toISOString() });
+  }
+
+  return { records, errors };
+}
+
 export function exportRecordsToCSV(records) {
   if (!records.length) return "";
   const header = "date,weight,bmi,bodyFat,source,note";

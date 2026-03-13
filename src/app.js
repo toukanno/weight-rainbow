@@ -39,6 +39,7 @@ import {
   calcWeightStability,
   detectMilestone,
   exportRecordsToCSV,
+  parseCSVImport,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -626,7 +627,7 @@ function render() {
                 ${recordDateFrom || recordDateTo ? `<button type="button" class="btn ghost" data-action="clear-date-range">${t("records.clearRange")}</button>` : ""}
               </div>
             </div>` : ""}
-            ${state.records.length ? `<div class="export-row"><button type="button" class="btn ghost" data-action="export-csv">📥 ${t("export.csv")}</button></div>` : ""}
+            ${state.records.length ? `<div class="export-row"><button type="button" class="btn ghost" data-action="export-csv">📥 ${t("export.csv")}</button><button type="button" class="btn ghost" data-action="import-csv">📤 ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>` : `<div class="export-row"><button type="button" class="btn ghost" data-action="import-csv">📤 ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>`}
             <div class="record-list">
               ${state.records.length ? renderRecordList() : `<div class="empty-state">
                 <div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">📊</div>
@@ -1137,6 +1138,10 @@ function bindEvents() {
   app.querySelector('[data-action="export-excel"]')?.addEventListener("click", exportExcel);
   app.querySelector('[data-action="export-csv"]')?.addEventListener("click", exportCSV);
   app.querySelector('[data-action="export-text"]')?.addEventListener("click", exportText);
+  app.querySelector('[data-action="import-csv"]')?.addEventListener("click", () => {
+    document.getElementById("csvImportInput")?.click();
+  });
+  document.getElementById("csvImportInput")?.addEventListener("change", handleCSVImport);
   app.querySelector('[data-action="save-goal"]')?.addEventListener("click", saveGoal);
   app.querySelector('[data-action="save-reminder"]')?.addEventListener("click", saveReminder);
   app.querySelector('[data-action="google-backup"]')?.addEventListener("click", googleBackup);
