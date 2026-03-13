@@ -1402,9 +1402,9 @@
         transition: height 0.3s ease;
       }
       .season-bar-label {
-        font-size: 0.6rem;
+        font-size: 0.65rem;
         color: var(--text);
-        opacity: 0.7;
+        opacity: 0.75;
         margin-top: 2px;
       }
       .season-info {
@@ -1443,13 +1443,13 @@
         min-height: 2px;
       }
       .dist-bar-label {
-        font-size: 0.55rem;
+        font-size: 0.65rem;
         color: var(--text);
-        opacity: 0.6;
+        opacity: 0.75;
         margin-top: 2px;
       }
       .dist-current-marker {
-        font-size: 0.55rem;
+        font-size: 0.65rem;
         color: var(--accent);
         font-weight: 600;
         position: absolute;
@@ -1498,9 +1498,9 @@
         min-height: 2px;
       }
       .dow-change-label {
-        font-size: 0.6rem;
+        font-size: 0.65rem;
         color: var(--text);
-        opacity: 0.7;
+        opacity: 0.75;
       }
       .dow-change-info {
         margin-top: 6px;
@@ -1750,6 +1750,60 @@
         font-size: 0.75rem;
         color: var(--text);
         opacity: 0.7;
+      }
+
+      .progress-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .progress-period {
+        font-size: 0.75rem;
+        color: var(--text);
+        opacity: 0.7;
+        margin-top: 4px;
+      }
+      .progress-compare {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 8px;
+      }
+      .progress-half {
+        text-align: center;
+      }
+      .progress-half-label {
+        display: block;
+        font-size: 0.72rem;
+        color: var(--text);
+      }
+      .progress-half-value {
+        display: block;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--accent);
+      }
+      .progress-arrow {
+        font-size: 1.2rem;
+        color: var(--text);
+      }
+      .progress-stats {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.8rem;
+        color: var(--text);
+        margin-top: 8px;
+      }
+      .progress-trend {
+        font-weight: 600;
+        font-size: 0.85rem;
+        margin-top: 4px;
+      }
+      .progress-stability {
+        font-size: 0.78rem;
+        color: var(--text);
+        opacity: 0.8;
       }
 
       .analytics-toggle-section {
@@ -3609,7 +3663,7 @@
           background: white !important;
           color: #222 !important;
         }
-        .hero, .panel, .hero-card {
+        .hero, .panel, .hero-card, .stat-card, .record-item {
           box-shadow: none !important;
           border: 1px solid #ccc !important;
           backdrop-filter: none !important;

@@ -2244,6 +2244,45 @@ function calcWeightConfidence(records) {
     dataPoints: n
   };
 }
+function calcProgressSummary(records) {
+  if (records.length < 4) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const mid = Math.floor(sorted.length / 2);
+  const firstHalf = sorted.slice(0, mid);
+  const secondHalf = sorted.slice(mid);
+  const avg = (arr) => Math.round(arr.reduce((s, r) => s + r.wt, 0) / arr.length * 10) / 10;
+  const stdDev = (arr) => {
+    const mean = arr.reduce((s, r) => s + r.wt, 0) / arr.length;
+    return Math.round(Math.sqrt(arr.reduce((s, r) => s + (r.wt - mean) ** 2, 0) / arr.length) * 100) / 100;
+  };
+  const firstAvg = avg(firstHalf);
+  const secondAvg = avg(secondHalf);
+  const change = Math.round((secondAvg - firstAvg) * 10) / 10;
+  const firstStd = stdDev(firstHalf);
+  const secondStd = stdDev(secondHalf);
+  const moreStable = secondStd < firstStd;
+  const firstWt = sorted[0].wt;
+  const lastWt = sorted[sorted.length - 1].wt;
+  const totalChange = Math.round((lastWt - firstWt) * 10) / 10;
+  const totalDays = Math.max(1, Math.round((new Date(sorted[sorted.length - 1].dt) - new Date(sorted[0].dt)) / 864e5));
+  let trend = "stable";
+  if (change < -0.5) trend = "improving";
+  else if (change > 0.5) trend = "gaining";
+  return {
+    firstHalfAvg: firstAvg,
+    secondHalfAvg: secondAvg,
+    change,
+    trend,
+    moreStable,
+    firstStd,
+    secondStd,
+    totalChange,
+    totalDays,
+    firstDate: sorted[0].dt,
+    lastDate: sorted[sorted.length - 1].dt,
+    recordCount: sorted.length
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -2821,7 +2860,18 @@ var translations = {
     "forecast.medium": "\u4E2D\u7A0B\u5EA6",
     "forecast.low": "\u4F4E\u3044",
     "forecast.rate": "\u9031{rate}kg",
-    "forecast.hint": "\u904E\u53BB{n}\u4EF6\u306E\u30C7\u30FC\u30BF\u306B\u57FA\u3065\u304F\u4E88\u6E2C\uFF0895%\u4FE1\u983C\u533A\u9593\uFF09"
+    "forecast.hint": "\u904E\u53BB{n}\u4EF6\u306E\u30C7\u30FC\u30BF\u306B\u57FA\u3065\u304F\u4E88\u6E2C\uFF0895%\u4FE1\u983C\u533A\u9593\uFF09",
+    "progress.title": "\u9032\u6357\u30B5\u30DE\u30EA\u30FC",
+    "progress.period": "{from} \u301C {to}\uFF08{days}\u65E5\u9593\u30FB{count}\u4EF6\uFF09",
+    "progress.firstHalf": "\u524D\u534A\u5E73\u5747",
+    "progress.secondHalf": "\u5F8C\u534A\u5E73\u5747",
+    "progress.change": "\u5909\u5316",
+    "progress.totalChange": "\u5408\u8A08\u5909\u52D5: {change}kg",
+    "progress.improving": "\u6539\u5584\u50BE\u5411\u3067\u3059\uFF01",
+    "progress.gaining": "\u5897\u52A0\u50BE\u5411\u3067\u3059",
+    "progress.stable": "\u5B89\u5B9A\u3057\u3066\u3044\u307E\u3059",
+    "progress.moreStable": "\u5B89\u5B9A\u5EA6\u304C\u5411\u4E0A\u3057\u3066\u3044\u307E\u3059",
+    "progress.lessStable": "\u5909\u52D5\u304C\u5927\u304D\u304F\u306A\u3063\u3066\u3044\u307E\u3059"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3397,7 +3447,18 @@ var translations = {
     "forecast.medium": "Medium",
     "forecast.low": "Low",
     "forecast.rate": "{rate}kg/week",
-    "forecast.hint": "Based on {n} data points (95% confidence interval)"
+    "forecast.hint": "Based on {n} data points (95% confidence interval)",
+    "progress.title": "Progress Summary",
+    "progress.period": "{from} \u2013 {to} ({days} days, {count} records)",
+    "progress.firstHalf": "First half avg",
+    "progress.secondHalf": "Second half avg",
+    "progress.change": "Change",
+    "progress.totalChange": "Total change: {change}kg",
+    "progress.improving": "Improving!",
+    "progress.gaining": "Gaining",
+    "progress.stable": "Stable",
+    "progress.moreStable": "Stability improved",
+    "progress.lessStable": "More variable recently"
   }
 };
 function createTranslator(language) {
@@ -24489,6 +24550,7 @@ function render() {
                 ${renderWeightRegression()}
                 ${renderBMIHistory()}
                 ${renderWeightHeatmap()}
+                ${renderProgressSummary()}
               </div>
               ` : ""}
             </div>
@@ -25423,6 +25485,37 @@ function renderWeightConfidence() {
     </div>
   `;
 }
+function renderProgressSummary() {
+  const ps = calcProgressSummary(state.records);
+  if (!ps) return "";
+  const trendColors = { improving: "#10b981", gaining: "#ef4444", stable: "#3b82f6" };
+  const trendColor = trendColors[ps.trend] || trendColors.stable;
+  const changeStr = ps.change > 0 ? "+" + ps.change : String(ps.change);
+  const totalStr = ps.totalChange > 0 ? "+" + ps.totalChange : String(ps.totalChange);
+  return `
+    <div class="progress-section">
+      <div class="helper">${t("progress.title")}</div>
+      <div class="progress-period">${t("progress.period").replace("{from}", ps.firstDate).replace("{to}", ps.lastDate).replace("{days}", ps.totalDays).replace("{count}", ps.recordCount)}</div>
+      <div class="progress-compare">
+        <div class="progress-half">
+          <span class="progress-half-label">${t("progress.firstHalf")}</span>
+          <span class="progress-half-value">${ps.firstHalfAvg}kg</span>
+        </div>
+        <div class="progress-arrow">${ps.change < 0 ? "\u2193" : ps.change > 0 ? "\u2191" : "\u2192"}</div>
+        <div class="progress-half">
+          <span class="progress-half-label">${t("progress.secondHalf")}</span>
+          <span class="progress-half-value">${ps.secondHalfAvg}kg</span>
+        </div>
+      </div>
+      <div class="progress-stats">
+        <span>${t("progress.change")}: <strong style="color:${trendColor}">${changeStr}kg</strong></span>
+        <span>${t("progress.totalChange").replace("{change}", totalStr)}</span>
+      </div>
+      <div class="progress-trend" style="color:${trendColor}">${t("progress." + ps.trend)}</div>
+      <div class="progress-stability">${ps.moreStable ? t("progress.moreStable") : t("progress.lessStable")}</div>
+    </div>
+  `;
+}
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -25649,9 +25742,9 @@ function bindEvents() {
   });
   app.querySelector("#recordSearch")?.addEventListener("input", (e) => {
     recordSearchQuery = e.target.value;
+    const pos = e.target.selectionStart;
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
-      const pos = e.target.selectionStart;
       render();
       const input = document.getElementById("recordSearch");
       if (input) {

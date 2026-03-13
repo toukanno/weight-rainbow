@@ -76,6 +76,7 @@ import {
   calcWeightHeatmap,
   calcStreakRewards,
   calcWeightConfidence,
+  calcProgressSummary,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -710,6 +711,7 @@ function render() {
                 ${renderWeightRegression()}
                 ${renderBMIHistory()}
                 ${renderWeightHeatmap()}
+                ${renderProgressSummary()}
               </div>
               ` : ""}
             </div>
@@ -1687,6 +1689,38 @@ function renderWeightConfidence() {
   `;
 }
 
+function renderProgressSummary() {
+  const ps = calcProgressSummary(state.records);
+  if (!ps) return "";
+  const trendColors = { improving: "#10b981", gaining: "#ef4444", stable: "#3b82f6" };
+  const trendColor = trendColors[ps.trend] || trendColors.stable;
+  const changeStr = ps.change > 0 ? "+" + ps.change : String(ps.change);
+  const totalStr = ps.totalChange > 0 ? "+" + ps.totalChange : String(ps.totalChange);
+  return `
+    <div class="progress-section">
+      <div class="helper">${t("progress.title")}</div>
+      <div class="progress-period">${t("progress.period").replace("{from}", ps.firstDate).replace("{to}", ps.lastDate).replace("{days}", ps.totalDays).replace("{count}", ps.recordCount)}</div>
+      <div class="progress-compare">
+        <div class="progress-half">
+          <span class="progress-half-label">${t("progress.firstHalf")}</span>
+          <span class="progress-half-value">${ps.firstHalfAvg}kg</span>
+        </div>
+        <div class="progress-arrow">${ps.change < 0 ? "↓" : ps.change > 0 ? "↑" : "→"}</div>
+        <div class="progress-half">
+          <span class="progress-half-label">${t("progress.secondHalf")}</span>
+          <span class="progress-half-value">${ps.secondHalfAvg}kg</span>
+        </div>
+      </div>
+      <div class="progress-stats">
+        <span>${t("progress.change")}: <strong style="color:${trendColor}">${changeStr}kg</strong></span>
+        <span>${t("progress.totalChange").replace("{change}", totalStr)}</span>
+      </div>
+      <div class="progress-trend" style="color:${trendColor}">${t("progress." + ps.trend)}</div>
+      <div class="progress-stability">${ps.moreStable ? t("progress.moreStable") : t("progress.lessStable")}</div>
+    </div>
+  `;
+}
+
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -1928,11 +1962,10 @@ function bindEvents() {
   });
   app.querySelector("#recordSearch")?.addEventListener("input", (e) => {
     recordSearchQuery = e.target.value;
+    const pos = e.target.selectionStart;
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
-      const pos = e.target.selectionStart;
       render();
-      // Restore focus and cursor position after render
       const input = document.getElementById("recordSearch");
       if (input) { input.focus(); input.selectionStart = input.selectionEnd = pos; }
     }, 150);

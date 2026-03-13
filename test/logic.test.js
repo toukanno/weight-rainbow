@@ -73,6 +73,7 @@ import {
   calcWeightHeatmap,
   calcStreakRewards,
   calcWeightConfidence,
+  calcProgressSummary,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -4717,6 +4718,55 @@ describe("calcWeightConfidence", () => {
     expect(["high", "medium", "low"]).toContain(result.confidence);
     expect(typeof result.r2).toBe("number");
     expect(result.dataPoints).toBe(20);
+  });
+});
+
+describe("calcProgressSummary", () => {
+  it("returns null for fewer than 4 records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69 },
+      { dt: "2025-01-03", wt: 68 },
+    ];
+    expect(calcProgressSummary(records)).toBeNull();
+  });
+
+  it("detects improving trend", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-01-02", wt: 74 },
+      { dt: "2025-01-03", wt: 72 },
+      { dt: "2025-01-04", wt: 71 },
+    ];
+    const result = calcProgressSummary(records);
+    expect(result).not.toBeNull();
+    expect(result.trend).toBe("improving");
+    expect(result.change).toBeLessThan(0);
+    expect(result.firstHalfAvg).toBeGreaterThan(result.secondHalfAvg);
+  });
+
+  it("detects gaining trend", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 65 },
+      { dt: "2025-01-02", wt: 66 },
+      { dt: "2025-01-03", wt: 68 },
+      { dt: "2025-01-04", wt: 69 },
+    ];
+    const result = calcProgressSummary(records);
+    expect(result.trend).toBe("gaining");
+    expect(result.change).toBeGreaterThan(0);
+  });
+
+  it("detects stable weight", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70.0 },
+      { dt: "2025-01-02", wt: 70.1 },
+      { dt: "2025-01-03", wt: 70.0 },
+      { dt: "2025-01-04", wt: 70.2 },
+    ];
+    const result = calcProgressSummary(records);
+    expect(result.trend).toBe("stable");
+    expect(result.recordCount).toBe(4);
   });
 });
 
