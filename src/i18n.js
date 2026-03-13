@@ -773,6 +773,8 @@ export const translations = {
     "scenario.weeks": "{weeks}週間",
     "scenario.perWeek": "/週",
     "a11y.skipToEntry": "入力フォームへスキップ",
+    "streakCal.title": "記録カレンダー（12週間）",
+    "streakCal.summary": "{recorded}日 / {total}日 記録済み",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1548,6 +1550,8 @@ export const translations = {
     "scenario.weeks": "{weeks} weeks",
     "scenario.perWeek": "/wk",
     "a11y.skipToEntry": "Skip to entry form",
+    "streakCal.title": "Streak Calendar (12 weeks)",
+    "streakCal.summary": "{recorded} / {total} days recorded",
   },
 };
 

@@ -2746,6 +2746,34 @@
         font-size: 0.75rem;
       }
 
+      .sc-section {
+        margin-top: 14px;
+      }
+      .sc-grid {
+        display: flex;
+        gap: 3px;
+        margin: 8px 0;
+        overflow-x: auto;
+      }
+      .sc-week {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .sc-day {
+        width: 12px;
+        height: 12px;
+        border-radius: 2px;
+        background: var(--border);
+      }
+      .sc-day.filled {
+        background: var(--ok);
+      }
+      .sc-day.sc-today {
+        outline: 2px solid var(--accent);
+        outline-offset: -1px;
+      }
+
       .success-section {
         margin-top: 14px;
         text-align: center;
@@ -3300,13 +3328,13 @@
 
       .stat-grid {
         grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 10px;
-        margin-top: 14px;
+        gap: 12px;
+        margin-top: 18px;
       }
 
       .stat-card {
         padding: 14px;
-        border-radius: 16px;
+        border-radius: 20px;
         background: var(--surface);
         border: 1px solid var(--border);
         transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -3331,7 +3359,7 @@
       }
 
       .record-list {
-        margin-top: 16px;
+        margin-top: 18px;
         display: flex;
         flex-direction: column;
         gap: 8px;
@@ -3341,7 +3369,7 @@
 
       .record-item {
         padding: 14px 16px;
-        border-radius: 16px;
+        border-radius: 20px;
         background: var(--surface);
         border: 1px solid var(--border);
         transition: transform 0.15s ease, box-shadow 0.15s ease;
