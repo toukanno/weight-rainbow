@@ -2374,6 +2374,39 @@
         font-weight: 500;
       }
 
+      .dash-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .dash-card {
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+        border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+        text-align: center;
+      }
+      .dash-label {
+        font-size: 0.7rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+      }
+      .dash-value {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: var(--text);
+      }
+      .dash-value small {
+        font-size: 0.7rem;
+        font-weight: 400;
+        opacity: 0.7;
+      }
+      .dash-up .dash-value { color: var(--accent-2); }
+      .dash-down .dash-value { color: var(--accent-3); }
+
       .mpr-section {
         margin-top: 14px;
       }

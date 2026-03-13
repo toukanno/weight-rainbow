@@ -721,6 +721,12 @@ export const translations = {
     "ai.prediction.achieved": "🎉 目標達成済み！",
     "ai.prediction.noTrend": "トレンドデータが不足しています",
     "ai.prediction.insufficient": "現在のペースでは目標達成が難しいです。ペースを見直しましょう",
+    "dash.weight": "最新体重",
+    "dash.change": "前回比",
+    "dash.bmi": "BMI",
+    "dash.streak": "連続記録",
+    "dash.days": "{n}日",
+    "dash.noRecord": "未記録",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1444,6 +1450,12 @@ export const translations = {
     "ai.prediction.achieved": "🎉 Goal achieved!",
     "ai.prediction.noTrend": "Not enough trend data yet",
     "ai.prediction.insufficient": "Current pace is insufficient. Consider adjusting your approach",
+    "dash.weight": "Latest",
+    "dash.change": "Change",
+    "dash.bmi": "BMI",
+    "dash.streak": "Streak",
+    "dash.days": "{n} days",
+    "dash.noRecord": "No record",
   },
 };
 

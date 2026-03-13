@@ -95,6 +95,7 @@ import {
   calcMultiPeriodRate,
   calcRecordMilestone,
   generateAICoachReport,
+  calcDashboardSummary,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -712,6 +713,7 @@ function render() {
                 : t("insight.weekSame")
               }</div>` : ""}
             </div>` : ""}
+            ${renderDashboard()}
             ${renderDataFreshness()}
             ${renderRecordMilestone()}
             ${renderTrendIndicator()}
@@ -2096,6 +2098,33 @@ function renderIdealWeight() {
   `;
 }
 
+function renderDashboard() {
+  const dash = calcDashboardSummary(state.records, Number(state.profile.heightCm));
+  if (!dash) return "";
+  const changeSign = dash.change > 0 ? "+" : "";
+  const changeCls = dash.change < 0 ? "dash-down" : dash.change > 0 ? "dash-up" : "";
+  return `
+    <div class="dash-grid">
+      <div class="dash-card">
+        <div class="dash-label">${t("dash.weight")}</div>
+        <div class="dash-value">${dash.weight.toFixed(1)}<small>kg</small></div>
+      </div>
+      <div class="dash-card ${changeCls}">
+        <div class="dash-label">${t("dash.change")}</div>
+        <div class="dash-value">${changeSign}${dash.change.toFixed(1)}<small>kg</small></div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-label">${t("dash.bmi")}</div>
+        <div class="dash-value">${dash.bmi !== null ? dash.bmi.toFixed(1) : "—"}</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-label">${t("dash.streak")}</div>
+        <div class="dash-value">${t("dash.days").replace("{n}", dash.streak)}</div>
+      </div>
+    </div>
+  `;
+}
+
 function renderDataFreshness() {
   const fresh = calcDataFreshness(state.records);
   if (!fresh) return "";
@@ -3275,7 +3304,7 @@ function handleCSVImport(e) {
     }
     merged = trimRecords(merged);
     state.records = merged;
-    persist();
+    if (!persist()) { setStatus(t("status.storageError"), "error"); e.target.value = ""; return; }
     let msg = t("import.csv.success").replace("{count}", records.length);
     if (errors.length) {
       msg += " " + t("import.csv.errors").replace("{count}", errors.length);

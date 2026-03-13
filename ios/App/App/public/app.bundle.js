@@ -2940,6 +2940,38 @@ function generateWeeklyReport(records, goalWeight, profile) {
     range: Math.round((thisMax - thisMin) * 10) / 10
   };
 }
+function calcDashboardSummary(records, heightCm) {
+  if (records.length === 0) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1];
+  const prev = sorted.length >= 2 ? sorted[sorted.length - 2] : null;
+  const change = prev ? Math.round((latest.wt - prev.wt) * 10) / 10 : 0;
+  let bmi = null;
+  if (heightCm && heightCm > 0) {
+    const hm = heightCm / 100;
+    bmi = Math.round(latest.wt / (hm * hm) * 10) / 10;
+  }
+  const now = /* @__PURE__ */ new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const dates = new Set(sorted.map((r) => r.dt));
+  let streak = 0;
+  const d = new Date(now);
+  if (!dates.has(todayStr)) {
+    d.setDate(d.getDate() - 1);
+    const yStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (!dates.has(yStr)) return { weight: latest.wt, change, bmi, streak: 0, date: latest.dt };
+  }
+  while (true) {
+    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (dates.has(ds)) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return { weight: latest.wt, change, bmi, streak, date: latest.dt };
+}
 
 // src/i18n.js
 var translations = {
@@ -25500,6 +25532,7 @@ function render() {
               <div class="helper">${t("insight.bestDay").replace("{day}", t("day." + insight.bestDay))}</div>
               ${insight.weekComparison !== null ? `<div class="helper">${insight.weekComparison > 0.05 ? t("insight.weekUp").replace("{diff}", insight.weekComparison.toFixed(1)) : insight.weekComparison < -0.05 ? t("insight.weekDown").replace("{diff}", insight.weekComparison.toFixed(1)) : t("insight.weekSame")}</div>` : ""}
             </div>` : ""}
+            ${renderDashboard()}
             ${renderDataFreshness()}
             ${renderRecordMilestone()}
             ${renderTrendIndicator()}
@@ -26817,6 +26850,32 @@ function renderIdealWeight() {
     </div>
   `;
 }
+function renderDashboard() {
+  const dash = calcDashboardSummary(state.records, Number(state.profile.heightCm));
+  if (!dash) return "";
+  const changeSign = dash.change > 0 ? "+" : "";
+  const changeCls = dash.change < 0 ? "dash-down" : dash.change > 0 ? "dash-up" : "";
+  return `
+    <div class="dash-grid">
+      <div class="dash-card">
+        <div class="dash-label">${t("dash.weight")}</div>
+        <div class="dash-value">${dash.weight.toFixed(1)}<small>kg</small></div>
+      </div>
+      <div class="dash-card ${changeCls}">
+        <div class="dash-label">${t("dash.change")}</div>
+        <div class="dash-value">${changeSign}${dash.change.toFixed(1)}<small>kg</small></div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-label">${t("dash.bmi")}</div>
+        <div class="dash-value">${dash.bmi !== null ? dash.bmi.toFixed(1) : "\u2014"}</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-label">${t("dash.streak")}</div>
+        <div class="dash-value">${t("dash.days").replace("{n}", dash.streak)}</div>
+      </div>
+    </div>
+  `;
+}
 function renderDataFreshness() {
   const fresh = calcDataFreshness(state.records);
   if (!fresh) return "";
@@ -27896,7 +27955,11 @@ function handleCSVImport(e) {
     }
     merged = trimRecords(merged);
     state.records = merged;
-    persist();
+    if (!persist()) {
+      setStatus(t("status.storageError"), "error");
+      e.target.value = "";
+      return;
+    }
     let msg = t("import.csv.success").replace("{count}", records.length);
     if (errors.length) {
       msg += " " + t("import.csv.errors").replace("{count}", errors.length);

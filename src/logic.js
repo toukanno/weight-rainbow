@@ -2652,3 +2652,45 @@ function generateWeeklyReport(records, goalWeight, profile) {
     range: Math.round((thisMax - thisMin) * 10) / 10,
   };
 }
+
+/**
+ * Build a compact dashboard summary with the 4 most important metrics.
+ * Returns { weight, change, bmi, streak } or null if no records.
+ */
+export function calcDashboardSummary(records, heightCm) {
+  if (records.length === 0) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1];
+  const prev = sorted.length >= 2 ? sorted[sorted.length - 2] : null;
+  const change = prev ? Math.round((latest.wt - prev.wt) * 10) / 10 : 0;
+
+  let bmi = null;
+  if (heightCm && heightCm > 0) {
+    const hm = heightCm / 100;
+    bmi = Math.round((latest.wt / (hm * hm)) * 10) / 10;
+  }
+
+  // Calculate current streak
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const dates = new Set(sorted.map((r) => r.dt));
+  let streak = 0;
+  const d = new Date(now);
+  // Check if today or yesterday has a record to start counting
+  if (!dates.has(todayStr)) {
+    d.setDate(d.getDate() - 1);
+    const yStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (!dates.has(yStr)) return { weight: latest.wt, change, bmi, streak: 0, date: latest.dt };
+  }
+  while (true) {
+    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (dates.has(ds)) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+
+  return { weight: latest.wt, change, bmi, streak, date: latest.dt };
+}
