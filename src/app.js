@@ -107,6 +107,7 @@ import {
   calcWeightJourney,
   calcGoalScenarios,
   calcStreakCalendar,
+  calcMovingAvgCrossover,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -1568,15 +1569,15 @@ function renderSeasonality() {
     const diff = avg - s.overallAvg;
     const pct = Math.min(100, Math.max(5, 50 + diff * 10));
     const color = i === s.lightestMonth ? "var(--ok)" : i === s.heaviestMonth ? "var(--warn)" : "var(--accent)";
-    return `<div class="season-bar-wrap"><div class="season-bar" style="height:${pct}%;background:${color};" title="${avg}kg"></div><div class="season-bar-label">${t("season.month." + (i + 1))}</div></div>`;
+    return `<div class="season-bar-wrap"><div class="season-bar" style="height:${pct}%;background:${color};" title="${Number(avg).toFixed(1)}kg"></div><div class="season-bar-label">${t("season.month." + (i + 1))}</div></div>`;
   }).join("");
   return `
     <div class="season-section">
       <div class="helper">${t("season.title")}</div>
       <div class="season-chart">${bars}</div>
       <div class="season-info">
-        <div>${t("season.lightest").replace("{month}", s.lightestMonth + 1).replace("{avg}", s.monthAvgs[s.lightestMonth])}</div>
-        <div>${t("season.heaviest").replace("{month}", s.heaviestMonth + 1).replace("{avg}", s.monthAvgs[s.heaviestMonth])}</div>
+        <div>${t("season.lightest").replace("{month}", s.lightestMonth + 1).replace("{avg}", Number(s.monthAvgs[s.lightestMonth]).toFixed(1))}</div>
+        <div>${t("season.heaviest").replace("{month}", s.heaviestMonth + 1).replace("{avg}", Number(s.monthAvgs[s.heaviestMonth]).toFixed(1))}</div>
         <div>${t("season.range").replace("{range}", s.seasonalRange)}</div>
       </div>
       <div class="helper hint-small">${t("season.hint")}</div>
@@ -1623,7 +1624,7 @@ function renderDayOfWeekChange() {
     const isBest = i === d.bestDay;
     const isWorst = i === d.worstDay;
     return `<div class="dow-change-col ${isBest ? "best" : ""} ${isWorst ? "worst" : ""}">
-      <div class="dow-change-val" style="color:${color};">${avg > 0 ? "+" : ""}${avg}</div>
+      <div class="dow-change-val" style="color:${color};">${avg > 0 ? "+" : ""}${Number(avg).toFixed(2)}</div>
       <div class="dow-change-bar-track"><div class="dow-change-bar" style="height:${pct}%;background:${color};"></div></div>
       <div class="dow-change-label">${t("day." + i)}</div>
     </div>`;

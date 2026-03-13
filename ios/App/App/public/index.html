@@ -5127,6 +5127,10 @@
       }
 
       @media print {
+        *, *::before, *::after {
+          animation: none !important;
+          transition: none !important;
+        }
         body {
           background: white !important;
           color: #222 !important;

@@ -4081,7 +4081,18 @@ var translations = {
     "scenario.perWeek": "/\u9031",
     "a11y.skipToEntry": "\u5165\u529B\u30D5\u30A9\u30FC\u30E0\u3078\u30B9\u30AD\u30C3\u30D7",
     "streakCal.title": "\u8A18\u9332\u30AB\u30EC\u30F3\u30C0\u30FC\uFF0812\u9031\u9593\uFF09",
-    "streakCal.summary": "{recorded}\u65E5 / {total}\u65E5 \u8A18\u9332\u6E08\u307F"
+    "streakCal.summary": "{recorded}\u65E5 / {total}\u65E5 \u8A18\u9332\u6E08\u307F",
+    "cross.title": "\u30C8\u30EC\u30F3\u30C9\u8EE2\u63DB\u30B7\u30B0\u30CA\u30EB",
+    "cross.current": "\u73FE\u5728\u306E\u30C8\u30EC\u30F3\u30C9",
+    "cross.uptrend": "\u4E0A\u6607\u50BE\u5411\uFF08\u77ED\u671FMA > \u9577\u671FMA\uFF09",
+    "cross.downtrend": "\u4E0B\u964D\u50BE\u5411\uFF08\u77ED\u671FMA < \u9577\u671FMA\uFF09",
+    "cross.neutral": "\u6A2A\u3070\u3044",
+    "cross.shortMA": "7\u65E5\u79FB\u52D5\u5E73\u5747",
+    "cross.longMA": "30\u65E5\u79FB\u52D5\u5E73\u5747",
+    "cross.golden": "\u30B4\u30FC\u30EB\u30C7\u30F3\u30AF\u30ED\u30B9\uFF08\u4E0B\u964D\u8EE2\u63DB\uFF09",
+    "cross.death": "\u30C7\u30C3\u30C9\u30AF\u30ED\u30B9\uFF08\u4E0A\u6607\u8EE2\u63DB\uFF09",
+    "cross.nodata": "30\u4EF6\u4EE5\u4E0A\u306E\u8A18\u9332\u304C\u5FC5\u8981\u3067\u3059",
+    "cross.none": "\u8EE2\u63DB\u30B7\u30B0\u30CA\u30EB\u306A\u3057"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4871,7 +4882,18 @@ var translations = {
     "scenario.perWeek": "/wk",
     "a11y.skipToEntry": "Skip to entry form",
     "streakCal.title": "Streak Calendar (12 weeks)",
-    "streakCal.summary": "{recorded} / {total} days recorded"
+    "streakCal.summary": "{recorded} / {total} days recorded",
+    "cross.title": "Trend Crossover Signals",
+    "cross.current": "Current Trend",
+    "cross.uptrend": "Uptrend (Short MA > Long MA)",
+    "cross.downtrend": "Downtrend (Short MA < Long MA)",
+    "cross.neutral": "Neutral",
+    "cross.shortMA": "7-day MA",
+    "cross.longMA": "30-day MA",
+    "cross.golden": "Golden Cross (downtrend shift)",
+    "cross.death": "Death Cross (uptrend shift)",
+    "cross.nodata": "Need 30+ records",
+    "cross.none": "No crossover signals"
   }
 };
 function createTranslator(language) {
@@ -26760,15 +26782,15 @@ function renderSeasonality() {
     const diff = avg - s.overallAvg;
     const pct = Math.min(100, Math.max(5, 50 + diff * 10));
     const color = i === s.lightestMonth ? "var(--ok)" : i === s.heaviestMonth ? "var(--warn)" : "var(--accent)";
-    return `<div class="season-bar-wrap"><div class="season-bar" style="height:${pct}%;background:${color};" title="${avg}kg"></div><div class="season-bar-label">${t("season.month." + (i + 1))}</div></div>`;
+    return `<div class="season-bar-wrap"><div class="season-bar" style="height:${pct}%;background:${color};" title="${Number(avg).toFixed(1)}kg"></div><div class="season-bar-label">${t("season.month." + (i + 1))}</div></div>`;
   }).join("");
   return `
     <div class="season-section">
       <div class="helper">${t("season.title")}</div>
       <div class="season-chart">${bars}</div>
       <div class="season-info">
-        <div>${t("season.lightest").replace("{month}", s.lightestMonth + 1).replace("{avg}", s.monthAvgs[s.lightestMonth])}</div>
-        <div>${t("season.heaviest").replace("{month}", s.heaviestMonth + 1).replace("{avg}", s.monthAvgs[s.heaviestMonth])}</div>
+        <div>${t("season.lightest").replace("{month}", s.lightestMonth + 1).replace("{avg}", Number(s.monthAvgs[s.lightestMonth]).toFixed(1))}</div>
+        <div>${t("season.heaviest").replace("{month}", s.heaviestMonth + 1).replace("{avg}", Number(s.monthAvgs[s.heaviestMonth]).toFixed(1))}</div>
         <div>${t("season.range").replace("{range}", s.seasonalRange)}</div>
       </div>
       <div class="helper hint-small">${t("season.hint")}</div>
@@ -26813,7 +26835,7 @@ function renderDayOfWeekChange() {
     const isBest = i === d.bestDay;
     const isWorst = i === d.worstDay;
     return `<div class="dow-change-col ${isBest ? "best" : ""} ${isWorst ? "worst" : ""}">
-      <div class="dow-change-val" style="color:${color};">${avg > 0 ? "+" : ""}${avg}</div>
+      <div class="dow-change-val" style="color:${color};">${avg > 0 ? "+" : ""}${Number(avg).toFixed(2)}</div>
       <div class="dow-change-bar-track"><div class="dow-change-bar" style="height:${pct}%;background:${color};"></div></div>
       <div class="dow-change-label">${t("day." + i)}</div>
     </div>`;
