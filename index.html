@@ -484,12 +484,14 @@
         background: rgba(255, 255, 255, 0.54);
         color: var(--muted);
         border: 1px solid rgba(120, 130, 180, 0.12);
+        transition: all 0.25s ease;
       }
 
       .tab.active {
         background: linear-gradient(135deg, var(--accent), var(--accent-2));
         color: white;
         box-shadow: 0 14px 30px color-mix(in srgb, var(--accent) 22%, transparent);
+        transform: scale(1.02);
       }
 
       .btn {
@@ -653,6 +655,12 @@
 
       .record-item {
         padding: 14px 16px;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      .record-item:hover {
+        transform: translateX(4px);
+        box-shadow: -4px 0 0 var(--accent);
       }
 
       .record-row {
@@ -1272,6 +1280,7 @@
         font-weight: 600;
         font-size: 14px;
         cursor: pointer;
+        transition: all 0.2s ease;
       }
 
       .summary-tab.active {

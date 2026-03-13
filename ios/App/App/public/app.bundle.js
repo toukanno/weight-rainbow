@@ -1408,6 +1408,8 @@
       "entry.source.manual": "Manual",
       "entry.source.voice": "Voice",
       "entry.source.photo": "Photo",
+      "entry.note": "Note",
+      "entry.noteHint": "Diet, exercise, etc. (up to 100 characters)",
       "weight.invalid": "Enter weight as a valid number",
       "weight.range": "Weight must be between 20kg and 300kg",
       "profile.heightRange": "Height must be between 80cm and 250cm",
@@ -23128,12 +23130,15 @@
     const updated = upsertRecord(state.records, record);
     state.records = trimRecords(updated, MAX_RECORDS);
     quickWeight = weightResult.weight;
+    imagePreviewUrl = "";
+    detectedWeights = [];
+    activeEntryMode = "manual";
     state.form = {
       ...state.form,
       weight: weightResult.weight.toFixed(1),
       pickerInt: Math.floor(weightResult.weight),
       pickerDec: Math.round((weightResult.weight - Math.floor(weightResult.weight)) * 10),
-      imageName: source === "photo" ? state.form.imageName : "",
+      imageName: "",
       bodyFat: "",
       note: ""
     };
@@ -23238,9 +23243,9 @@
     if (candidates.length > 0) {
       setStatus(t("status.photoReady"));
     } else if (supportsTextDetection) {
-      setStatus(t("status.photoNoDetection"), "error");
+      setStatus(t("entry.photoFallback"));
     } else {
-      setStatus(t("status.photoReady"));
+      setStatus(t("entry.photoFallback"));
     }
     render();
   }
@@ -23404,17 +23409,23 @@
     writeFileSync(wb, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.xlsx`);
     setStatus(t("export.excelDone"));
   }
+  function csvEscape(value) {
+    const str = String(value ?? "");
+    if (/[,"\r\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
+    return str;
+  }
   function exportCSV() {
     if (!state.records.length) {
       setStatus(t("records.empty"), "error");
       return;
     }
-    const header = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source")].join(",");
+    const headers = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source"), t("entry.note")];
+    const header = headers.map(csvEscape).join(",");
     const lines = state.records.map(
-      (r) => `${r.dt},${r.wt},${r.bmi ?? ""},${r.bf ?? ""},${r.source}`
+      (r) => [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source, r.note ?? ""].map(csvEscape).join(",")
     );
-    const csv = [header, ...lines].join("\n");
-    downloadFile(csv, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.csv`, "text/csv");
+    const csv = "\uFEFF" + [header, ...lines].join("\r\n");
+    downloadFile(csv, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
     setStatus(t("export.csvDone"));
   }
   function exportText() {

@@ -319,6 +319,8 @@ export const translations = {
     "entry.source.manual": "Manual",
     "entry.source.voice": "Voice",
     "entry.source.photo": "Photo",
+    "entry.note": "Note",
+    "entry.noteHint": "Diet, exercise, etc. (up to 100 characters)",
     "weight.invalid": "Enter weight as a valid number",
     "weight.range": "Weight must be between 20kg and 300kg",
     "profile.heightRange": "Height must be between 80cm and 250cm",

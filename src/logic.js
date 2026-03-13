@@ -220,6 +220,39 @@ export function createDefaultSettings() {
   };
 }
 
+export function calcWeightComparison(records) {
+  if (records.length < 2) return null;
+  const latest = records[records.length - 1];
+  const result = {};
+
+  const findRecordNearDate = (targetDate) => {
+    const target = targetDate.toISOString().slice(0, 10);
+    // Find closest record on or before target date
+    let closest = null;
+    for (const r of records) {
+      if (r.dt <= target) closest = r;
+    }
+    return closest;
+  };
+
+  const periods = [
+    { key: "week", days: 7 },
+    { key: "month", days: 30 },
+    { key: "quarter", days: 90 },
+  ];
+
+  for (const { key, days } of periods) {
+    const pastDate = new Date(Date.now() - days * 86400000);
+    const pastRecord = findRecordNearDate(pastDate);
+    if (pastRecord && pastRecord.dt !== latest.dt) {
+      const diff = Math.round((latest.wt - pastRecord.wt) * 10) / 10;
+      result[key] = { diff, from: pastRecord.wt, to: latest.wt, fromDate: pastRecord.dt };
+    }
+  }
+
+  return Object.keys(result).length ? result : null;
+}
+
 export function calcDailyDiff(records) {
   if (records.length < 2) return null;
   const today = new Date().toISOString().slice(0, 10);

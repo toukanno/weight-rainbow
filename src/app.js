@@ -6,6 +6,7 @@ import {
   buildRecord,
   calcStats,
   calcDailyDiff,
+  calcWeightComparison,
   calcGoalProgress,
   calcGoalPrediction,
   calcPeriodSummary,
@@ -1093,12 +1094,15 @@ function saveRecordWithWeight(weight, source) {
   const updated = upsertRecord(state.records, record);
   state.records = trimRecords(updated, MAX_RECORDS);
   quickWeight = weightResult.weight;
+  imagePreviewUrl = "";
+  detectedWeights = [];
+  activeEntryMode = "manual";
   state.form = {
     ...state.form,
     weight: weightResult.weight.toFixed(1),
     pickerInt: Math.floor(weightResult.weight),
     pickerDec: Math.round((weightResult.weight - Math.floor(weightResult.weight)) * 10),
-    imageName: source === "photo" ? state.form.imageName : "",
+    imageName: "",
     bodyFat: "",
     note: "",
   };
@@ -1221,9 +1225,9 @@ async function handlePhotoSelection(event) {
   if (candidates.length > 0) {
     setStatus(t("status.photoReady"));
   } else if (supportsTextDetection) {
-    setStatus(t("status.photoNoDetection"), "error");
+    setStatus(t("entry.photoFallback"));
   } else {
-    setStatus(t("status.photoReady"));
+    setStatus(t("entry.photoFallback"));
   }
   render();
 }
@@ -1406,6 +1410,7 @@ function exportExcel() {
     [t("export.header.bmi")]: r.bmi ?? "",
     [t("export.header.bodyFat")]: r.bf ?? "",
     [t("export.header.source")]: r.source,
+    [t("entry.note")]: r.note ?? "",
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -1414,17 +1419,24 @@ function exportExcel() {
   setStatus(t("export.excelDone"));
 }
 
+function csvEscape(value) {
+  const str = String(value ?? "");
+  if (/[,"\r\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
+  return str;
+}
+
 function exportCSV() {
   if (!state.records.length) {
     setStatus(t("records.empty"), "error");
     return;
   }
-  const header = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source")].join(",");
+  const headers = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source"), t("entry.note")];
+  const header = headers.map(csvEscape).join(",");
   const lines = state.records.map((r) =>
-    `${r.dt},${r.wt},${r.bmi ?? ""},${r.bf ?? ""},${r.source}`
+    [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source, r.note ?? ""].map(csvEscape).join(",")
   );
-  const csv = [header, ...lines].join("\n");
-  downloadFile(csv, `weight-rainbow-${new Date().toISOString().slice(0, 10)}.csv`, "text/csv");
+  const csv = "\uFEFF" + [header, ...lines].join("\r\n");
+  downloadFile(csv, `weight-rainbow-${new Date().toISOString().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
   setStatus(t("export.csvDone"));
 }
 
@@ -1586,6 +1598,8 @@ function resetData() {
   quickWeight = 65.0;
   voiceTranscript = "";
   detectedWeights = [];
+  imagePreviewUrl = "";
+  activeEntryMode = "manual";
 
   try {
     window.localStorage.removeItem(STORAGE_KEYS.records);
