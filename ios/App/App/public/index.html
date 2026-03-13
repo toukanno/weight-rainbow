@@ -3098,6 +3098,41 @@
       .mp-has-pattern { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
       .mp-stable { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
 
+      .sf-section { margin-top: 14px; }
+      .sf-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px;
+        margin: 8px 0;
+      }
+      .sf-cell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 10px 6px;
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--accent) 8%, transparent);
+      }
+      .sf-highlight {
+        background: color-mix(in srgb, var(--ok) 15%, transparent);
+      }
+      .sf-num { font-size: 1.5rem; font-weight: 800; }
+      .sf-label { font-size: 0.72rem; color: var(--muted); text-align: center; }
+      .sf-detail {
+        display: flex;
+        justify-content: center;
+        gap: 16px;
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+      .sf-info {
+        text-align: center;
+        font-size: 0.72rem;
+        color: var(--muted);
+        margin-top: 6px;
+        font-style: italic;
+      }
+
       .wc-section { margin-top: 14px; }
       .wc-header, .wc-row {
         display: grid;

@@ -118,6 +118,7 @@ import {
   calcBodyFatTrend,
   calcDailyTarget,
   calcMonthPhaseAvg,
+  calcStreakFreezeInfo,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -169,6 +170,7 @@ let rainbowDetail = "";
 let summaryPeriod = "week";
 let chartPeriod = "all"; // "7", "30", "90", "all"
 let reminderTimer = null;
+let lastNotifiedDate = "";
 let calendarYear = new Date().getFullYear();
 let calendarMonth = new Date().getMonth();
 let showMonthlyStats = false;
@@ -813,6 +815,7 @@ function render() {
             ${renderGoalProgressRing()}
             ${renderDailyTarget()}
             ${renderMonthPhaseAvg()}
+            ${renderStreakFreeze()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -2742,7 +2745,7 @@ function renderBodyFatTrend() {
 }
 
 function renderDailyTarget() {
-  const goalWeight = Number(state.profile.goalWeight);
+  const goalWeight = Number(state.settings.goalWeight);
   if (!goalWeight || state.records.length < 2) return "";
   const data = calcDailyTarget(state.records, goalWeight);
   if (!data) return "";
@@ -2814,6 +2817,36 @@ function renderMonthPhaseAvg() {
       <div class="helper">${t("mphase.title")}</div>
       ${rows}
       <div class="mp-status ${statusCls}">${statusMsg}</div>
+    </div>
+  `;
+}
+
+function renderStreakFreeze() {
+  const data = calcStreakFreezeInfo(state.records);
+  if (data.currentStreak < 3 && data.freezesEarned === 0) return "";
+
+  return `
+    <div class="sf-section">
+      <div class="helper">${t("sfreeze.title")}</div>
+      <div class="sf-grid">
+        <div class="sf-cell">
+          <span class="sf-num">${data.currentStreak}</span>
+          <span class="sf-label">${t("sfreeze.current")}</span>
+        </div>
+        <div class="sf-cell">
+          <span class="sf-num">${data.longestStreak}</span>
+          <span class="sf-label">${t("sfreeze.longest")}</span>
+        </div>
+        <div class="sf-cell sf-highlight">
+          <span class="sf-num">${data.freezesAvailable}</span>
+          <span class="sf-label">${t("sfreeze.available")}</span>
+        </div>
+      </div>
+      <div class="sf-detail">
+        <span>${t("sfreeze.earned")}: ${data.freezesEarned}</span>
+        <span>${t("sfreeze.used")}: ${data.freezesUsed}</span>
+      </div>
+      <div class="sf-info">${t("sfreeze.info")}</div>
     </div>
   `;
 }
@@ -3982,7 +4015,11 @@ async function toggleVoiceInput() {
     render();
   };
 
-  recognition.start();
+  try { recognition.start(); } catch {
+    voiceActive = false;
+    setStatus(t("entry.voiceUnsupported"), "error");
+    render();
+  }
 }
 
 async function toggleNativeVoiceInput() {
@@ -4795,8 +4832,6 @@ function initReminder() {
 
   if (!state.settings.reminderEnabled || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
-
-  let lastNotifiedDate = "";
 
   reminderTimer = setInterval(() => {
     const now = new Date();

@@ -1334,6 +1334,9 @@ function parseCSVImport(csvText) {
       field += ch;
     }
   }
+  if (inQuotes) {
+    return { records: [], errors: ["CSV contains unterminated quoted field"] };
+  }
   fields.push(field);
   allRows.push(fields);
   if (allRows.length < 2) return { records: [], errors: ["No data rows found"] };
@@ -3687,6 +3690,56 @@ function calcMonthPhaseAvg(records) {
     hasPattern: maxVar > 0.3
   };
 }
+function calcStreakFreezeInfo(records) {
+  if (!records || records.length < 2) {
+    return { freezesEarned: 0, freezesUsed: 0, freezesAvailable: 0, currentStreak: records?.length || 0, longestStreak: records?.length || 0 };
+  }
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const dateSet = new Set(sorted.map((r) => r.dt));
+  let currentStreak = 1;
+  let longestStreak = 1;
+  let totalConsecutiveDays = 0;
+  let freezesUsed = 0;
+  let streak = 1;
+  let frozeInCurrentStreak = false;
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = /* @__PURE__ */ new Date(sorted[i - 1].dt + "T00:00:00");
+    const curr = /* @__PURE__ */ new Date(sorted[i].dt + "T00:00:00");
+    const diffDays = Math.round((curr - prev) / 864e5);
+    if (diffDays === 1) {
+      streak++;
+    } else if (diffDays === 2 && !frozeInCurrentStreak) {
+      const freezesAtPoint = Math.floor(streak / 7);
+      if (freezesAtPoint > 0) {
+        freezesUsed++;
+        frozeInCurrentStreak = true;
+        streak++;
+      } else {
+        totalConsecutiveDays += streak;
+        longestStreak = Math.max(longestStreak, streak);
+        streak = 1;
+        frozeInCurrentStreak = false;
+      }
+    } else {
+      totalConsecutiveDays += streak;
+      longestStreak = Math.max(longestStreak, streak);
+      streak = 1;
+      frozeInCurrentStreak = false;
+    }
+  }
+  totalConsecutiveDays += streak;
+  longestStreak = Math.max(longestStreak, streak);
+  currentStreak = streak;
+  const freezesEarned = Math.floor(totalConsecutiveDays / 7);
+  const freezesAvailable = Math.max(0, freezesEarned - freezesUsed);
+  return {
+    freezesEarned,
+    freezesUsed,
+    freezesAvailable,
+    currentStreak,
+    longestStreak
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -5472,7 +5525,15 @@ var translations = {
     "mphase.change": "Diff",
     "mphase.pattern": "Monthly variation detected",
     "mphase.noPattern": "Stable throughout month",
-    "mphase.records": "records"
+    "mphase.records": "records",
+    "sfreeze.title": "Streak Freeze",
+    "sfreeze.earned": "Earned",
+    "sfreeze.used": "Used",
+    "sfreeze.available": "Available",
+    "sfreeze.current": "Current streak",
+    "sfreeze.longest": "Longest streak",
+    "sfreeze.days": "days",
+    "sfreeze.info": "Earn 1 freeze for every 7 consecutive days"
   }
 };
 function createTranslator(language) {
@@ -26029,6 +26090,7 @@ var rainbowDetail = "";
 var summaryPeriod = "week";
 var chartPeriod = "all";
 var reminderTimer = null;
+var lastNotifiedDate = "";
 var calendarYear = (/* @__PURE__ */ new Date()).getFullYear();
 var calendarMonth = (/* @__PURE__ */ new Date()).getMonth();
 var showMonthlyStats = false;
@@ -26624,6 +26686,7 @@ function render() {
             ${renderGoalProgressRing()}
             ${renderDailyTarget()}
             ${renderMonthPhaseAvg()}
+            ${renderStreakFreeze()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -28419,7 +28482,7 @@ function renderBodyFatTrend() {
   `;
 }
 function renderDailyTarget() {
-  const goalWeight = Number(state.profile.goalWeight);
+  const goalWeight = Number(state.settings.goalWeight);
   if (!goalWeight || state.records.length < 2) return "";
   const data = calcDailyTarget(state.records, goalWeight);
   if (!data) return "";
@@ -28481,6 +28544,34 @@ function renderMonthPhaseAvg() {
       <div class="helper">${t("mphase.title")}</div>
       ${rows}
       <div class="mp-status ${statusCls}">${statusMsg}</div>
+    </div>
+  `;
+}
+function renderStreakFreeze() {
+  const data = calcStreakFreezeInfo(state.records);
+  if (data.currentStreak < 3 && data.freezesEarned === 0) return "";
+  return `
+    <div class="sf-section">
+      <div class="helper">${t("sfreeze.title")}</div>
+      <div class="sf-grid">
+        <div class="sf-cell">
+          <span class="sf-num">${data.currentStreak}</span>
+          <span class="sf-label">${t("sfreeze.current")}</span>
+        </div>
+        <div class="sf-cell">
+          <span class="sf-num">${data.longestStreak}</span>
+          <span class="sf-label">${t("sfreeze.longest")}</span>
+        </div>
+        <div class="sf-cell sf-highlight">
+          <span class="sf-num">${data.freezesAvailable}</span>
+          <span class="sf-label">${t("sfreeze.available")}</span>
+        </div>
+      </div>
+      <div class="sf-detail">
+        <span>${t("sfreeze.earned")}: ${data.freezesEarned}</span>
+        <span>${t("sfreeze.used")}: ${data.freezesUsed}</span>
+      </div>
+      <div class="sf-info">${t("sfreeze.info")}</div>
     </div>
   `;
 }
@@ -29566,7 +29657,13 @@ async function toggleVoiceInput() {
     voiceActive = false;
     render();
   };
-  recognition.start();
+  try {
+    recognition.start();
+  } catch {
+    voiceActive = false;
+    setStatus(t("entry.voiceUnsupported"), "error");
+    render();
+  }
 }
 async function toggleNativeVoiceInput() {
   try {
@@ -30310,7 +30407,6 @@ function initReminder() {
   }
   if (!state.settings.reminderEnabled || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
-  let lastNotifiedDate = "";
   reminderTimer = setInterval(() => {
     const now = /* @__PURE__ */ new Date();
     const todayStr = todayLocal();

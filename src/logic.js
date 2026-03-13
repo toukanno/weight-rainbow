@@ -674,6 +674,9 @@ export function parseCSVImport(csvText) {
       field += ch;
     }
   }
+  if (inQuotes) {
+    return { records: [], errors: ["CSV contains unterminated quoted field"] };
+  }
   fields.push(field);
   allRows.push(fields);
 
@@ -3589,5 +3592,124 @@ export function calcDailyTarget(records, goalWeight) {
     isAbove,
     isBelow,
     onTarget,
+  };
+}
+
+/**
+ * Calculate average weight grouped by month phase (early/mid/late/end).
+ * Helps identify monthly patterns (e.g. payday eating, end-of-month stress).
+ * Returns { phases: [{ label, days, avg, count, change }], hasPattern }
+ */
+export function calcMonthPhaseAvg(records) {
+  if (!records || records.length < 14) return null;
+
+  const phases = [
+    { label: "early", days: "1-7", sums: 0, counts: 0, weights: [] },
+    { label: "mid", days: "8-14", sums: 0, counts: 0, weights: [] },
+    { label: "late", days: "15-21", sums: 0, counts: 0, weights: [] },
+    { label: "end", days: "22-31", sums: 0, counts: 0, weights: [] },
+  ];
+
+  for (const r of records) {
+    const day = parseInt(r.dt.slice(8), 10);
+    let idx;
+    if (day <= 7) idx = 0;
+    else if (day <= 14) idx = 1;
+    else if (day <= 21) idx = 2;
+    else idx = 3;
+    phases[idx].sums += r.wt;
+    phases[idx].counts += 1;
+    phases[idx].weights.push(r.wt);
+  }
+
+  const result = phases.map((p, i) => ({
+    label: p.label,
+    days: p.days,
+    avg: p.counts > 0 ? +(p.sums / p.counts).toFixed(1) : null,
+    count: p.counts,
+    change: null,
+  }));
+
+  // Calculate change relative to the first phase
+  if (result[0].avg !== null) {
+    for (let i = 0; i < result.length; i++) {
+      if (result[i].avg !== null) {
+        result[i].change = +(result[i].avg - result[0].avg).toFixed(2);
+      }
+    }
+  }
+
+  // Determine if there's a noticeable pattern (max variation > 0.3kg)
+  const avgs = result.filter((r) => r.avg !== null).map((r) => r.avg);
+  const maxVar = avgs.length > 1 ? Math.max(...avgs) - Math.min(...avgs) : 0;
+
+  return {
+    phases: result,
+    hasPattern: maxVar > 0.3,
+  };
+}
+
+/**
+ * Calculate streak freeze info — gamification feature.
+ * Users earn 1 "freeze day" for every 7 consecutive recording days.
+ * A freeze day allows skipping one day without breaking the streak.
+ * Returns { freezesEarned, freezesUsed, freezesAvailable, currentStreak, longestStreak }
+ */
+export function calcStreakFreezeInfo(records) {
+  if (!records || records.length < 2) {
+    return { freezesEarned: 0, freezesUsed: 0, freezesAvailable: 0, currentStreak: records?.length || 0, longestStreak: records?.length || 0 };
+  }
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const dateSet = new Set(sorted.map((r) => r.dt));
+
+  // Walk through dates to find streaks and gaps
+  let currentStreak = 1;
+  let longestStreak = 1;
+  let totalConsecutiveDays = 0;
+  let freezesUsed = 0;
+  let streak = 1;
+  let frozeInCurrentStreak = false;
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(sorted[i - 1].dt + "T00:00:00");
+    const curr = new Date(sorted[i].dt + "T00:00:00");
+    const diffDays = Math.round((curr - prev) / 86400000);
+
+    if (diffDays === 1) {
+      streak++;
+    } else if (diffDays === 2 && !frozeInCurrentStreak) {
+      // 1-day gap — use a freeze if available
+      const freezesAtPoint = Math.floor(streak / 7);
+      if (freezesAtPoint > 0) {
+        freezesUsed++;
+        frozeInCurrentStreak = true;
+        streak++;
+      } else {
+        totalConsecutiveDays += streak;
+        longestStreak = Math.max(longestStreak, streak);
+        streak = 1;
+        frozeInCurrentStreak = false;
+      }
+    } else {
+      totalConsecutiveDays += streak;
+      longestStreak = Math.max(longestStreak, streak);
+      streak = 1;
+      frozeInCurrentStreak = false;
+    }
+  }
+  totalConsecutiveDays += streak;
+  longestStreak = Math.max(longestStreak, streak);
+  currentStreak = streak;
+
+  const freezesEarned = Math.floor(totalConsecutiveDays / 7);
+  const freezesAvailable = Math.max(0, freezesEarned - freezesUsed);
+
+  return {
+    freezesEarned,
+    freezesUsed,
+    freezesAvailable,
+    currentStreak,
+    longestStreak,
   };
 }
