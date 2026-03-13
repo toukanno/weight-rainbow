@@ -92,6 +92,7 @@ import {
   calcMultiPeriodRate,
   calcRecordMilestone,
   generateAICoachReport,
+  calcDashboardSummary,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -7183,5 +7184,45 @@ describe("calcStats edge cases", () => {
     expect(r.minWeight).toBe(75);
     expect(r.maxWeight).toBe(75);
     expect(r.change).toBe(0);
+  });
+});
+
+describe("calcDashboardSummary", () => {
+  it("returns null for empty records", () => {
+    expect(calcDashboardSummary([], 170)).toBeNull();
+  });
+
+  it("returns correct weight and change", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69.5 },
+    ];
+    const result = calcDashboardSummary(records, 170);
+    expect(result.weight).toBe(69.5);
+    expect(result.change).toBe(-0.5);
+  });
+
+  it("calculates BMI when height provided", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    const result = calcDashboardSummary(records, 170);
+    expect(result.bmi).toBeCloseTo(24.2, 0);
+  });
+
+  it("returns null BMI when no height", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    const result = calcDashboardSummary(records, 0);
+    expect(result.bmi).toBeNull();
+  });
+
+  it("calculates streak for today's record", () => {
+    const now = new Date();
+    const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const d1 = new Date(now); d1.setDate(d1.getDate() - 1);
+    const records = [
+      { dt: fmt(d1), wt: 70 },
+      { dt: fmt(now), wt: 69.5 },
+    ];
+    const result = calcDashboardSummary(records, 170);
+    expect(result.streak).toBe(2);
   });
 });
