@@ -225,6 +225,62 @@ export function calcGoalProgress(records, goalWeight) {
   return { percent, remaining };
 }
 
+export function calcStreak(records) {
+  if (!records.length) return 0;
+  const dates = new Set(records.map((r) => r.dt));
+  let streak = 0;
+  const today = new Date();
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    if (dates.has(dateStr)) {
+      streak++;
+    } else {
+      // Allow gap of today if no record yet today
+      if (i === 0) continue;
+      break;
+    }
+  }
+  return streak;
+}
+
+export function calcWeightTrend(records, days = 7) {
+  if (records.length < 2) return null;
+  const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const recent = records.filter((r) => r.dt >= cutoff);
+  if (recent.length < 2) return null;
+  const first = recent[0].wt;
+  const last = recent[recent.length - 1].wt;
+  const diff = Math.round((last - first) * 10) / 10;
+  if (diff < -0.1) return "down";
+  if (diff > 0.1) return "up";
+  return "flat";
+}
+
+export function calcGoalPrediction(records, goalWeight) {
+  if (!records.length || !Number.isFinite(goalWeight)) return null;
+  const latestWeight = records[records.length - 1].wt;
+  if (latestWeight <= goalWeight) return { achieved: true, days: 0 };
+
+  // Use last 14 days of data to calculate average daily change
+  const cutoff = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+  const recent = records.filter((r) => r.dt >= cutoff);
+  if (recent.length < 2) return { achieved: false, insufficient: true };
+
+  const firstRecent = recent[0].wt;
+  const lastRecent = recent[recent.length - 1].wt;
+  const daySpan = Math.max(1, (new Date(recent[recent.length - 1].dt) - new Date(recent[0].dt)) / 86400000);
+  const dailyChange = (lastRecent - firstRecent) / daySpan;
+
+  if (dailyChange >= 0) return { achieved: false, noTrend: true };
+
+  const remaining = latestWeight - goalWeight;
+  const days = Math.ceil(remaining / Math.abs(dailyChange));
+  const predictedDate = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+  return { achieved: false, days, predictedDate };
+}
+
 export function calcPeriodSummary(records, days) {
   const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
   const filtered = records.filter((r) => r.dt >= cutoff);

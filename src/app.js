@@ -7,7 +7,10 @@ import {
   calcStats,
   calcDailyDiff,
   calcGoalProgress,
+  calcGoalPrediction,
   calcPeriodSummary,
+  calcStreak,
+  calcWeightTrend,
   createDefaultProfile,
   createDefaultSettings,
   extractWeightCandidates,
@@ -30,6 +33,7 @@ const isNativePlatform = Capacitor.isNativePlatform();
 const BrowserSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const supportsSpeech = isNativePlatform || Boolean(BrowserSpeechRecognition);
 const supportsTextDetection = "TextDetector" in window;
+// supportsTextDetection controls OCR availability
 
 let state = loadState();
 let t = createTranslator(state.settings.language);
@@ -159,8 +163,11 @@ function render() {
   const dailyDiff = calcDailyDiff(state.records);
   const goalWeight = Number(state.settings.goalWeight);
   const goalProgress = calcGoalProgress(state.records, goalWeight);
+  const goalPrediction = calcGoalPrediction(state.records, goalWeight);
   const periodDays = summaryPeriod === "week" ? 7 : 30;
   const periodSummary = calcPeriodSummary(state.records, periodDays);
+  const streak = calcStreak(state.records);
+  const trend = calcWeightTrend(state.records);
   const bmiStatus = stats?.latestBMI ? t(getBMIStatus(stats.latestBMI)) : t("bmi.unknown");
   const previewWeightResult = validateWeight(state.form.weight);
   const currentBMI = previewWeightResult.valid && state.profile.heightCm
@@ -186,6 +193,8 @@ function render() {
               <span class="pill">${t("badge.local")}</span>
               <span class="pill">${t("badge.free")}</span>
               <span class="pill">${t("badge.safe")}</span>
+              ${streak > 0 ? `<span class="streak-badge${streak >= 7 ? " rainbow" : ""}">🔥 ${streak}${t("streak.days")}</span>` : ""}
+              ${trend ? `<span class="trend-indicator ${trend}">${trend === "down" ? "📉" : trend === "up" ? "📈" : "➡️"} ${t("trend." + trend)}</span>` : ""}
             </div>
           </div>
           <div class="hero-card">
@@ -227,7 +236,13 @@ function render() {
                 <div class="progress-text">
                   <span>${t("goal.progress")}</span>
                   <span>${goalProgress.remaining <= 0 ? t("goal.achieved") : `${t("goal.remaining")}: ${goalProgress.remaining.toFixed(1)}kg`}</span>
-                </div>`
+                </div>
+                ${goalPrediction ? `<div class="prediction-text">${t("goal.prediction")}: ${
+                  goalPrediction.achieved ? t("goal.predictionAchieved")
+                  : goalPrediction.insufficient ? t("goal.predictionInsufficient")
+                  : goalPrediction.noTrend ? t("goal.predictionNoTrend")
+                  : `${t("goal.predictionDays").replace("{days}", goalPrediction.days)} (${goalPrediction.predictedDate})`
+                }</div>` : ""}`
               : `<div class="diff-value zero">--</div>
                 <div class="diff-detail">${t("goal.notSet")}</div>`}
           </div>
@@ -343,10 +358,13 @@ function render() {
                     ? `<button type="button" class="btn secondary" data-action="pick-native-photo">${t("entry.photoSelect")}</button>`
                     : `<label class="btn secondary" for="photoInput">${t("entry.photoSelect")}</label>
                   <input id="photoInput" type="file" accept="image/*" capture="environment" class="hidden" />`}
-                  <span class="helper">${supportsTextDetection ? "" : t("entry.photoFallback")}</span>
                 </div>
-                ${imagePreviewUrl ? `<img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" />` : ""}
+                ${imagePreviewUrl ? `
+                  <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" style="cursor: zoom-in;" data-action="zoom-photo" />
+                  ${!supportsTextDetection && !detectedWeights.length ? `<p class="helper" style="margin-top: 8px; text-align: center;">${t("photo.manualHint")}</p>` : ""}
+                ` : ""}
                 ${detectedWeights.length ? `<div style="margin-top: 12px;"><div class="helper">${t("entry.photoDetected")}</div><div class="chip-row" style="margin-top: 8px;">${detectedWeights.map((weight) => `<button type="button" class="chip" data-pick-weight="${weight}">${formatWeight(weight)}</button>`).join("")}</div></div>` : ""}
+                ${!supportsTextDetection && !imagePreviewUrl ? `<span class="helper">${t("entry.photoFallback")}</span>` : ""}
               </div>
 
               <div class="row">
@@ -471,9 +489,31 @@ function render() {
                 <input value="${APP_VERSION}" readonly />
               </div>
             </div>
-            <div class="row" style="margin-top: 16px;">
+            <div class="row" style="margin-top: 16px; grid-template-columns: 1fr 1fr auto;">
               <button type="button" class="btn secondary" data-action="export-data">${t("settings.export")}</button>
+              <label class="btn secondary" for="importInput" style="text-align:center;cursor:pointer;">${t("import.button")}</label>
+              <input id="importInput" type="file" accept=".json" class="hidden" />
               <button type="button" class="btn ghost" data-action="reset-data">${t("settings.reset")}</button>
+            </div>
+          </section>
+
+          <!-- Google Drive Sync -->
+          <section class="panel">
+            <div class="section-header">
+              <div>
+                <h2>${t("google.title")}</h2>
+                <p>${t("google.hint")}</p>
+              </div>
+            </div>
+            <div class="row" style="gap: 10px;">
+              <button type="button" class="google-btn" data-action="google-backup">
+                <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                ${t("google.backup")}
+              </button>
+              <button type="button" class="google-btn" data-action="google-restore">
+                <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                ${t("google.restore")}
+              </button>
             </div>
           </section>
 
@@ -512,7 +552,7 @@ function render() {
               </div>
             </div>
             <div style="margin-top: 12px;">
-              <button type="button" class="btn secondary" data-action="save-reminder">${t("reminder.saved").split("しました")[0] || t("goal.save")}</button>
+              <button type="button" class="btn secondary" data-action="save-reminder">${t("reminder.save")}</button>
             </div>
           </section>
 
@@ -620,7 +660,7 @@ function renderRecord(record) {
         <div class="tag">${t(`entry.source.${record.source}`)}</div>
         <div>
           <div class="record-weight">${formatWeight(record.wt)}</div>
-          <div class="helper">${escapeHtml(record.dt)}${record.imageName ? ` / ${escapeHtml(record.imageName)}` : ""}</div>
+          <div class="helper">${escapeAttr(record.dt)}${record.imageName ? ` / ${escapeAttr(record.imageName)}` : ""}</div>
         </div>
         <div class="helper">${t("bmi.title")}: ${bmiText}</div>
       </div>
@@ -667,6 +707,7 @@ function bindEvents() {
   app.querySelector('[data-action="pick-native-photo"]')?.addEventListener("click", pickNativePhoto);
   app.querySelector('[data-action="toggle-voice"]')?.addEventListener("click", toggleVoiceInput);
   app.querySelector("#photoInput")?.addEventListener("change", handlePhotoSelection);
+  app.querySelector("#importInput")?.addEventListener("change", handleImportData);
   app.querySelector('[data-action="quick-save"]')?.addEventListener("click", quickSaveRecord);
   app.querySelector('[data-action="toggle-records"]')?.addEventListener("click", () => {
     showAllRecords = !showAllRecords;
@@ -677,6 +718,9 @@ function bindEvents() {
   app.querySelector('[data-action="export-text"]')?.addEventListener("click", exportText);
   app.querySelector('[data-action="save-goal"]')?.addEventListener("click", saveGoal);
   app.querySelector('[data-action="save-reminder"]')?.addEventListener("click", saveReminder);
+  app.querySelector('[data-action="google-backup"]')?.addEventListener("click", googleBackup);
+  app.querySelector('[data-action="google-restore"]')?.addEventListener("click", googleRestore);
+  app.querySelector('[data-action="zoom-photo"]')?.addEventListener("click", handlePhotoZoom);
 
   app.querySelectorAll("[data-summary]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -886,8 +930,66 @@ function saveRecordWithWeight(weight, source) {
   setStatus(`${t("entry.saved")} · ${t("bmi.title")}: ${record.bmi ? record.bmi.toFixed(1) : t("bmi.unknown")}`);
 }
 
-function saveRecord() {
-  saveRecordFromPicker();
+async function preprocessImageForOCR(source) {
+  // Enhance contrast and sharpen to improve OCR accuracy for scale displays
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  let bitmap;
+  if (source instanceof Blob || source instanceof File) {
+    bitmap = await createImageBitmap(source);
+  } else {
+    bitmap = source;
+  }
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  ctx.drawImage(bitmap, 0, 0);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+
+  // Convert to grayscale and increase contrast
+  for (let i = 0; i < data.length; i += 4) {
+    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    // Increase contrast: shift values away from middle
+    const contrast = 1.5;
+    const adjusted = Math.min(255, Math.max(0, ((gray - 128) * contrast) + 128));
+    // Threshold for clearer text
+    const threshold = adjusted > 128 ? 255 : 0;
+    data[i] = threshold;
+    data[i + 1] = threshold;
+    data[i + 2] = threshold;
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return await createImageBitmap(canvas);
+}
+
+async function detectWeightsFromImage(source) {
+  if (!supportsTextDetection) return [];
+  try {
+    const detector = new window.TextDetector();
+    // Try with original image first
+    let bitmap;
+    if (source instanceof Blob || source instanceof File) {
+      bitmap = await createImageBitmap(source);
+    } else {
+      bitmap = source;
+    }
+    const textBlocks = await detector.detect(bitmap);
+    let extracted = textBlocks.map((block) => block.rawValue || "").join(" ");
+    let candidates = extractWeightCandidates(extracted);
+
+    // If no candidates found, try with preprocessed image
+    if (candidates.length === 0) {
+      const enhanced = await preprocessImageForOCR(source);
+      const enhancedBlocks = await detector.detect(enhanced);
+      extracted = enhancedBlocks.map((block) => block.rawValue || "").join(" ");
+      candidates = extractWeightCandidates(extracted);
+    }
+
+    return candidates;
+  } catch {
+    return [];
+  }
 }
 
 async function handlePhotoSelection(event) {
@@ -899,24 +1001,22 @@ async function handlePhotoSelection(event) {
   state.form.imageName = file.name;
   detectedWeights = [];
 
-  if (supportsTextDetection) {
-    try {
-      const detector = new window.TextDetector();
-      const bitmap = await createImageBitmap(file);
-      const textBlocks = await detector.detect(bitmap);
-      const extracted = textBlocks.map((block) => block.rawValue || "").join(" ");
-      const candidates = extractWeightCandidates(extracted);
-      detectedWeights = candidates;
-      const picked = pickWeightCandidate(candidates, state.records.at(-1)?.wt ?? null);
-      if (picked) {
-        state.form.weight = picked.toFixed(1);
-      }
-    } catch {
-      detectedWeights = [];
-    }
+  const candidates = await detectWeightsFromImage(file);
+  detectedWeights = candidates;
+  const picked = pickWeightCandidate(candidates, state.records.at(-1)?.wt ?? null);
+  if (picked) {
+    state.form.weight = picked.toFixed(1);
+    state.form.pickerInt = Math.floor(picked);
+    state.form.pickerDec = Math.round((picked - Math.floor(picked)) * 10);
   }
 
-  setStatus(t("status.photoReady"));
+  if (candidates.length > 0) {
+    setStatus(t("status.photoReady"));
+  } else if (supportsTextDetection) {
+    setStatus(t("status.photoNoDetection"), "error");
+  } else {
+    setStatus(t("status.photoReady"));
+  }
   render();
 }
 
@@ -946,19 +1046,17 @@ async function pickNativePhoto() {
     state.form.imageName = photo.path?.split("/").pop() || "camera-photo.jpeg";
     detectedWeights = [];
 
-    if (photo.webPath && supportsTextDetection) {
+    if (photo.webPath) {
       try {
         const response = await fetch(photo.webPath);
         const blob = await response.blob();
-        const bitmap = await createImageBitmap(blob);
-        const detector = new window.TextDetector();
-        const textBlocks = await detector.detect(bitmap);
-        const extracted = textBlocks.map((block) => block.rawValue || "").join(" ");
-        const candidates = extractWeightCandidates(extracted);
+        const candidates = await detectWeightsFromImage(blob);
         detectedWeights = candidates;
         const picked = pickWeightCandidate(candidates, state.records.at(-1)?.wt ?? null);
         if (picked) {
           state.form.weight = picked.toFixed(1);
+          state.form.pickerInt = Math.floor(picked);
+          state.form.pickerDec = Math.round((picked - Math.floor(picked)) * 10);
         }
       } catch {
         detectedWeights = [];
@@ -1147,14 +1245,25 @@ function spawnConfetti() {
   const container = document.getElementById("confettiContainer");
   if (!container) return;
   const colors = ["#ff0000", "#ff9a00", "#d0de21", "#4fdc4a", "#3fdad8", "#2f6bec", "#8b45db", "#ec4899"];
-  for (let i = 0; i < 40; i++) {
+  const shapes = ["circle", "square", "star"];
+  for (let i = 0; i < 80; i++) {
     const el = document.createElement("div");
     el.className = "confetti";
+    const shape = shapes[Math.floor(Math.random() * shapes.length)];
+    const size = 6 + Math.random() * 10;
     el.style.left = `${Math.random() * 100}%`;
-    el.style.top = `${Math.random() * 60}%`;
+    el.style.top = `${-10 + Math.random() * 20}%`;
+    el.style.width = `${size}px`;
+    el.style.height = `${size}px`;
     el.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-    el.style.animationDelay = `${Math.random() * 0.8}s`;
-    el.style.animationDuration = `${1 + Math.random() * 1}s`;
+    el.style.setProperty("--confetti-delay", `${Math.random() * 1.2}s`);
+    el.style.setProperty("--confetti-duration", `${1.5 + Math.random() * 2}s`);
+    if (shape === "circle") el.style.borderRadius = "50%";
+    else if (shape === "star") {
+      el.style.borderRadius = "2px";
+      el.style.transform = `rotate(${Math.random() * 360}deg)`;
+    }
+    el.style.opacity = `${0.7 + Math.random() * 0.3}`;
     container.appendChild(el);
   }
 }
@@ -1166,14 +1275,54 @@ function exportData() {
     settings: state.settings,
     records: state.records,
   };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `weight-rainbow-${new Date().toISOString().slice(0, 10)}.json`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  downloadFile(
+    JSON.stringify(payload, null, 2),
+    `weight-rainbow-${new Date().toISOString().slice(0, 10)}.json`,
+    "application/json"
+  );
   setStatus(t("status.exported"));
+}
+
+function handleImportData(event) {
+  const [file] = event.target.files || [];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!Array.isArray(data.records)) {
+        setStatus(t("import.invalid"), "error");
+        return;
+      }
+
+      if (!window.confirm(t("import.confirm"))) return;
+
+      // Merge records by date (imported records fill gaps, don't overwrite)
+      for (const record of data.records) {
+        if (record.dt && Number.isFinite(record.wt)) {
+          state.records = upsertRecord(state.records, record);
+        }
+      }
+      state.records = trimRecords(state.records, MAX_RECORDS);
+
+      // Import profile if present and current one is empty
+      if (data.profile && !state.profile.name) {
+        state.profile = { ...state.profile, ...data.profile };
+      }
+
+      if (!persist()) {
+        setStatus(t("status.storageError"), "error");
+        return;
+      }
+      quickWeight = state.records.length ? state.records[state.records.length - 1].wt : 65.0;
+      setStatus(t("import.success"));
+    } catch {
+      setStatus(t("import.invalid"), "error");
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = "";
 }
 
 function resetData() {
@@ -1216,8 +1365,16 @@ function drawChart() {
   const canvas = document.getElementById("chart");
   if (!canvas) return;
 
+  // Fix DPI scaling for retina displays
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
   const context = canvas.getContext("2d");
-  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.scale(dpr, dpr);
+
+  const width = rect.width;
+  const height = rect.height;
 
   if (!state.records.length) {
     context.fillStyle = "#7c7f9b";
@@ -1232,8 +1389,6 @@ function drawChart() {
   const range = max - min || 2;
   const padX = 40;
   const padY = 28;
-  const width = canvas.width;
-  const height = canvas.height;
 
   const toX = (index) => padX + (index / Math.max(state.records.length - 1, 1)) * (width - padX * 2);
   const toY = (weight) => height - padY - ((weight - min) / range) * (height - padY * 2);
@@ -1243,6 +1398,7 @@ function drawChart() {
   gradient.addColorStop(0.5, getComputedStyle(document.body).getPropertyValue("--accent-2"));
   gradient.addColorStop(1, getComputedStyle(document.body).getPropertyValue("--accent-3"));
 
+  // Grid lines
   context.strokeStyle = "rgba(120,130,180,0.18)";
   context.lineWidth = 1;
   for (let index = 0; index < 5; index += 1) {
@@ -1251,10 +1407,20 @@ function drawChart() {
     context.moveTo(padX, y);
     context.lineTo(width - padX, y);
     context.stroke();
+
+    // Y-axis labels
+    const weightLabel = (max - (index / 4) * range).toFixed(1);
+    context.fillStyle = getComputedStyle(document.body).getPropertyValue("--muted");
+    context.font = "11px sans-serif";
+    context.textAlign = "right";
+    context.fillText(weightLabel, padX - 6, y + 4);
   }
 
+  // Line chart with smooth curves
   context.strokeStyle = gradient;
-  context.lineWidth = 4;
+  context.lineWidth = 3;
+  context.lineJoin = "round";
+  context.lineCap = "round";
   context.beginPath();
   state.records.forEach((record, index) => {
     const x = toX(index);
@@ -1264,15 +1430,41 @@ function drawChart() {
   });
   context.stroke();
 
+  // Fill area under curve
+  const fillGradient = context.createLinearGradient(0, 0, 0, height);
+  fillGradient.addColorStop(0, getComputedStyle(document.body).getPropertyValue("--accent").trim() + "30");
+  fillGradient.addColorStop(1, "transparent");
+  context.fillStyle = fillGradient;
+  context.beginPath();
+  state.records.forEach((record, index) => {
+    const x = toX(index);
+    const y = toY(record.wt);
+    if (index === 0) context.moveTo(x, y);
+    else context.lineTo(x, y);
+  });
+  context.lineTo(toX(state.records.length - 1), height - padY);
+  context.lineTo(toX(0), height - padY);
+  context.closePath();
+  context.fill();
+
+  // Data points
   context.fillStyle = gradient;
   state.records.forEach((record, index) => {
     const x = toX(index);
     const y = toY(record.wt);
+    // White outline
     context.beginPath();
-    context.arc(x, y, 5, 0, Math.PI * 2);
+    context.arc(x, y, 6, 0, Math.PI * 2);
+    context.fillStyle = "white";
+    context.fill();
+    // Colored dot
+    context.beginPath();
+    context.arc(x, y, 4, 0, Math.PI * 2);
+    context.fillStyle = gradient;
     context.fill();
   });
 
+  // X-axis labels
   context.fillStyle = getComputedStyle(document.body).getPropertyValue("--muted");
   context.font = "12px sans-serif";
   context.textAlign = "center";
@@ -1296,9 +1488,6 @@ function escapeAttr(value) {
     .replace(/>/g, "&gt;");
 }
 
-function escapeHtml(value) {
-  return escapeAttr(value);
-}
 
 function saveGoal() {
   const raw = document.getElementById("goalWeight")?.value || "";
@@ -1377,16 +1566,135 @@ function initReminder() {
     const targetTime = state.settings.reminderTime || "21:00";
 
     if (currentTime === targetTime && lastNotifiedDate !== todayStr) {
+      lastNotifiedDate = todayStr;
       const hasRecordToday = state.records.some((r) => r.dt === todayStr);
       if (!hasRecordToday) {
         new Notification(t("app.title"), {
           body: t("reminder.body"),
           icon: "./assets/icon.svg",
         });
-        lastNotifiedDate = todayStr;
       }
     }
-  }, 30000); // Check every 30 seconds
+  }, 15000); // Check every 15 seconds for reliability
+}
+
+// --- Google Drive Integration ---
+const GOOGLE_CLIENT_ID = window.__GOOGLE_CLIENT_ID__ || "";
+const BACKUP_FILENAME = "weight-rainbow-backup.json";
+let gTokenClient = null;
+let gToken = null;
+
+function googleAuth() {
+  if (!GOOGLE_CLIENT_ID || typeof google === "undefined") return null;
+  if (gTokenClient) return gTokenClient;
+  gTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: "https://www.googleapis.com/auth/drive.file",
+    callback: () => {},
+  });
+  return gTokenClient;
+}
+
+function googleGetToken() {
+  return new Promise((resolve, reject) => {
+    const c = googleAuth();
+    if (!c) { reject(new Error("not_configured")); return; }
+    c.callback = (r) => {
+      if (r.error) reject(new Error(r.error));
+      else { gToken = r.access_token; resolve(r.access_token); }
+    };
+    if (gToken) resolve(gToken);
+    else c.requestAccessToken();
+  });
+}
+
+async function googleBackup() {
+  if (!GOOGLE_CLIENT_ID) { setStatus(t("google.notConfigured"), "error"); return; }
+  try {
+    const tk = await googleGetToken();
+    const data = {
+      exportedAt: new Date().toISOString(),
+      records: state.records.map((r) => ({
+        dt: r.dt, wt: r.wt, bmi: r.bmi, source: r.source, createdAt: r.createdAt,
+      })),
+      settings: {
+        goalWeight: state.settings.goalWeight,
+        theme: state.settings.theme,
+        language: state.settings.language,
+      },
+    };
+    const sr = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=name='${BACKUP_FILENAME}'+and+trashed=false&spaces=appDataFolder`,
+      { headers: { Authorization: `Bearer ${tk}` } },
+    );
+    const sd = await sr.json();
+    const ex = sd.files?.[0];
+    const bd = JSON.stringify(data, null, 2);
+    if (ex) {
+      await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${ex.id}?uploadType=media`,
+        { method: "PATCH", headers: { Authorization: `Bearer ${tk}`, "Content-Type": "application/json" }, body: bd },
+      );
+    } else {
+      const fm = new FormData();
+      fm.append(
+        "metadata",
+        new Blob([JSON.stringify({ name: BACKUP_FILENAME, mimeType: "application/json", parents: ["appDataFolder"] })], { type: "application/json" }),
+      );
+      fm.append("file", new Blob([bd], { type: "application/json" }));
+      await fetch(
+        "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+        { method: "POST", headers: { Authorization: `Bearer ${tk}` }, body: fm },
+      );
+    }
+    setStatus(t("google.backupDone"));
+  } catch (e) {
+    setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
+  }
+}
+
+async function googleRestore() {
+  if (!GOOGLE_CLIENT_ID) { setStatus(t("google.notConfigured"), "error"); return; }
+  try {
+    const tk = await googleGetToken();
+    const sr = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=name='${BACKUP_FILENAME}'+and+trashed=false&spaces=appDataFolder`,
+      { headers: { Authorization: `Bearer ${tk}` } },
+    );
+    const sd = await sr.json();
+    const f = sd.files?.[0];
+    if (!f) { setStatus(t("google.noData"), "error"); return; }
+    const cr = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
+      { headers: { Authorization: `Bearer ${tk}` } },
+    );
+    const bd = await cr.json();
+    if (!bd.records?.length) { setStatus(t("google.noData"), "error"); return; }
+    let m = [...state.records];
+    for (const r of bd.records) {
+      m = upsertRecord(m, { ...r, bmi: r.bmi ?? null, source: r.source || "manual", imageName: "" });
+    }
+    state.records = trimRecords(m, MAX_RECORDS);
+    if (bd.settings?.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;
+    if (!persist()) { setStatus(t("status.storageError"), "error"); return; }
+    setStatus(t("google.restoreDone"));
+    render();
+  } catch (e) {
+    setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
+  }
+}
+
+// Photo zoom
+function handlePhotoZoom() {
+  if (!imagePreviewUrl) return;
+  const ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
+  const im = document.createElement("img");
+  im.src = imagePreviewUrl;
+  im.style.cssText = "max-width:95vw;max-height:95vh;object-fit:contain;border-radius:12px";
+  ov.appendChild(im);
+  ov.addEventListener("click", () => ov.remove());
+  document.body.appendChild(ov);
 }
 
 window.addEventListener("resize", () => drawChart());

@@ -3,8 +3,11 @@ import {
   buildRecord,
   calcStats,
   calcDailyDiff,
+  calcGoalPrediction,
   calcGoalProgress,
   calcPeriodSummary,
+  calcStreak,
+  calcWeightTrend,
   calculateBMI,
   createDefaultProfile,
   createDefaultSettings,
@@ -217,6 +220,49 @@ describe("calcGoalProgress", () => {
     const result = calcGoalProgress(records, 60);
     expect(result.percent).toBe(100);
     expect(result.remaining).toBe(-5);
+  });
+});
+
+describe("calcGoalPrediction", () => {
+  it("returns null with no records", () => {
+    expect(calcGoalPrediction([], 60)).toBeNull();
+  });
+
+  it("returns achieved when already at goal", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const records = [{ dt: today, wt: 58 }];
+    expect(calcGoalPrediction(records, 60)).toEqual({ achieved: true, days: 0 });
+  });
+
+  it("returns insufficient with fewer than 2 recent records", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const records = [{ dt: today, wt: 70 }];
+    const result = calcGoalPrediction(records, 60);
+    expect(result.insufficient).toBe(true);
+  });
+
+  it("returns noTrend when weight is not decreasing", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const records = [
+      { dt: yesterday, wt: 70 },
+      { dt: today, wt: 71 },
+    ];
+    const result = calcGoalPrediction(records, 60);
+    expect(result.noTrend).toBe(true);
+  });
+
+  it("estimates days to goal with downward trend", () => {
+    const dates = [];
+    for (let i = 10; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+      dates.push(d);
+    }
+    const records = dates.map((dt, i) => ({ dt, wt: 70 - i * 0.1 }));
+    const result = calcGoalPrediction(records, 60);
+    expect(result.achieved).toBe(false);
+    expect(result.days).toBeGreaterThan(0);
+    expect(result.predictedDate).toBeDefined();
   });
 });
 
