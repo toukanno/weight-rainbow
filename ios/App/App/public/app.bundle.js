@@ -25356,18 +25356,28 @@ function showFirstLaunchModal() {
     </div>
   `;
   app.querySelector("[data-lang]")?.focus();
+  const selectLang = (lang) => {
+    state.settings.language = lang;
+    t = createTranslator(lang);
+    try {
+      window.localStorage.setItem(STORAGE_KEYS.firstLaunchDone, "1");
+    } catch {
+    }
+    persist();
+    render();
+  };
   app.querySelectorAll("[data-lang]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const lang = button.dataset.lang;
-      state.settings.language = lang;
-      t = createTranslator(lang);
-      try {
-        window.localStorage.setItem(STORAGE_KEYS.firstLaunchDone, "1");
-      } catch {
-      }
-      persist();
-      render();
-    });
+    button.addEventListener("click", () => selectLang(button.dataset.lang));
+  });
+  const overlay = app.querySelector(".lang-modal-overlay");
+  overlay?.addEventListener("click", (e) => {
+    if (e.target === overlay) selectLang("ja");
+  });
+  document.addEventListener("keydown", function onEsc(e) {
+    if (e.key === "Escape") {
+      document.removeEventListener("keydown", onEsc);
+      selectLang("ja");
+    }
   });
 }
 var statusClearTimer = null;
