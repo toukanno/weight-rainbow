@@ -8232,3 +8232,70 @@ describe("calcWeightRangeSummary", () => {
     expect(all.avg).toBe(70);
   });
 });
+
+describe("calcTrendStreak", () => {
+  it("returns null direction for fewer than 2 records", () => {
+    expect(calcTrendStreak([{ dt: "2025-01-01", wt: 70 }]).direction).toBeNull();
+    expect(calcTrendStreak([]).direction).toBeNull();
+    expect(calcTrendStreak(null).direction).toBeNull();
+  });
+
+  it("detects downward streak", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69.5 },
+      { dt: "2025-01-03", wt: 69.0 },
+      { dt: "2025-01-04", wt: 68.5 },
+    ];
+    const result = calcTrendStreak(records);
+    expect(result.direction).toBe("down");
+    expect(result.count).toBe(3);
+    expect(result.totalChange).toBeLessThan(0);
+  });
+
+  it("detects upward streak", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 65 },
+      { dt: "2025-01-02", wt: 65.5 },
+      { dt: "2025-01-03", wt: 66.0 },
+    ];
+    const result = calcTrendStreak(records);
+    expect(result.direction).toBe("up");
+    expect(result.count).toBe(2);
+    expect(result.totalChange).toBeGreaterThan(0);
+  });
+
+  it("detects flat streak", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70 },
+      { dt: "2025-01-03", wt: 70 },
+    ];
+    const result = calcTrendStreak(records);
+    expect(result.direction).toBe("flat");
+    expect(result.count).toBe(2);
+  });
+
+  it("breaks streak on direction change", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69 },
+      { dt: "2025-01-03", wt: 68 },
+      { dt: "2025-01-04", wt: 69 }, // reversal
+    ];
+    const result = calcTrendStreak(records);
+    expect(result.direction).toBe("up");
+    expect(result.count).toBe(1);
+  });
+
+  it("returns startDate and endDate", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69 },
+      { dt: "2025-01-03", wt: 68 },
+    ];
+    const result = calcTrendStreak(records);
+    expect(result.startDate).toBe("2025-01-01");
+    expect(result.endDate).toBe("2025-01-03");
+  });
+});
