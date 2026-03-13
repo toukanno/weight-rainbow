@@ -123,6 +123,7 @@ import {
   calcThenVsNow,
   calcQuickWeightPresets,
   calcRecordCompleteness,
+  calcWeightPace,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -9141,5 +9142,67 @@ describe("calcRecordCompleteness", () => {
     const result = calcRecordCompleteness(records);
     expect(result.withBodyFat).toBe(0);
     expect(result.withNote).toBe(0);
+  });
+});
+
+describe("calcWeightPace", () => {
+  const makeDailyRecords = (count, startWt, dailyDelta) =>
+    Array.from({ length: count }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: +(startWt + dailyDelta * i).toFixed(1),
+    }));
+
+  it("returns null for insufficient data", () => {
+    expect(calcWeightPace(null, 65)).toBeNull();
+    expect(calcWeightPace([], 65)).toBeNull();
+    expect(calcWeightPace(makeDailyRecords(5, 70, -0.1), 65)).toBeNull();
+    expect(calcWeightPace(makeDailyRecords(10, 70, -0.1), 0)).toBeNull();
+  });
+
+  it("detects healthy loss pace", () => {
+    // -0.1 kg/day = ~-0.7 kg/week (within -0.5 to -1.0 range)
+    const records = makeDailyRecords(14, 75, -0.1);
+    const result = calcWeightPace(records, 65);
+    expect(result).not.toBeNull();
+    expect(result.direction).toBe("lose");
+    expect(result.pace).toBe("healthy");
+    expect(result.weeklyRate).toBeLessThan(0);
+  });
+
+  it("detects too fast loss pace", () => {
+    // -0.2 kg/day = ~-1.4 kg/week (too fast)
+    const records = makeDailyRecords(14, 80, -0.2);
+    const result = calcWeightPace(records, 65);
+    expect(result.pace).toBe("too_fast");
+  });
+
+  it("detects too slow loss pace", () => {
+    // -0.01 kg/day = ~-0.07 kg/week (too slow)
+    const records = makeDailyRecords(14, 70, -0.01);
+    const result = calcWeightPace(records, 65);
+    expect(result.pace).toBe("too_slow");
+  });
+
+  it("detects achieved goal", () => {
+    const records = makeDailyRecords(10, 65, 0);
+    const result = calcWeightPace(records, 65);
+    expect(result.direction).toBe("achieved");
+    expect(result.pace).toBe("maintaining");
+  });
+
+  it("handles gain direction", () => {
+    // +0.05 kg/day = ~0.35 kg/week (healthy gain)
+    const records = makeDailyRecords(14, 55, 0.05);
+    const result = calcWeightPace(records, 65);
+    expect(result.direction).toBe("gain");
+    expect(result.pace).toBe("healthy");
+  });
+
+  it("detects too fast gain", () => {
+    // +0.1 kg/day = ~0.7 kg/week (too fast for gain)
+    const records = makeDailyRecords(14, 55, 0.1);
+    const result = calcWeightPace(records, 65);
+    expect(result.direction).toBe("gain");
+    expect(result.pace).toBe("too_fast");
   });
 });

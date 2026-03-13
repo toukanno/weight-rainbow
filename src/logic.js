@@ -4038,3 +4038,48 @@ export function calcRecordCompleteness(records) {
 
   return { total, withBodyFat, withNote, withTag, completePct, bodyFatPct, notePct, tagPct, level };
 }
+
+/**
+ * Calculate weight change pace and compare to healthy guidelines.
+ * Loss: healthy is 0.5–1.0 kg/week. Gain: healthy is 0.25–0.5 kg/week.
+ * Returns { weeklyRate, direction, pace, healthyMin, healthyMax }
+ * pace: "too_fast" | "healthy" | "too_slow" | "maintaining"
+ */
+export function calcWeightPace(records, goalWeight) {
+  if (!records || records.length < 7 || !goalWeight || goalWeight <= 0) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-14);
+  if (recent.length < 7) return null;
+
+  const first = recent[0];
+  const last = recent[recent.length - 1];
+  const daysDiff = Math.max(1, Math.round((new Date(last.dt + "T00:00:00") - new Date(first.dt + "T00:00:00")) / 86400000));
+  const totalChange = last.wt - first.wt;
+  const weeklyRate = +((totalChange / daysDiff) * 7).toFixed(2);
+
+  const currentWt = last.wt;
+  const direction = currentWt > goalWeight ? "lose" : currentWt < goalWeight ? "gain" : "achieved";
+
+  if (direction === "achieved") {
+    return { weeklyRate, direction, pace: "maintaining", healthyMin: 0, healthyMax: 0 };
+  }
+
+  let healthyMin, healthyMax, pace;
+  if (direction === "lose") {
+    healthyMin = -1.0;
+    healthyMax = -0.5;
+    if (weeklyRate < healthyMin) pace = "too_fast";
+    else if (weeklyRate >= healthyMin && weeklyRate <= healthyMax) pace = "healthy";
+    else pace = "too_slow";
+  } else {
+    healthyMin = 0.25;
+    healthyMax = 0.5;
+    if (weeklyRate > healthyMax) pace = "too_fast";
+    else if (weeklyRate < 0.1) pace = "too_slow";
+    else if (weeklyRate >= healthyMin) pace = "healthy";
+    else pace = "too_slow";
+  }
+
+  return { weeklyRate, direction, pace, healthyMin, healthyMax };
+}

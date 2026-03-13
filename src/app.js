@@ -125,6 +125,8 @@ import {
   calcGoalStreak,
   calcThenVsNow,
   calcQuickWeightPresets,
+  calcRecordCompleteness,
+  calcWeightPace,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -835,6 +837,7 @@ function render() {
             ${renderTrendForecast()}
             ${renderGoalStreak()}
             ${renderThenVsNow()}
+            ${renderWeightPace()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -874,6 +877,7 @@ function render() {
                 ${renderMovingAvgCrossover()}
                 ${renderPredictionAccuracy()}
                 ${renderDailyChangeDist()}
+                ${renderRecordCompleteness()}
               </div>
               ` : ""}
             </div>
@@ -3057,6 +3061,47 @@ function renderThenVsNow() {
         </div>
       </div>
       <div class="tvn-diff ${diffCls}">${t("tvn.change")}: ${diffSign}${data.diff}kg</div>
+    </div>
+  `;
+}
+
+function renderRecordCompleteness() {
+  const data = calcRecordCompleteness(state.records);
+  if (!data || data.total < 3) return "";
+
+  const barColor = data.level === "excellent" ? "var(--ok)" : data.level === "good" ? "var(--accent-3)" : data.level === "fair" ? "var(--warn)" : "var(--muted)";
+
+  return `
+    <div class="rc-section">
+      <div class="helper">${t("rcomp.title")}</div>
+      <div class="rc-level" style="color:${barColor}">${t("rcomp.level." + data.level)}</div>
+      <div class="rc-bars">
+        <div class="rc-bar-row"><span class="rc-bar-label">${t("rcomp.bodyFat")}</span><div class="rc-bar-track"><div class="rc-bar-fill" style="width:${data.bodyFatPct}%;background:${barColor}"></div></div><span class="rc-bar-val">${data.bodyFatPct}%</span></div>
+        <div class="rc-bar-row"><span class="rc-bar-label">${t("rcomp.note")}</span><div class="rc-bar-track"><div class="rc-bar-fill" style="width:${data.notePct}%;background:${barColor}"></div></div><span class="rc-bar-val">${data.notePct}%</span></div>
+        <div class="rc-bar-row"><span class="rc-bar-label">${t("rcomp.tag")}</span><div class="rc-bar-track"><div class="rc-bar-fill" style="width:${data.tagPct}%;background:${barColor}"></div></div><span class="rc-bar-val">${data.tagPct}%</span></div>
+      </div>
+      ${data.level !== "excellent" ? `<div class="rc-tip">${t("rcomp.tip")}</div>` : ""}
+    </div>
+  `;
+}
+
+function renderWeightPace() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const data = calcWeightPace(state.records, goalWeight);
+  if (!data) return "";
+
+  const paceColor = data.pace === "healthy" ? "var(--ok)" : data.pace === "too_fast" ? "var(--error)" : data.pace === "too_slow" ? "var(--warn)" : "var(--muted)";
+  const paceLabel = data.pace === "healthy" ? t("wpace.healthy_pace") : data.pace === "too_fast" ? t("wpace.too_fast") : data.pace === "too_slow" ? t("wpace.too_slow") : t("wpace.maintaining");
+  const sign = data.weeklyRate > 0 ? "+" : "";
+
+  return `
+    <div class="wp-section">
+      <div class="helper">${t("wpace.title")}</div>
+      <div class="wp-meter">
+        <div class="wp-rate" style="color:${paceColor}">${sign}${data.weeklyRate} kg/${t("wpace.weekly")}</div>
+        <div class="wp-badge" style="background:color-mix(in srgb, ${paceColor} 15%, transparent);color:${paceColor}">${paceLabel}</div>
+      </div>
+      ${data.pace !== "maintaining" ? `<div class="wp-range">${t("wpace.range").replace("{min}", String(data.healthyMin)).replace("{max}", String(data.healthyMax))}</div>` : ""}
     </div>
   `;
 }
