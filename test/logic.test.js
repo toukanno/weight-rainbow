@@ -3598,3 +3598,99 @@ describe("calcSeasonality", () => {
     expect(result.overallAvg).toBe(70);
   });
 });
+
+describe("calcDailyDiff edge cases", () => {
+  it("returns null for single record", () => {
+    expect(calcDailyDiff([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns null when today or yesterday missing", () => {
+    // Records from long ago
+    const records = [
+      { dt: "2020-01-01", wt: 70 },
+      { dt: "2020-01-02", wt: 71 },
+    ];
+    expect(calcDailyDiff(records)).toBeNull();
+  });
+
+  it("returns diff when today and yesterday exist", () => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const records = [
+      { dt: fmt(yesterday), wt: 70.0 },
+      { dt: fmt(today), wt: 69.5 },
+    ];
+    const result = calcDailyDiff(records);
+    expect(result).not.toBeNull();
+    expect(result.diff).toBe(-0.5);
+    expect(result.today).toBe(69.5);
+    expect(result.yesterday).toBe(70.0);
+  });
+});
+
+describe("calcSmoothedWeight edge cases", () => {
+  it("returns null for empty records", () => {
+    expect(calcSmoothedWeight([])).toBeNull();
+  });
+
+  it("returns weight with zero trend for single record", () => {
+    const result = calcSmoothedWeight([{ dt: "2025-01-01", wt: 70 }]);
+    expect(result).toEqual({ smoothed: 70, trend: 0 });
+  });
+
+  it("returns smoothed value for multiple records", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 70 + i * 0.1,
+    }));
+    const result = calcSmoothedWeight(records);
+    expect(result).not.toBeNull();
+    expect(result.smoothed).toBeGreaterThan(70);
+    expect(typeof result.trend).toBe("number");
+  });
+});
+
+describe("calcBMIDistribution edge cases", () => {
+  it("returns null for no records with BMI", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }]; // no bmi field
+    expect(calcBMIDistribution(records)).toBeNull();
+  });
+
+  it("categorizes BMI values correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 50, bmi: 17 },    // under
+      { dt: "2025-01-02", wt: 60, bmi: 22 },    // normal
+      { dt: "2025-01-03", wt: 65, bmi: 23 },    // normal
+      { dt: "2025-01-04", wt: 80, bmi: 28 },    // over
+      { dt: "2025-01-05", wt: 95, bmi: 33 },    // obese
+    ];
+    const result = calcBMIDistribution(records);
+    expect(result).not.toBeNull();
+    expect(result.under.count).toBe(1);
+    expect(result.normal.count).toBe(2);
+    expect(result.over.count).toBe(1);
+    expect(result.obese.count).toBe(1);
+    expect(result.total).toBe(5);
+  });
+});
+
+describe("calcRecordGaps edge cases", () => {
+  it("returns null for fewer than 2 records", () => {
+    expect(calcRecordGaps([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("detects gaps in recording", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70 },
+      // gap
+      { dt: "2025-01-10", wt: 70 },
+      { dt: "2025-01-11", wt: 70 },
+    ];
+    const result = calcRecordGaps(records);
+    expect(result).not.toBeNull();
+    expect(result.gaps.length).toBeGreaterThan(0);
+    expect(result.gaps[0].days).toBe(8);
+  });
+});
