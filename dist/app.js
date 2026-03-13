@@ -23099,7 +23099,7 @@ function render() {
             </div>
 
             <div class="status ${statusKind === "error" ? "warn" : ""}" role="status" aria-live="polite">
-              ${statusMessage}
+              ${escapeAttr(statusMessage)}
               ${lastUndoState ? `<button type="button" class="undo-btn" data-action="undo">${t("undo.button")}</button>` : ""}
             </div>
           </section>
@@ -23404,7 +23404,7 @@ function render() {
       <div class="rainbow-card">
         <div class="rainbow-emoji" aria-hidden="true">\u{1F308}\u2728</div>
         <div class="rainbow-text">${t("rainbow.congrats")}</div>
-        <div class="rainbow-detail">${rainbowDetail}</div>
+        <div class="rainbow-detail">${escapeAttr(rainbowDetail)}</div>
       </div>
     </div>
     ` : ""}
