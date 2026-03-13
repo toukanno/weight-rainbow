@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import WebKit
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -7,8 +8,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // Enable pinch-to-zoom on the WKWebView after a short delay to ensure it's loaded
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.enablePinchToZoom()
+        }
         return true
+    }
+
+    private func enablePinchToZoom() {
+        guard let rootVC = window?.rootViewController else { return }
+        if let bridgeVC = rootVC as? CAPBridgeViewController {
+            bridgeVC.webView?.scrollView.minimumZoomScale = 0.5
+            bridgeVC.webView?.scrollView.maximumZoomScale = 3.0
+            bridgeVC.webView?.scrollView.bouncesZoom = true
+        }
     }
 
     func applicationWillResignActive(_ application: UIApplication) {

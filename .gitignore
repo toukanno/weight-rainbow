@@ -4,3 +4,5 @@ Library/
 .DS_Store
 xcuserdata/
 DerivedData/
+ios/build/
+.vscode/

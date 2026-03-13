@@ -4,6 +4,10 @@
   "webDir": "web",
   "ios": {
     "contentInset": "automatic",
-    "limitsNavigationsToAppBoundDomains": true
+    "limitsNavigationsToAppBoundDomains": true,
+    "scrollEnabled": true
+  },
+  "server": {
+    "iosScheme": "capacitor"
   }
 }
