@@ -359,7 +359,7 @@ export function calcGoalPrediction(records, goalWeight) {
 
   const firstRecent = recent[0].wt;
   const lastRecent = recent[recent.length - 1].wt;
-  const daySpan = Math.max(1, (new Date(recent[recent.length - 1].dt) - new Date(recent[0].dt)) / 86400000);
+  const daySpan = Math.max(1, (new Date(recent[recent.length - 1].dt + "T00:00:00") - new Date(recent[0].dt + "T00:00:00")) / 86400000);
   const dailyChange = (lastRecent - firstRecent) / daySpan;
 
   if (dailyChange >= 0) return { achieved: false, noTrend: true };
@@ -393,7 +393,7 @@ export function calcWeeklyRate(records) {
   if (records.length < 2) return null;
   const first = records[0];
   const last = records[records.length - 1];
-  const daySpan = (new Date(last.dt) - new Date(first.dt)) / 86400000;
+  const daySpan = (new Date(last.dt + "T00:00:00") - new Date(first.dt + "T00:00:00")) / 86400000;
   if (daySpan < 7) return null;
   const totalChange = last.wt - first.wt;
   const weeklyRate = Math.round((totalChange / daySpan) * 7 * 100) / 100;
@@ -1053,6 +1053,7 @@ export function calcBestPeriod(records) {
         bestStart = i;
       }
     }
+    if (bestChange === Infinity) continue;
     result[window] = {
       change: Math.round(bestChange * 10) / 10,
       from: records[bestStart].dt,
@@ -1659,8 +1660,8 @@ export function calcWeightConfidence(records) {
   if (recent.length < 7) return null;
 
   // Calculate daily rate via linear regression on recent data
-  const firstDate = new Date(recent[0].dt);
-  const xs = recent.map((r) => (new Date(r.dt) - firstDate) / 86400000);
+  const firstDate = new Date(recent[0].dt + "T00:00:00");
+  const xs = recent.map((r) => (new Date(r.dt + "T00:00:00") - firstDate) / 86400000);
   const ys = recent.map((r) => r.wt);
   const n = xs.length;
   const sumX = xs.reduce((a, b) => a + b, 0);
@@ -1745,7 +1746,7 @@ export function calcProgressSummary(records) {
   const firstWt = sorted[0].wt;
   const lastWt = sorted[sorted.length - 1].wt;
   const totalChange = Math.round((lastWt - firstWt) * 10) / 10;
-  const totalDays = Math.max(1, Math.round((new Date(sorted[sorted.length - 1].dt) - new Date(sorted[0].dt)) / 86400000));
+  const totalDays = Math.max(1, Math.round((new Date(sorted[sorted.length - 1].dt + "T00:00:00") - new Date(sorted[0].dt + "T00:00:00")) / 86400000));
 
   // Direction assessment
   let trend = "stable";
@@ -1837,7 +1838,7 @@ export function calcVolatilityIndex(records) {
   // Calculate consecutive-day changes
   const changes = [];
   for (let i = 1; i < sorted.length; i++) {
-    const dayDiff = Math.round((new Date(sorted[i].dt) - new Date(sorted[i - 1].dt)) / 86400000);
+    const dayDiff = Math.round((new Date(sorted[i].dt + "T00:00:00") - new Date(sorted[i - 1].dt + "T00:00:00")) / 86400000);
     if (dayDiff === 1) {
       changes.push(Math.abs(sorted[i].wt - sorted[i - 1].wt));
     }
@@ -2056,7 +2057,7 @@ export function generateWeightSummary(records, profile = {}) {
   const max = Math.max(...weights);
   const avg = Math.round((weights.reduce((s, w) => s + w, 0) / weights.length) * 10) / 10;
   const totalChange = Math.round((latest.wt - first.wt) * 10) / 10;
-  const days = Math.max(1, Math.round((new Date(latest.dt) - new Date(first.dt)) / 86400000));
+  const days = Math.max(1, Math.round((new Date(latest.dt + "T00:00:00") - new Date(first.dt + "T00:00:00")) / 86400000));
 
   // BMI if height available
   let bmiInfo = null;
@@ -2333,4 +2334,40 @@ export function calcNoteTagStats(records) {
     .sort((a, b) => b.count - a.count);
 
   return { tags, totalTagged, totalRecords: records.length };
+}
+
+/**
+ * Calculate ideal weight range based on height using BMI 18.5-24.9.
+ * Returns { minWeight, maxWeight, midWeight, currentBMI, currentWeight, position }
+ * position: 0-100 (0=underweight, 50=ideal center, 100=overweight)
+ */
+export function calcIdealWeightRange(heightCm, currentWeight) {
+  if (!heightCm || heightCm <= 0 || !currentWeight || currentWeight <= 0) return null;
+  const heightM = heightCm / 100;
+  const h2 = heightM * heightM;
+  const minWeight = Math.round(18.5 * h2 * 10) / 10;
+  const maxWeight = Math.round(24.9 * h2 * 10) / 10;
+  const midWeight = Math.round(22.0 * h2 * 10) / 10;
+  const currentBMI = Math.round((currentWeight / h2) * 10) / 10;
+
+  // Position: 0% at BMI 15, 100% at BMI 30, ideal range maps to ~23%-83%
+  const bmiRange = 30 - 15;
+  const position = Math.max(0, Math.min(100, Math.round(((currentBMI - 15) / bmiRange) * 100)));
+
+  let zone = "normal";
+  if (currentBMI < 18.5) zone = "underweight";
+  else if (currentBMI >= 25 && currentBMI < 30) zone = "overweight";
+  else if (currentBMI >= 30) zone = "obese";
+
+  return {
+    minWeight,
+    maxWeight,
+    midWeight,
+    currentBMI,
+    currentWeight: Math.round(currentWeight * 10) / 10,
+    position,
+    zone,
+    toMin: Math.round((currentWeight - minWeight) * 10) / 10,
+    toMax: Math.round((maxWeight - currentWeight) * 10) / 10,
+  };
 }

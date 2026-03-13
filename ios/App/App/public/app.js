@@ -1060,7 +1060,7 @@ function calcGoalPrediction(records, goalWeight) {
   if (recent.length < 2) return { achieved: false, insufficient: true };
   const firstRecent = recent[0].wt;
   const lastRecent = recent[recent.length - 1].wt;
-  const daySpan = Math.max(1, (new Date(recent[recent.length - 1].dt) - new Date(recent[0].dt)) / 864e5);
+  const daySpan = Math.max(1, (/* @__PURE__ */ new Date(recent[recent.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(recent[0].dt + "T00:00:00")) / 864e5);
   const dailyChange = (lastRecent - firstRecent) / daySpan;
   if (dailyChange >= 0) return { achieved: false, noTrend: true };
   const remaining = latestWeight - goalWeight;
@@ -1088,7 +1088,7 @@ function calcWeeklyRate(records) {
   if (records.length < 2) return null;
   const first = records[0];
   const last = records[records.length - 1];
-  const daySpan = (new Date(last.dt) - new Date(first.dt)) / 864e5;
+  const daySpan = (/* @__PURE__ */ new Date(last.dt + "T00:00:00") - /* @__PURE__ */ new Date(first.dt + "T00:00:00")) / 864e5;
   if (daySpan < 7) return null;
   const totalChange = last.wt - first.wt;
   const weeklyRate = Math.round(totalChange / daySpan * 7 * 100) / 100;
@@ -1659,6 +1659,7 @@ function calcBestPeriod(records) {
         bestStart = i;
       }
     }
+    if (bestChange === Infinity) continue;
     result[window2] = {
       change: Math.round(bestChange * 10) / 10,
       from: records[bestStart].dt,
@@ -2200,8 +2201,8 @@ function calcWeightConfidence(records) {
   const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
   const recent = sorted.slice(-30);
   if (recent.length < 7) return null;
-  const firstDate = new Date(recent[0].dt);
-  const xs = recent.map((r) => (new Date(r.dt) - firstDate) / 864e5);
+  const firstDate = /* @__PURE__ */ new Date(recent[0].dt + "T00:00:00");
+  const xs = recent.map((r) => (/* @__PURE__ */ new Date(r.dt + "T00:00:00") - firstDate) / 864e5);
   const ys = recent.map((r) => r.wt);
   const n = xs.length;
   const sumX = xs.reduce((a, b) => a + b, 0);
@@ -2265,7 +2266,7 @@ function calcProgressSummary(records) {
   const firstWt = sorted[0].wt;
   const lastWt = sorted[sorted.length - 1].wt;
   const totalChange = Math.round((lastWt - firstWt) * 10) / 10;
-  const totalDays = Math.max(1, Math.round((new Date(sorted[sorted.length - 1].dt) - new Date(sorted[0].dt)) / 864e5));
+  const totalDays = Math.max(1, Math.round((/* @__PURE__ */ new Date(sorted[sorted.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(sorted[0].dt + "T00:00:00")) / 864e5));
   let trend = "stable";
   if (change < -0.5) trend = "improving";
   else if (change > 0.5) trend = "gaining";
@@ -2331,7 +2332,7 @@ function calcVolatilityIndex(records) {
   const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
   const changes = [];
   for (let i = 1; i < sorted.length; i++) {
-    const dayDiff = Math.round((new Date(sorted[i].dt) - new Date(sorted[i - 1].dt)) / 864e5);
+    const dayDiff = Math.round((/* @__PURE__ */ new Date(sorted[i].dt + "T00:00:00") - /* @__PURE__ */ new Date(sorted[i - 1].dt + "T00:00:00")) / 864e5);
     if (dayDiff === 1) {
       changes.push(Math.abs(sorted[i].wt - sorted[i - 1].wt));
     }
@@ -2488,7 +2489,7 @@ function generateWeightSummary(records, profile = {}) {
   const max = Math.max(...weights);
   const avg = Math.round(weights.reduce((s, w) => s + w, 0) / weights.length * 10) / 10;
   const totalChange = Math.round((latest.wt - first.wt) * 10) / 10;
-  const days2 = Math.max(1, Math.round((new Date(latest.dt) - new Date(first.dt)) / 864e5));
+  const days2 = Math.max(1, Math.round((/* @__PURE__ */ new Date(latest.dt + "T00:00:00") - /* @__PURE__ */ new Date(first.dt + "T00:00:00")) / 864e5));
   let bmiInfo = null;
   if (profile.heightCm) {
     const h = profile.heightCm / 100;
@@ -2697,6 +2698,32 @@ function calcNoteTagStats(records) {
     };
   }).sort((a, b) => b.count - a.count);
   return { tags, totalTagged, totalRecords: records.length };
+}
+function calcIdealWeightRange(heightCm, currentWeight) {
+  if (!heightCm || heightCm <= 0 || !currentWeight || currentWeight <= 0) return null;
+  const heightM = heightCm / 100;
+  const h2 = heightM * heightM;
+  const minWeight = Math.round(18.5 * h2 * 10) / 10;
+  const maxWeight = Math.round(24.9 * h2 * 10) / 10;
+  const midWeight = Math.round(22 * h2 * 10) / 10;
+  const currentBMI = Math.round(currentWeight / h2 * 10) / 10;
+  const bmiRange = 30 - 15;
+  const position = Math.max(0, Math.min(100, Math.round((currentBMI - 15) / bmiRange * 100)));
+  let zone = "normal";
+  if (currentBMI < 18.5) zone = "underweight";
+  else if (currentBMI >= 25 && currentBMI < 30) zone = "overweight";
+  else if (currentBMI >= 30) zone = "obese";
+  return {
+    minWeight,
+    maxWeight,
+    midWeight,
+    currentBMI,
+    currentWeight: Math.round(currentWeight * 10) / 10,
+    position,
+    zone,
+    toMin: Math.round((currentWeight - minWeight) * 10) / 10,
+    toMax: Math.round((maxWeight - currentWeight) * 10) / 10
+  };
 }
 
 // src/i18n.js
@@ -3372,7 +3399,15 @@ var translations = {
     "tagStats.title": "\u30BF\u30B0\u4F7F\u7528\u72B6\u6CC1",
     "tagStats.count": "{count}\u56DE\uFF08{pct}%\uFF09",
     "tagStats.avgChange": "\u5E73\u5747\u5909\u52D5 {change}kg",
-    "tagStats.none": "\u30BF\u30B0\u4ED8\u304D\u8A18\u9332\u304C\u3042\u308A\u307E\u305B\u3093"
+    "tagStats.none": "\u30BF\u30B0\u4ED8\u304D\u8A18\u9332\u304C\u3042\u308A\u307E\u305B\u3093",
+    "ideal.title": "\u9069\u6B63\u4F53\u91CD\u30EC\u30F3\u30B8",
+    "ideal.range": "{min}\u301C{max}kg\uFF08BMI 18.5\u301C24.9\uFF09",
+    "ideal.current": "\u73FE\u5728 {weight}kg\uFF08BMI {bmi}\uFF09",
+    "ideal.center": "\u6A19\u6E96\u4E2D\u592E {mid}kg\uFF08BMI 22\uFF09",
+    "ideal.underweight": "\u4F4E\u4F53\u91CD\u57DF",
+    "ideal.normal": "\u6A19\u6E96\u57DF",
+    "ideal.overweight": "\u904E\u4F53\u91CD\u57DF",
+    "ideal.obese": "\u80A5\u6E80\u57DF"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4045,7 +4080,15 @@ var translations = {
     "tagStats.title": "Tag Usage",
     "tagStats.count": "{count} times ({pct}%)",
     "tagStats.avgChange": "Avg change: {change}kg",
-    "tagStats.none": "No tagged entries"
+    "tagStats.none": "No tagged entries",
+    "ideal.title": "Ideal Weight Range",
+    "ideal.range": "{min} \u2013 {max}kg (BMI 18.5 \u2013 24.9)",
+    "ideal.current": "Current: {weight}kg (BMI {bmi})",
+    "ideal.center": "Ideal center: {mid}kg (BMI 22)",
+    "ideal.underweight": "Underweight",
+    "ideal.normal": "Normal",
+    "ideal.overweight": "Overweight",
+    "ideal.obese": "Obese"
   }
 };
 function createTranslator(language) {
@@ -25126,6 +25169,7 @@ function render() {
             ${renderDayOfWeekAvg()}
             ${renderStability()}
             ${renderBMIDistribution()}
+            ${renderIdealWeight()}
             ${renderWeightVelocity()}
             ${renderCalorieEstimate()}
             ${renderWeightConfidence()}
@@ -26395,6 +26439,39 @@ function renderNoteTagStats() {
     <div class="tag-stats-section">
       <div class="helper">${t("tagStats.title")}</div>
       ${rows}
+    </div>
+  `;
+}
+function renderIdealWeight() {
+  if (!state.profile.heightCm || state.records.length === 0) return "";
+  const latest = [...state.records].sort((a, b) => a.dt.localeCompare(b.dt)).pop();
+  const ideal = calcIdealWeightRange(Number(state.profile.heightCm), latest.wt);
+  if (!ideal) return "";
+  const zoneLabel = t("ideal." + ideal.zone);
+  const rangeText = t("ideal.range").replace("{min}", ideal.minWeight).replace("{max}", ideal.maxWeight);
+  const currentText = t("ideal.current").replace("{weight}", ideal.currentWeight).replace("{bmi}", ideal.currentBMI);
+  const centerText = t("ideal.center").replace("{mid}", ideal.midWeight);
+  const idealStart = Math.round((18.5 - 15) / 15 * 100);
+  const idealEnd = Math.round((24.9 - 15) / 15 * 100);
+  return `
+    <div class="ideal-section">
+      <div class="helper">${t("ideal.title")}</div>
+      <div class="ideal-bar-container">
+        <div class="ideal-bar">
+          <div class="ideal-zone ideal-under" style="width:${idealStart}%"></div>
+          <div class="ideal-zone ideal-normal" style="width:${idealEnd - idealStart}%"></div>
+          <div class="ideal-zone ideal-over" style="width:${100 - idealEnd}%"></div>
+          <div class="ideal-marker" style="left:${ideal.position}%"></div>
+        </div>
+        <div class="ideal-labels">
+          <span>${t("ideal.underweight")}</span>
+          <span>${t("ideal.normal")}</span>
+          <span>${t("ideal.overweight")}</span>
+        </div>
+      </div>
+      <div class="helper hint-small">${currentText}</div>
+      <div class="helper hint-small">${rangeText}</div>
+      <div class="helper hint-small">${centerText}</div>
     </div>
   `;
 }
