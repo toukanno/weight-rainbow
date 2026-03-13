@@ -812,6 +812,7 @@ function render() {
                 ${renderNoteTagStats()}
                 ${renderWeightAnomalies()}
                 ${renderMilestoneHistory()}
+                ${renderWeightJourney()}
               </div>
               ` : ""}
             </div>
@@ -2317,6 +2318,32 @@ function renderMilestoneHistory() {
       <div class="helper">${t("msHist.title")}</div>
       <div class="helper hint-small">${dirLabel}</div>
       ${rows}
+    </div>
+  `;
+}
+
+function renderWeightJourney() {
+  const journey = calcWeightJourney(state.records);
+  if (!journey || journey.phases.length === 0) return "";
+  const typeLabel = { loss: "journey.loss", gain: "journey.gain", maintain: "journey.maintain" };
+  const typeIcon = { loss: "📉", gain: "📈", maintain: "➡️" };
+  const typeCls = { loss: "loss", gain: "gain", maintain: "maintain" };
+  const rows = journey.phases.slice(-6).map((p) => {
+    const sign = p.change > 0 ? "+" : "";
+    return `<div class="jny-row ${typeCls[p.type]}">
+      <span class="jny-icon">${typeIcon[p.type]}</span>
+      <span class="jny-type">${t(typeLabel[p.type])}</span>
+      <span class="jny-dates">${p.startDate.slice(5).replace("-", "/")}〜${p.endDate.slice(5).replace("-", "/")}</span>
+      <span class="jny-change">${sign}${p.change.toFixed(1)}kg</span>
+      <span class="jny-days">${p.days}d</span>
+    </div>`;
+  }).join("");
+  const totalSign = journey.totalChange > 0 ? "+" : "";
+  return `
+    <div class="jny-section">
+      <div class="helper">${t("journey.title")}</div>
+      ${rows}
+      <div class="jny-total">${t("journey.total")}: ${totalSign}${journey.totalChange.toFixed(1)}kg</div>
     </div>
   `;
 }
@@ -4387,6 +4414,9 @@ async function googleRestore() {
     if (!bd.records?.length) { setStatus(t("google.noData"), "error"); return; }
     const validBackupRecords = bd.records.filter((r) => r.dt && Number.isFinite(r.wt));
     if (!window.confirm(t("google.restoreConfirm") + ` (${validBackupRecords.length} ${t("chart.records")})`)) return;
+    const prevRecords = [...state.records];
+    const prevSettings = { ...state.settings };
+    const prevProfile = { ...state.profile };
     const beforeCount = state.records.length;
     let m = [...state.records];
     for (const r of validBackupRecords) {
@@ -4399,7 +4429,13 @@ async function googleRestore() {
     if (bd.profile && !state.profile.name && !state.profile.heightCm) {
       state.profile = sanitizeProfile({ ...createDefaultProfile(), ...bd.profile });
     }
-    if (!persist()) { setStatus(t("status.storageError"), "error"); return; }
+    if (!persist()) {
+      state.records = prevRecords;
+      state.settings = prevSettings;
+      state.profile = prevProfile;
+      setStatus(t("status.storageError"), "error");
+      return;
+    }
     setStatus(t("google.restoreDone") + ` (${validBackupRecords.length} ${t("chart.records")}${newCount > 0 ? `, +${newCount} ${t("import.new")}` : ""})`);
     render();
   } catch (e) {

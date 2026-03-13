@@ -3189,6 +3189,56 @@ function calcMilestoneHistory(records) {
   }
   return { direction, startWt, latestWt, milestones };
 }
+function calcWeightJourney(records) {
+  if (records.length < 7) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const avgs = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const start = Math.max(0, i - 3);
+    const end = Math.min(sorted.length - 1, i + 3);
+    let sum = 0, count = 0;
+    for (let j = start; j <= end; j++) {
+      sum += sorted[j].wt;
+      count++;
+    }
+    avgs.push({ dt: sorted[i].dt, avg: Math.round(sum / count * 10) / 10 });
+  }
+  const THRESHOLD = 0.3;
+  const phases = [];
+  let phaseStart = 0;
+  let phaseType = "maintain";
+  for (let i = 1; i < avgs.length; i++) {
+    const change = avgs[i].avg - avgs[phaseStart].avg;
+    let currentType;
+    if (change < -THRESHOLD) currentType = "loss";
+    else if (change > THRESHOLD) currentType = "gain";
+    else currentType = "maintain";
+    if (currentType !== phaseType && i - phaseStart >= 3) {
+      phases.push({
+        type: phaseType,
+        startDate: avgs[phaseStart].dt,
+        endDate: avgs[i - 1].dt,
+        startWt: avgs[phaseStart].avg,
+        endWt: avgs[i - 1].avg,
+        change: Math.round((avgs[i - 1].avg - avgs[phaseStart].avg) * 10) / 10,
+        days: Math.round((/* @__PURE__ */ new Date(avgs[i - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(avgs[phaseStart].dt + "T00:00:00")) / 864e5)
+      });
+      phaseStart = i;
+      phaseType = currentType;
+    }
+  }
+  phases.push({
+    type: phaseType,
+    startDate: avgs[phaseStart].dt,
+    endDate: avgs[avgs.length - 1].dt,
+    startWt: avgs[phaseStart].avg,
+    endWt: avgs[avgs.length - 1].avg,
+    change: Math.round((avgs[avgs.length - 1].avg - avgs[phaseStart].avg) * 10) / 10,
+    days: Math.round((/* @__PURE__ */ new Date(avgs[avgs.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(avgs[phaseStart].dt + "T00:00:00")) / 864e5)
+  });
+  const totalChange = Math.round((sorted[sorted.length - 1].wt - sorted[0].wt) * 10) / 10;
+  return { phases, totalChange };
+}
 
 // src/i18n.js
 var translations = {
@@ -25912,6 +25962,7 @@ function render() {
                 ${renderNoteTagStats()}
                 ${renderWeightAnomalies()}
                 ${renderMilestoneHistory()}
+                ${renderWeightJourney()}
               </div>
               ` : ""}
             </div>
@@ -27334,6 +27385,31 @@ function renderMilestoneHistory() {
       <div class="helper">${t("msHist.title")}</div>
       <div class="helper hint-small">${dirLabel}</div>
       ${rows}
+    </div>
+  `;
+}
+function renderWeightJourney() {
+  const journey = calcWeightJourney(state.records);
+  if (!journey || journey.phases.length === 0) return "";
+  const typeLabel = { loss: "journey.loss", gain: "journey.gain", maintain: "journey.maintain" };
+  const typeIcon = { loss: "\u{1F4C9}", gain: "\u{1F4C8}", maintain: "\u27A1\uFE0F" };
+  const typeCls = { loss: "loss", gain: "gain", maintain: "maintain" };
+  const rows = journey.phases.slice(-6).map((p) => {
+    const sign = p.change > 0 ? "+" : "";
+    return `<div class="jny-row ${typeCls[p.type]}">
+      <span class="jny-icon">${typeIcon[p.type]}</span>
+      <span class="jny-type">${t(typeLabel[p.type])}</span>
+      <span class="jny-dates">${p.startDate.slice(5).replace("-", "/")}\u301C${p.endDate.slice(5).replace("-", "/")}</span>
+      <span class="jny-change">${sign}${p.change.toFixed(1)}kg</span>
+      <span class="jny-days">${p.days}d</span>
+    </div>`;
+  }).join("");
+  const totalSign = journey.totalChange > 0 ? "+" : "";
+  return `
+    <div class="jny-section">
+      <div class="helper">${t("journey.title")}</div>
+      ${rows}
+      <div class="jny-total">${t("journey.total")}: ${totalSign}${journey.totalChange.toFixed(1)}kg</div>
     </div>
   `;
 }
@@ -29267,6 +29343,9 @@ async function googleRestore() {
     }
     const validBackupRecords = bd.records.filter((r) => r.dt && Number.isFinite(r.wt));
     if (!window.confirm(t("google.restoreConfirm") + ` (${validBackupRecords.length} ${t("chart.records")})`)) return;
+    const prevRecords = [...state.records];
+    const prevSettings = { ...state.settings };
+    const prevProfile = { ...state.profile };
     const beforeCount = state.records.length;
     let m = [...state.records];
     for (const r of validBackupRecords) {
@@ -29279,6 +29358,9 @@ async function googleRestore() {
       state.profile = sanitizeProfile({ ...createDefaultProfile(), ...bd.profile });
     }
     if (!persist()) {
+      state.records = prevRecords;
+      state.settings = prevSettings;
+      state.profile = prevProfile;
       setStatus(t("status.storageError"), "error");
       return;
     }
