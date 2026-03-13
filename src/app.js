@@ -37,6 +37,7 @@ import {
   calcSourceBreakdown,
   calcDayOfWeekAvg,
   calcWeightStability,
+  detectMilestone,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -1345,6 +1346,19 @@ function checkRainbow(newWeight) {
   if (lastRecord && newWeight < lastRecord.wt) {
     const diff = Math.round((lastRecord.wt - newWeight) * 10) / 10;
     rainbowDetail = `-${diff.toFixed(1)}kg (${lastRecord.wt.toFixed(1)} → ${newWeight.toFixed(1)})`;
+    // Check for special milestones
+    const milestone = detectMilestone(state.records, newWeight, state.profile.heightCm);
+    if (milestone) {
+      if (milestone.type === "allTimeLow") {
+        rainbowDetail += ` ⭐ ${t("milestone.allTimeLow").replace("{diff}", milestone.diff.toFixed(1))}`;
+      } else if (milestone.type === "roundNumber") {
+        rainbowDetail += ` 🎯 ${t("milestone.roundNumber").replace("{value}", milestone.value)}`;
+      } else if (milestone.type === "bmiCrossing") {
+        const bmiKey = milestone.threshold === 18.5 ? "milestone.bmiNormal"
+          : milestone.threshold === 25 ? "milestone.bmiUnder25" : "milestone.bmiUnder30";
+        rainbowDetail += ` 💪 ${t(bmiKey).replace("{bmi}", milestone.bmi.toFixed(1))}`;
+      }
+    }
     rainbowVisible = true;
   }
 }
@@ -2347,7 +2361,7 @@ function googleAuth() {
   if (gTokenClient) return gTokenClient;
   gTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
-    scope: "https://www.googleapis.com/auth/drive.file",
+    scope: "https://www.googleapis.com/auth/drive.appdata",
     callback: () => {},
   });
   return gTokenClient;
@@ -2400,15 +2414,14 @@ async function googleBackup() {
         { method: "PATCH", headers: { Authorization: `Bearer ${tk}`, "Content-Type": "application/json" }, body: bd },
       );
     } else {
-      const fm = new FormData();
-      fm.append(
-        "metadata",
-        new Blob([JSON.stringify({ name: BACKUP_FILENAME, mimeType: "application/json", parents: ["appDataFolder"] })], { type: "application/json" }),
-      );
-      fm.append("file", new Blob([bd], { type: "application/json" }));
+      const boundary = "weight_rainbow_boundary";
+      const multipartBody =
+        `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+        JSON.stringify({ name: BACKUP_FILENAME, mimeType: "application/json", parents: ["appDataFolder"] }) +
+        `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${bd}\r\n--${boundary}--`;
       await fetch(
         "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
-        { method: "POST", headers: { Authorization: `Bearer ${tk}` }, body: fm },
+        { method: "POST", headers: { Authorization: `Bearer ${tk}`, "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipartBody },
       );
     }
     setStatus(t("google.backupDone"));

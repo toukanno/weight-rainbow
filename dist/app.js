@@ -1233,6 +1233,35 @@ function calcWeightStability(records, days2 = 7) {
   const score = Math.max(0, Math.min(100, Math.round((1 - stdDev / 2) * 100)));
   return { stdDev, score, count: recent.length, avg: Math.round(avg * 10) / 10 };
 }
+function detectMilestone(records, newWeight, heightCm) {
+  if (!records.length) return null;
+  const weights = records.map((r) => r.wt);
+  const allTimeMin = Math.min(...weights);
+  if (newWeight < allTimeMin) {
+    return { type: "allTimeLow", diff: Math.round((allTimeMin - newWeight) * 10) / 10 };
+  }
+  const lastWeight = weights[weights.length - 1];
+  if (lastWeight > newWeight) {
+    const lastFloor = Math.floor(lastWeight);
+    const newFloor = Math.floor(newWeight);
+    if (newFloor < lastFloor) {
+      return { type: "roundNumber", value: lastFloor };
+    }
+  }
+  if (heightCm) {
+    const prevBMI = calculateBMI(lastWeight, heightCm);
+    const newBMI = calculateBMI(newWeight, heightCm);
+    if (prevBMI && newBMI) {
+      const thresholds = [30, 25, 18.5];
+      for (const th of thresholds) {
+        if (prevBMI >= th && newBMI < th) {
+          return { type: "bmiCrossing", threshold: th, bmi: newBMI };
+        }
+      }
+    }
+  }
+  return null;
+}
 function filterRecordsByDateRange(records, fromDate, toDate) {
   if (!fromDate && !toDate) return records;
   return records.filter((r) => {
@@ -1396,6 +1425,9 @@ var translations = {
     "export.header.source": "\u5165\u529B\u65B9\u6CD5",
     "export.header.note": "\u30E1\u30E2",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
+    "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01",
+    "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
+    "milestone.bmiCrossing": "BMI {threshold}\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
     "entry.source.quick": "\u9023\u6253",
     "diff.title": "\u524D\u65E5\u6BD4",
     "diff.today": "\u4ECA\u65E5",
@@ -1724,6 +1756,9 @@ var translations = {
     "export.header.source": "Source",
     "export.header.note": "Note",
     "rainbow.congrats": "Congrats! Weight decreased!",
+    "milestone.allTimeLow": "New all-time low!",
+    "milestone.roundNumber": "Dropped below {value}kg!",
+    "milestone.bmiCrossing": "BMI dropped below {threshold}!",
     "entry.source.quick": "Quick",
     "diff.title": "Daily Diff",
     "diff.today": "Today",
@@ -23637,6 +23672,17 @@ function checkRainbow(newWeight) {
   if (lastRecord && newWeight < lastRecord.wt) {
     const diff = Math.round((lastRecord.wt - newWeight) * 10) / 10;
     rainbowDetail = `-${diff.toFixed(1)}kg (${lastRecord.wt.toFixed(1)} \u2192 ${newWeight.toFixed(1)})`;
+    const milestone = detectMilestone(state.records, newWeight, state.profile.heightCm);
+    if (milestone) {
+      if (milestone.type === "allTimeLow") {
+        rainbowDetail += ` \u2B50 ${t("milestone.allTimeLow").replace("{diff}", milestone.diff.toFixed(1))}`;
+      } else if (milestone.type === "roundNumber") {
+        rainbowDetail += ` \u{1F3AF} ${t("milestone.roundNumber").replace("{value}", milestone.value)}`;
+      } else if (milestone.type === "bmiCrossing") {
+        const bmiKey = milestone.threshold === 18.5 ? "milestone.bmiNormal" : milestone.threshold === 25 ? "milestone.bmiUnder25" : "milestone.bmiUnder30";
+        rainbowDetail += ` \u{1F4AA} ${t(bmiKey).replace("{bmi}", milestone.bmi.toFixed(1))}`;
+      }
+    }
     rainbowVisible = true;
   }
 }
@@ -24509,7 +24555,7 @@ function googleAuth() {
   if (gTokenClient) return gTokenClient;
   gTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
-    scope: "https://www.googleapis.com/auth/drive.file",
+    scope: "https://www.googleapis.com/auth/drive.appdata",
     callback: () => {
     }
   });
@@ -24573,15 +24619,19 @@ async function googleBackup() {
         { method: "PATCH", headers: { Authorization: `Bearer ${tk}`, "Content-Type": "application/json" }, body: bd }
       );
     } else {
-      const fm = new FormData();
-      fm.append(
-        "metadata",
-        new Blob([JSON.stringify({ name: BACKUP_FILENAME, mimeType: "application/json", parents: ["appDataFolder"] })], { type: "application/json" })
-      );
-      fm.append("file", new Blob([bd], { type: "application/json" }));
+      const boundary = "weight_rainbow_boundary";
+      const multipartBody = `--${boundary}\r
+Content-Type: application/json; charset=UTF-8\r
+\r
+` + JSON.stringify({ name: BACKUP_FILENAME, mimeType: "application/json", parents: ["appDataFolder"] }) + `\r
+--${boundary}\r
+Content-Type: application/json\r
+\r
+${bd}\r
+--${boundary}--`;
       await fetch(
         "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
-        { method: "POST", headers: { Authorization: `Bearer ${tk}` }, body: fm }
+        { method: "POST", headers: { Authorization: `Bearer ${tk}`, "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipartBody }
       );
     }
     setStatus(t("google.backupDone"));

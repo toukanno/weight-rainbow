@@ -568,6 +568,43 @@ export function calcWeightStability(records, days = 7) {
   return { stdDev, score, count: recent.length, avg: Math.round(avg * 10) / 10 };
 }
 
+export function detectMilestone(records, newWeight, heightCm) {
+  if (!records.length) return null;
+  const weights = records.map((r) => r.wt);
+  const allTimeMin = Math.min(...weights);
+
+  // New all-time low
+  if (newWeight < allTimeMin) {
+    return { type: "allTimeLow", diff: Math.round((allTimeMin - newWeight) * 10) / 10 };
+  }
+
+  // Round number crossing (e.g., dropped below 70.0)
+  const lastWeight = weights[weights.length - 1];
+  if (lastWeight > newWeight) {
+    const lastFloor = Math.floor(lastWeight);
+    const newFloor = Math.floor(newWeight);
+    if (newFloor < lastFloor) {
+      return { type: "roundNumber", value: lastFloor };
+    }
+  }
+
+  // BMI threshold crossing
+  if (heightCm) {
+    const prevBMI = calculateBMI(lastWeight, heightCm);
+    const newBMI = calculateBMI(newWeight, heightCm);
+    if (prevBMI && newBMI) {
+      const thresholds = [30, 25, 18.5];
+      for (const th of thresholds) {
+        if (prevBMI >= th && newBMI < th) {
+          return { type: "bmiCrossing", threshold: th, bmi: newBMI };
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 export function filterRecordsByDateRange(records, fromDate, toDate) {
   if (!fromDate && !toDate) return records;
   return records.filter((r) => {

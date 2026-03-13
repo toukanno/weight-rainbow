@@ -35,6 +35,7 @@ import {
   calcWeightComparison,
   calcDayOfWeekAvg,
   calcWeightStability,
+  detectMilestone,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -1098,5 +1099,54 @@ describe("calcWeightStability", () => {
     expect(result).not.toBeNull();
     expect(result.score).toBeLessThan(50);
     expect(result.stdDev).toBeGreaterThan(2);
+  });
+});
+
+describe("detectMilestone", () => {
+  it("returns null for empty records", () => {
+    expect(detectMilestone([], 70)).toBeNull();
+  });
+
+  it("detects all-time low", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72 },
+      { dt: "2025-01-02", wt: 71 },
+    ];
+    const result = detectMilestone(records, 70);
+    expect(result).not.toBeNull();
+    expect(result.type).toBe("allTimeLow");
+  });
+
+  it("detects round number crossing", () => {
+    // Weight already was below 69.8 before, so not all-time low
+    const records = [
+      { dt: "2025-01-01", wt: 69 },
+      { dt: "2025-01-02", wt: 70.3 },
+    ];
+    const result = detectMilestone(records, 69.8);
+    expect(result).not.toBeNull();
+    expect(result.type).toBe("roundNumber");
+    expect(result.value).toBe(70);
+  });
+
+  it("detects BMI threshold crossing", () => {
+    // Height 170cm: BMI 25 = 72.25kg. Same floor (72), so no round number
+    const records = [
+      { dt: "2025-01-01", wt: 71 },
+      { dt: "2025-01-02", wt: 72.5 },
+    ];
+    const result = detectMilestone(records, 72.1, 170);
+    expect(result).not.toBeNull();
+    expect(result.type).toBe("bmiCrossing");
+    expect(result.threshold).toBe(25);
+  });
+
+  it("returns null when no milestone", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 71 },
+      { dt: "2025-01-02", wt: 71.5 },
+    ];
+    const result = detectMilestone(records, 71.2);
+    expect(result).toBeNull();
   });
 });
