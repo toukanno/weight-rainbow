@@ -34,6 +34,7 @@ import {
   calcAchievements,
   calcWeightComparison,
   calcDayOfWeekAvg,
+  calcWeightStability,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -1056,5 +1057,41 @@ describe("calcMonthlyStats", () => {
     expect(result[1].avg).toBe(69);
     expect(result[1].min).toBe(68);
     expect(result[1].max).toBe(70);
+  });
+});
+
+describe("calcWeightStability", () => {
+  it("returns null for fewer than 3 records", () => {
+    const records = [
+      { dt: new Date().toISOString().slice(0, 10), wt: 70 },
+      { dt: new Date(Date.now() - 86400000).toISOString().slice(0, 10), wt: 69 },
+    ];
+    expect(calcWeightStability(records)).toBeNull();
+  });
+
+  it("returns high stability for identical weights", () => {
+    const now = Date.now();
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: new Date(now - i * 86400000).toISOString().slice(0, 10),
+      wt: 70,
+    }));
+    const result = calcWeightStability(records);
+    expect(result).not.toBeNull();
+    expect(result.score).toBe(100);
+    expect(result.stdDev).toBe(0);
+  });
+
+  it("returns lower stability for fluctuating weights", () => {
+    const now = Date.now();
+    const records = [
+      { dt: new Date(now).toISOString().slice(0, 10), wt: 75 },
+      { dt: new Date(now - 86400000).toISOString().slice(0, 10), wt: 65 },
+      { dt: new Date(now - 2 * 86400000).toISOString().slice(0, 10), wt: 75 },
+      { dt: new Date(now - 3 * 86400000).toISOString().slice(0, 10), wt: 65 },
+    ];
+    const result = calcWeightStability(records);
+    expect(result).not.toBeNull();
+    expect(result.score).toBeLessThan(50);
+    expect(result.stdDev).toBeGreaterThan(2);
   });
 });

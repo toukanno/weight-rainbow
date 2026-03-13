@@ -1220,6 +1220,18 @@ function calcSourceBreakdown(records) {
   }
   return counts;
 }
+function calcWeightStability(records, days2 = 7) {
+  if (records.length < 3) return null;
+  const cutoff = new Date(Date.now() - days2 * 864e5).toISOString().slice(0, 10);
+  const recent = records.filter((r) => r.dt >= cutoff);
+  if (recent.length < 3) return null;
+  const weights = recent.map((r) => r.wt);
+  const avg = weights.reduce((s, w) => s + w, 0) / weights.length;
+  const variance = weights.reduce((s, w) => s + (w - avg) ** 2, 0) / weights.length;
+  const stdDev = Math.round(Math.sqrt(variance) * 100) / 100;
+  const score = Math.max(0, Math.min(100, Math.round((1 - stdDev / 2) * 100)));
+  return { stdDev, score, count: recent.length, avg: Math.round(avg * 10) / 10 };
+}
 function filterRecordsByDateRange(records, fromDate, toDate) {
   if (!fromDate && !toDate) return records;
   return records.filter((r) => {
@@ -22871,6 +22883,7 @@ function render() {
               ${insight.weekComparison !== null ? `<div class="helper">${insight.weekComparison > 0.05 ? t("insight.weekUp").replace("{diff}", insight.weekComparison.toFixed(1)) : insight.weekComparison < -0.05 ? t("insight.weekDown").replace("{diff}", insight.weekComparison.toFixed(1)) : t("insight.weekSame")}</div>` : ""}
             </div>` : ""}
             ${renderDayOfWeekAvg()}
+            ${renderStability()}
           </section>
 
           <!-- Monthly Stats Panel -->
@@ -23256,6 +23269,26 @@ function renderSourceBreakdown() {
     const pct = Math.round(count / state.records.length * 100);
     return `<span class="source-chip"><span class="source-icon">${icon}</span> ${t("entry.source." + src)} <strong>${count}</strong> (${pct}%)</span>`;
   }).join("")}
+      </div>
+    </div>
+  `;
+}
+function renderStability() {
+  const stability = calcWeightStability(state.records);
+  if (!stability) return "";
+  const level = stability.score >= 70 ? "high" : stability.score >= 40 ? "medium" : "low";
+  return `
+    <div class="stability-section">
+      <div class="helper">${t("stability.title")}</div>
+      <div class="stability-display">
+        <div class="stability-score-ring ${level}">
+          <span class="stability-score-value">${stability.score}</span>
+        </div>
+        <div class="stability-details">
+          <div class="stability-label ${level}">${t("stability." + level)}</div>
+          <div class="helper">${t("stability.stddev")}: ${stability.stdDev.toFixed(2)}kg</div>
+          <div class="helper">${t("chart.avg")}: ${stability.avg.toFixed(1)}kg (${stability.count} ${t("chart.records")})</div>
+        </div>
       </div>
     </div>
   `;
