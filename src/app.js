@@ -858,7 +858,7 @@ function renderCalendar() {
   const dayNames = ["calendar.sun", "calendar.mon", "calendar.tue", "calendar.wed", "calendar.thu", "calendar.fri", "calendar.sat"];
   let html = `<div class="calendar-nav">
     <button type="button" data-action="cal-prev">${t("calendar.prev")}</button>
-    <span class="calendar-label">${data.label}</span>
+    <span class="calendar-label">${new Date(calendarYear, calendarMonth).toLocaleDateString(state.settings.language === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "long" })}</span>
     <button type="button" data-action="cal-next">${t("calendar.next")}</button>
   </div>`;
   html += `<div class="calendar-grid">`;
