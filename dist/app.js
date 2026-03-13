@@ -1070,6 +1070,7 @@ function calcWeeklyRate(records) {
   return { weeklyRate, totalDays: Math.round(daySpan), totalChange: Math.round(totalChange * 10) / 10 };
 }
 function buildCalendarMonth(records, year, month) {
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return null;
   const firstDay = new Date(year, month, 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const startDow = firstDay.getDay();
@@ -22410,6 +22411,20 @@ var version = XLSX.version;
 // src/app.js
 var app = document.getElementById("app");
 var APP_VERSION = "1.0.0";
+window.onerror = function(msg, src, line, col, err) {
+  console.error("[WeightRainbow] Uncaught error:", msg, "at", src, line, col, err);
+  if (app && !app.innerHTML.trim()) {
+    app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
+      <h2 style="color:#dc2626;">\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F</h2>
+      <p style="color:#666;margin:12px 0;">${String(msg)}</p>
+      <p style="color:#999;font-size:0.8rem;">Line ${line}:${col}</p>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F</button>
+    </div>`;
+  }
+};
+window.addEventListener("unhandledrejection", function(e) {
+  console.error("[WeightRainbow] Unhandled rejection:", e.reason);
+});
 var isNativePlatform = Capacitor.isNativePlatform();
 var BrowserSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 var supportsSpeech = isNativePlatform || Boolean(BrowserSpeechRecognition);
@@ -22442,10 +22457,20 @@ var recordDateTo = "";
   const lastRecord = state.records[state.records.length - 1];
   if (lastRecord) quickWeight = lastRecord.wt;
 }
-if (!window.localStorage.getItem(STORAGE_KEYS.firstLaunchDone)) {
-  showFirstLaunchModal();
-} else {
-  render();
+try {
+  if (!window.localStorage.getItem(STORAGE_KEYS.firstLaunchDone)) {
+    showFirstLaunchModal();
+  } else {
+    render();
+  }
+} catch (e) {
+  console.error("[WeightRainbow] Init error:", e);
+  app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
+    <h2 style="color:#dc2626;">\u521D\u671F\u5316\u30A8\u30E9\u30FC</h2>
+    <p style="color:#666;margin:12px 0;">${e.message}</p>
+    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F</button>
+    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">\u30C7\u30FC\u30BF\u30EA\u30BB\u30C3\u30C8</button>
+  </div>`;
 }
 initReminder();
 function applySystemTheme() {
@@ -22573,40 +22598,41 @@ function getMotivationalMessage(streak, trend, records, goalProgress) {
   return "";
 }
 function render() {
-  document.documentElement.lang = state.settings.language;
-  document.title = t("app.title");
-  const description = document.querySelector('meta[name="description"]');
-  if (description) description.setAttribute("content", t("app.description"));
-  document.body.dataset.theme = state.settings.theme;
-  const themeColor = document.querySelector('meta[name="theme-color"]');
-  if (themeColor) {
-    const accent = getComputedStyle(document.body).getPropertyValue("--accent").trim();
-    if (accent) themeColor.setAttribute("content", accent);
-  }
-  const stats = calcStats(state.records, state.profile);
-  const dailyDiff = calcDailyDiff(state.records);
-  const weightComp = calcWeightComparison(state.records);
-  const goalWeight = Number(state.settings.goalWeight);
-  const goalProgress = calcGoalProgress(state.records, goalWeight);
-  const goalPrediction = calcGoalPrediction(state.records, goalWeight);
-  const periodDays = summaryPeriod === "week" ? 7 : 30;
-  const periodSummary = calcPeriodSummary(state.records, periodDays);
-  const streak = calcStreak(state.records);
-  const trend = calcWeightTrend(state.records);
-  const weeklyRate = calcWeeklyRate(state.records);
-  const bmiStatus = stats?.latestBMI ? t(getBMIStatus(stats.latestBMI)) : t("bmi.unknown");
-  const motivation = getMotivationalMessage(streak, trend, state.records, goalProgress);
-  const achievements = calcAchievements(state.records, streak, goalWeight);
-  const insight = calcInsight(state.records);
-  const previewWeightResult = validateWeight(state.form.weight);
-  const currentBMI = previewWeightResult.valid && state.profile.heightCm ? buildRecord({
-    date: state.form.date || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
-    weight: previewWeightResult.weight,
-    profile: state.profile,
-    source: activeEntryMode,
-    imageName: state.form.imageName
-  }).bmi : null;
-  app.innerHTML = `
+  try {
+    document.documentElement.lang = state.settings.language;
+    document.title = t("app.title");
+    const description = document.querySelector('meta[name="description"]');
+    if (description) description.setAttribute("content", t("app.description"));
+    document.body.dataset.theme = state.settings.theme;
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) {
+      const accent = getComputedStyle(document.body).getPropertyValue("--accent").trim();
+      if (accent) themeColor.setAttribute("content", accent);
+    }
+    const stats = calcStats(state.records, state.profile);
+    const dailyDiff = calcDailyDiff(state.records);
+    const weightComp = calcWeightComparison(state.records);
+    const goalWeight = Number(state.settings.goalWeight);
+    const goalProgress = calcGoalProgress(state.records, goalWeight);
+    const goalPrediction = calcGoalPrediction(state.records, goalWeight);
+    const periodDays = summaryPeriod === "week" ? 7 : 30;
+    const periodSummary = calcPeriodSummary(state.records, periodDays);
+    const streak = calcStreak(state.records);
+    const trend = calcWeightTrend(state.records);
+    const weeklyRate = calcWeeklyRate(state.records);
+    const bmiStatus = stats?.latestBMI ? t(getBMIStatus(stats.latestBMI)) : t("bmi.unknown");
+    const motivation = getMotivationalMessage(streak, trend, state.records, goalProgress);
+    const achievements = calcAchievements(state.records, streak, goalWeight);
+    const insight = calcInsight(state.records);
+    const previewWeightResult = validateWeight(state.form.weight);
+    const currentBMI = previewWeightResult.valid && state.profile.heightCm ? buildRecord({
+      date: state.form.date || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
+      weight: previewWeightResult.weight,
+      profile: state.profile,
+      source: activeEntryMode,
+      imageName: state.form.imageName
+    }).bmi : null;
+    app.innerHTML = `
     <div class="app-shell">
       <section class="hero">
         <div class="hero-top">
@@ -22670,11 +22696,11 @@ function render() {
         ${weightComp ? `
         <div class="hero-bottom hero-sub-3col">
           ${["week", "month", "quarter"].map((key) => {
-    const c = weightComp[key];
-    if (!c) return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value zero compact">--</div></div>`;
-    const cls = c.diff > 0 ? "positive" : c.diff < 0 ? "negative" : "zero";
-    return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value ${cls} compact">${c.diff > 0 ? "+" : ""}${c.diff.toFixed(1)}kg</div></div>`;
-  }).join("")}
+      const c = weightComp[key];
+      if (!c) return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value zero compact">--</div></div>`;
+      const cls = c.diff > 0 ? "positive" : c.diff < 0 ? "negative" : "zero";
+      return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value ${cls} compact">${c.diff > 0 ? "+" : ""}${c.diff.toFixed(1)}kg</div></div>`;
+    }).join("")}
         </div>` : ""}
       </section>
 
@@ -22762,9 +22788,9 @@ function render() {
                 ${(state.form.note || "").length > 50 ? `<div class="hint-small" style="text-align:right;">${(state.form.note || "").length}/100</div>` : ""}
                 <div class="note-tags-row" role="group" aria-label="${t("note.tags")}">
                   ${NOTE_TAGS.map((tag) => {
-    const active = (state.form.note || "").includes(`#${tag}`);
-    return `<button type="button" class="note-tag${active ? " active" : ""}" data-note-tag="${tag}">${t("note.tag." + tag)}</button>`;
-  }).join("")}
+      const active = (state.form.note || "").includes(`#${tag}`);
+      return `<button type="button" class="note-tag${active ? " active" : ""}" data-note-tag="${tag}">${t("note.tag." + tag)}</button>`;
+    }).join("")}
                 </div>
               </div>
 
@@ -23133,21 +23159,30 @@ function render() {
     </div>
     ` : ""}
   `;
-  bindEvents();
-  drawChart();
-  if (rainbowVisible) {
-    spawnConfetti();
-    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-    setTimeout(() => {
-      const overlay = document.getElementById("rainbowOverlay");
-      if (overlay) {
-        overlay.classList.add("fade-out");
-        setTimeout(() => {
-          rainbowVisible = false;
-          overlay.remove();
-        }, 600);
-      }
-    }, 3500);
+    bindEvents();
+    drawChart();
+    if (rainbowVisible) {
+      spawnConfetti();
+      if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+      setTimeout(() => {
+        const overlay = document.getElementById("rainbowOverlay");
+        if (overlay) {
+          overlay.classList.add("fade-out");
+          setTimeout(() => {
+            rainbowVisible = false;
+            overlay.remove();
+          }, 600);
+        }
+      }, 3500);
+    }
+  } catch (e) {
+    console.error("[WeightRainbow] Render error:", e);
+    app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
+      <h2 style="color:#dc2626;">\u63CF\u753B\u30A8\u30E9\u30FC</h2>
+      <p style="color:#666;margin:12px 0;">${e.message}</p>
+      <p style="color:#999;font-size:0.8rem;">${e.stack ? e.stack.split("\n").slice(0, 3).join("<br>") : ""}</p>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F</button>
+    </div>`;
   }
 }
 function renderMetric(label, value) {
@@ -23189,6 +23224,7 @@ function renderMonthlyStats() {
 }
 function renderCalendar() {
   const data = buildCalendarMonth(state.records, calendarYear, calendarMonth);
+  if (!data) return `<div class="helper">${t("chart.empty")}</div>`;
   const dayNames = ["calendar.sun", "calendar.mon", "calendar.tue", "calendar.wed", "calendar.thu", "calendar.fri", "calendar.sat"];
   let html = `<div class="calendar-nav">
     <button type="button" data-action="cal-prev">${t("calendar.prev")}</button>
@@ -23825,6 +23861,9 @@ async function toggleVoiceInput() {
   }
   if (voiceActive) {
     recognition?.stop();
+    recognition = null;
+    voiceActive = false;
+    render();
     return;
   }
   recognition = new BrowserSpeechRecognition();
@@ -24023,6 +24062,7 @@ async function shareChart() {
 function spawnConfetti() {
   const container = document.getElementById("confettiContainer");
   if (!container) return;
+  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
   const colors = ["#ff0000", "#ff9a00", "#d0de21", "#4fdc4a", "#3fdad8", "#2f6bec", "#8b45db", "#ec4899"];
   const shapes = ["circle", "square", "star"];
   const fragment = document.createDocumentFragment();

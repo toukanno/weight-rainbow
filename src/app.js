@@ -44,6 +44,22 @@ import * as XLSX from "xlsx";
 
 const app = document.getElementById("app");
 const APP_VERSION = "1.0.0";
+
+// Global error handler to prevent white screen
+window.onerror = function(msg, src, line, col, err) {
+  console.error("[WeightRainbow] Uncaught error:", msg, "at", src, line, col, err);
+  if (app && !app.innerHTML.trim()) {
+    app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
+      <h2 style="color:#dc2626;">エラーが発生しました</h2>
+      <p style="color:#666;margin:12px 0;">${String(msg)}</p>
+      <p style="color:#999;font-size:0.8rem;">Line ${line}:${col}</p>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">再読み込み</button>
+    </div>`;
+  }
+};
+window.addEventListener("unhandledrejection", function(e) {
+  console.error("[WeightRainbow] Unhandled rejection:", e.reason);
+});
 const isNativePlatform = Capacitor.isNativePlatform();
 const BrowserSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const supportsSpeech = isNativePlatform || Boolean(BrowserSpeechRecognition);
@@ -82,10 +98,20 @@ let recordDateTo = "";
 }
 
 // First-launch language selection
-if (!window.localStorage.getItem(STORAGE_KEYS.firstLaunchDone)) {
-  showFirstLaunchModal();
-} else {
-  render();
+try {
+  if (!window.localStorage.getItem(STORAGE_KEYS.firstLaunchDone)) {
+    showFirstLaunchModal();
+  } else {
+    render();
+  }
+} catch (e) {
+  console.error("[WeightRainbow] Init error:", e);
+  app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
+    <h2 style="color:#dc2626;">初期化エラー</h2>
+    <p style="color:#666;margin:12px 0;">${e.message}</p>
+    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">再読み込み</button>
+    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">データリセット</button>
+  </div>`;
 }
 
 // Initialize reminder system
@@ -224,6 +250,7 @@ function getMotivationalMessage(streak, trend, records, goalProgress) {
 }
 
 function render() {
+  try {
   document.documentElement.lang = state.settings.language;
   document.title = t("app.title");
   const description = document.querySelector('meta[name="description"]');
@@ -827,6 +854,15 @@ function render() {
       }
     }, 3500);
   }
+  } catch (e) {
+    console.error("[WeightRainbow] Render error:", e);
+    app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
+      <h2 style="color:#dc2626;">描画エラー</h2>
+      <p style="color:#666;margin:12px 0;">${e.message}</p>
+      <p style="color:#999;font-size:0.8rem;">${e.stack ? e.stack.split('\n').slice(0, 3).join('<br>') : ''}</p>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">再読み込み</button>
+    </div>`;
+  }
 }
 
 function renderMetric(label, value) {
@@ -870,6 +906,7 @@ function renderMonthlyStats() {
 
 function renderCalendar() {
   const data = buildCalendarMonth(state.records, calendarYear, calendarMonth);
+  if (!data) return `<div class="helper">${t("chart.empty")}</div>`;
   const dayNames = ["calendar.sun", "calendar.mon", "calendar.tue", "calendar.wed", "calendar.thu", "calendar.fri", "calendar.sat"];
   let html = `<div class="calendar-nav">
     <button type="button" data-action="cal-prev">${t("calendar.prev")}</button>
@@ -1572,6 +1609,9 @@ async function toggleVoiceInput() {
 
   if (voiceActive) {
     recognition?.stop();
+    recognition = null;
+    voiceActive = false;
+    render();
     return;
   }
 
@@ -1793,6 +1833,7 @@ async function shareChart() {
 function spawnConfetti() {
   const container = document.getElementById("confettiContainer");
   if (!container) return;
+  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
   const colors = ["#ff0000", "#ff9a00", "#d0de21", "#4fdc4a", "#3fdad8", "#2f6bec", "#8b45db", "#ec4899"];
   const shapes = ["circle", "square", "star"];
   const fragment = document.createDocumentFragment();

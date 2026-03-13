@@ -959,6 +959,11 @@ describe("buildCalendarMonth", () => {
     expect(result.days[0].wt).toBeNull(); // Jan 1 - no record
   });
 
+  it("returns null for invalid year/month", () => {
+    expect(buildCalendarMonth([], NaN, 0)).toBeNull();
+    expect(buildCalendarMonth([], 2025, NaN)).toBeNull();
+  });
+
   it("computes intensity based on weight range", () => {
     const records = [
       { dt: "2025-03-01", wt: 60 },
