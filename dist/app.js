@@ -1743,6 +1743,36 @@ function calcWeightVariance(records) {
     level
   };
 }
+function calcWeightPlateau(records) {
+  if (records.length < 14) return null;
+  const recent = records.slice(-14);
+  const weights = recent.map((r) => r.wt);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  const range = Math.round((max - min) * 10) / 10;
+  const avg = Math.round(weights.reduce((s, w) => s + w, 0) / weights.length * 10) / 10;
+  const first = recent[0];
+  const last = recent[recent.length - 1];
+  const daySpan = Math.max(1, (/* @__PURE__ */ new Date(last.dt + "T00:00:00") - /* @__PURE__ */ new Date(first.dt + "T00:00:00")) / 864e5);
+  const recentChange = Math.abs(last.wt - first.wt);
+  let previousRate = null;
+  if (records.length >= 28) {
+    const prev = records.slice(-28, -14);
+    const prevFirst = prev[0];
+    const prevLast = prev[prev.length - 1];
+    const prevDays = Math.max(1, (/* @__PURE__ */ new Date(prevLast.dt + "T00:00:00") - /* @__PURE__ */ new Date(prevFirst.dt + "T00:00:00")) / 864e5);
+    previousRate = Math.round((prevLast.wt - prevFirst.wt) / prevDays * 100) / 100;
+  }
+  const isPlateau = range <= 1 && recentChange <= 0.5;
+  return {
+    isPlateau,
+    days: Math.round(daySpan),
+    range,
+    avg,
+    recentChange: Math.round(recentChange * 10) / 10,
+    previousRate
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -2201,7 +2231,16 @@ var translations = {
     "variance.low": "\u5B89\u5B9A",
     "variance.moderate": "\u3084\u3084\u5909\u52D5\u3042\u308A",
     "variance.high": "\u5909\u52D5\u5927",
-    "variance.hint": "\u76F4\u8FD1{count}\u56DE\u306E\u8A18\u9332\u304B\u3089\u7B97\u51FA"
+    "variance.hint": "\u76F4\u8FD1{count}\u56DE\u306E\u8A18\u9332\u304B\u3089\u7B97\u51FA",
+    "plateau.title": "\u30D7\u30E9\u30C8\u30FC\u691C\u51FA",
+    "plateau.detected": "\u4F53\u91CD\u505C\u6EDE\u671F\u306B\u5165\u3063\u3066\u3044\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059",
+    "plateau.notDetected": "\u73FE\u5728\u30D7\u30E9\u30C8\u30FC\u3067\u306F\u3042\u308A\u307E\u305B\u3093",
+    "plateau.days": "\u76F4\u8FD1{days}\u65E5\u9593",
+    "plateau.range": "\u5909\u52D5\u5E45: {range}kg",
+    "plateau.avg": "\u5E73\u5747: {avg}kg",
+    "plateau.change": "\u5909\u5316\u91CF: {change}kg",
+    "plateau.prevRate": "\u524D\u671F\u9593\u306E\u30DA\u30FC\u30B9: {rate}kg/\u65E5",
+    "plateau.hint": "\u4F53\u91CD\u304C\u9577\u671F\u9593\u307B\u307C\u5909\u5316\u3057\u306A\u3044\u72B6\u614B\u3092\u691C\u51FA\u3057\u307E\u3059"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2658,7 +2697,16 @@ var translations = {
     "variance.low": "Stable",
     "variance.moderate": "Moderate fluctuation",
     "variance.high": "High fluctuation",
-    "variance.hint": "Based on last {count} records"
+    "variance.hint": "Based on last {count} records",
+    "plateau.title": "Plateau Detection",
+    "plateau.detected": "You may be in a weight plateau",
+    "plateau.notDetected": "Not currently in a plateau",
+    "plateau.days": "Last {days} days",
+    "plateau.range": "Range: {range}kg",
+    "plateau.avg": "Average: {avg}kg",
+    "plateau.change": "Change: {change}kg",
+    "plateau.prevRate": "Previous rate: {rate}kg/day",
+    "plateau.hint": "Detects periods where weight remains relatively unchanged"
   }
 };
 function createTranslator(language) {
@@ -23725,6 +23773,7 @@ function render() {
             ${renderWeeklyFrequency()}
             ${renderWeightVelocity()}
             ${renderWeightVariance()}
+            ${renderWeightPlateau()}
             ${renderBodyFatStats()}
           </section>
 
@@ -24322,6 +24371,27 @@ function renderWeightVariance() {
         <span>${t("variance.daily").replace("{avg}", v.avgDailySwing)}</span>
       </div>
       <div class="helper hint-small">${t("variance.hint").replace("{count}", v.count)}</div>
+    </div>
+  `;
+}
+function renderWeightPlateau() {
+  const p = calcWeightPlateau(state.records);
+  if (!p) return "";
+  const statusColor = p.isPlateau ? "var(--warn, #f59e0b)" : "var(--ok, #10b981)";
+  const statusIcon = p.isPlateau ? "\u23F8" : "\u{1F4C8}";
+  return `
+    <div class="plateau-section">
+      <div class="helper">${t("plateau.title")}</div>
+      <div class="plateau-status" style="color:${statusColor};font-weight:700;">
+        ${statusIcon} ${p.isPlateau ? t("plateau.detected") : t("plateau.notDetected")}
+      </div>
+      <div class="plateau-stats">
+        <span>${t("plateau.days").replace("{days}", p.days)}</span>
+        <span>${t("plateau.range").replace("{range}", p.range)}</span>
+        <span>${t("plateau.change").replace("{change}", p.recentChange)}</span>
+      </div>
+      ${p.previousRate !== null ? `<div class="plateau-prev">${t("plateau.prevRate").replace("{rate}", p.previousRate)}</div>` : ""}
+      <div class="helper hint-small">${t("plateau.hint")}</div>
     </div>
   `;
 }

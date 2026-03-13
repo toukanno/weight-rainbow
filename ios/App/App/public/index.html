@@ -1211,22 +1211,32 @@
         margin-top: 2px;
       }
 
-      .variance-section {
+      .variance-section,
+      .plateau-section {
         margin-top: 14px;
         padding-top: 12px;
         border-top: 1px solid var(--border);
       }
-      .variance-badge {
+      .variance-badge,
+      .plateau-status {
         font-size: 1.1rem;
         margin-top: 4px;
       }
-      .variance-stats {
+      .variance-stats,
+      .plateau-stats {
         display: flex;
         flex-wrap: wrap;
         gap: 6px 14px;
         margin-top: 6px;
         font-size: 0.78rem;
         color: var(--text);
+      }
+
+      .plateau-prev {
+        margin-top: 4px;
+        font-size: 0.78rem;
+        color: var(--text);
+        opacity: 0.8;
       }
 
       .consistency-section {
@@ -2831,7 +2841,8 @@
       body[data-theme="midnight"] .best-period-section,
       body[data-theme="midnight"] .tag-impact-section,
       body[data-theme="midnight"] .freq-section,
-      body[data-theme="midnight"] .variance-section {
+      body[data-theme="midnight"] .variance-section,
+      body[data-theme="midnight"] .plateau-section {
         border-color: rgba(139, 146, 176, 0.14);
       }
 

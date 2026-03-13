@@ -61,6 +61,7 @@ import {
   calcWeeklyFrequency,
   calcWeightVelocity,
   calcWeightVariance,
+  calcWeightPlateau,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -668,6 +669,7 @@ function render() {
             ${renderWeeklyFrequency()}
             ${renderWeightVelocity()}
             ${renderWeightVariance()}
+            ${renderWeightPlateau()}
             ${renderBodyFatStats()}
           </section>
 
@@ -1286,6 +1288,28 @@ function renderWeightVariance() {
         <span>${t("variance.daily").replace("{avg}", v.avgDailySwing)}</span>
       </div>
       <div class="helper hint-small">${t("variance.hint").replace("{count}", v.count)}</div>
+    </div>
+  `;
+}
+
+function renderWeightPlateau() {
+  const p = calcWeightPlateau(state.records);
+  if (!p) return "";
+  const statusColor = p.isPlateau ? "var(--warn, #f59e0b)" : "var(--ok, #10b981)";
+  const statusIcon = p.isPlateau ? "⏸" : "📈";
+  return `
+    <div class="plateau-section">
+      <div class="helper">${t("plateau.title")}</div>
+      <div class="plateau-status" style="color:${statusColor};font-weight:700;">
+        ${statusIcon} ${p.isPlateau ? t("plateau.detected") : t("plateau.notDetected")}
+      </div>
+      <div class="plateau-stats">
+        <span>${t("plateau.days").replace("{days}", p.days)}</span>
+        <span>${t("plateau.range").replace("{range}", p.range)}</span>
+        <span>${t("plateau.change").replace("{change}", p.recentChange)}</span>
+      </div>
+      ${p.previousRate !== null ? `<div class="plateau-prev">${t("plateau.prevRate").replace("{rate}", p.previousRate)}</div>` : ""}
+      <div class="helper hint-small">${t("plateau.hint")}</div>
     </div>
   `;
 }

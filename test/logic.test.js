@@ -59,6 +59,7 @@ import {
   calcWeeklyFrequency,
   calcWeightVelocity,
   calcWeightVariance,
+  calcWeightPlateau,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -2742,5 +2743,44 @@ describe("calcWeightVariance", () => {
     const result = calcWeightVariance(records);
     expect(result).not.toBeNull();
     expect(result.avgDailySwing).toBe(1);
+  });
+});
+
+describe("calcWeightPlateau", () => {
+  it("returns null with fewer than 14 records", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({ dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 70 }));
+    expect(calcWeightPlateau(records)).toBeNull();
+  });
+
+  it("detects plateau when weight is stable", () => {
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + (i % 2) * 0.2,
+    }));
+    const result = calcWeightPlateau(records);
+    expect(result).not.toBeNull();
+    expect(result.isPlateau).toBe(true);
+    expect(result.range).toBeLessThanOrEqual(1.0);
+  });
+
+  it("does not detect plateau when weight is changing", () => {
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i * 0.3,
+    }));
+    const result = calcWeightPlateau(records);
+    expect(result).not.toBeNull();
+    expect(result.isPlateau).toBe(false);
+  });
+
+  it("includes previous rate when 28+ records exist", () => {
+    const records = Array.from({ length: 28 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: i < 14 ? 73 - i * 0.2 : 70.2,
+    }));
+    const result = calcWeightPlateau(records);
+    expect(result).not.toBeNull();
+    expect(result.previousRate).not.toBeNull();
+    expect(result.isPlateau).toBe(true);
   });
 });

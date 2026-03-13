@@ -1142,3 +1142,38 @@ export function calcWeightVariance(records) {
     level,
   };
 }
+
+export function calcWeightPlateau(records) {
+  if (records.length < 14) return null;
+  const recent = records.slice(-14);
+  const weights = recent.map((r) => r.wt);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  const range = Math.round((max - min) * 10) / 10;
+  const avg = Math.round((weights.reduce((s, w) => s + w, 0) / weights.length) * 10) / 10;
+  const first = recent[0];
+  const last = recent[recent.length - 1];
+  const daySpan = Math.max(1, (new Date(last.dt + "T00:00:00") - new Date(first.dt + "T00:00:00")) / 86400000);
+  const recentChange = Math.abs(last.wt - first.wt);
+
+  // Check previous period for comparison
+  let previousRate = null;
+  if (records.length >= 28) {
+    const prev = records.slice(-28, -14);
+    const prevFirst = prev[0];
+    const prevLast = prev[prev.length - 1];
+    const prevDays = Math.max(1, (new Date(prevLast.dt + "T00:00:00") - new Date(prevFirst.dt + "T00:00:00")) / 86400000);
+    previousRate = Math.round(((prevLast.wt - prevFirst.wt) / prevDays) * 100) / 100;
+  }
+
+  // Plateau: range <= 1.0kg AND change <= 0.5kg over the period
+  const isPlateau = range <= 1.0 && recentChange <= 0.5;
+  return {
+    isPlateau,
+    days: Math.round(daySpan),
+    range,
+    avg,
+    recentChange: Math.round(recentChange * 10) / 10,
+    previousRate,
+  };
+}
