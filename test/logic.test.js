@@ -22,6 +22,7 @@ import {
   buildCalendarMonth,
   calcWeeklyRate,
   calcMonthlyStats,
+  filterRecords,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -585,5 +586,44 @@ describe("calcMonthlyStats", () => {
     expect(result[0].month).toBe("2026-03");
     expect(result[0].count).toBe(1);
     expect(result[0].change).toBe(0);
+  });
+});
+
+describe("filterRecords", () => {
+  const records = [
+    { dt: "2026-01-05", wt: 70, note: "morning run", source: "manual" },
+    { dt: "2026-01-10", wt: 68.5, note: "after gym", source: "quick" },
+    { dt: "2026-02-01", wt: 67, note: "", source: "voice" },
+    { dt: "2026-02-15", wt: 66, note: "diet started", source: "manual" },
+  ];
+
+  it("returns all records when query is empty", () => {
+    expect(filterRecords(records, "")).toEqual(records);
+    expect(filterRecords(records, null)).toEqual(records);
+    expect(filterRecords(records, "  ")).toEqual(records);
+  });
+
+  it("filters by date substring", () => {
+    const result = filterRecords(records, "2026-01");
+    expect(result).toHaveLength(2);
+    expect(result[0].dt).toBe("2026-01-05");
+  });
+
+  it("filters by note content (case insensitive)", () => {
+    const result = filterRecords(records, "gym");
+    expect(result).toHaveLength(1);
+    expect(result[0].wt).toBe(68.5);
+  });
+
+  it("filters by weight value", () => {
+    const result = filterRecords(records, "67");
+    expect(result).toHaveLength(1);
+    expect(result[0].dt).toBe("2026-02-01");
+  });
+
+  it("filters by source", () => {
+    const result = filterRecords(records, "voice");
+    expect(result).toHaveLength(1);
+    expect(result[0].dt).toBe("2026-02-01");
   });
 });

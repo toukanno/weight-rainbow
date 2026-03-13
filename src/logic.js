@@ -457,3 +457,15 @@ export function calcMonthlyStats(records) {
     return { month: key, count: weights.length, avg, min, max, change };
   });
 }
+
+export function filterRecords(records, query) {
+  if (!query || !query.trim()) return records;
+  const q = query.trim().toLowerCase();
+  return records.filter((r) => {
+    if (r.dt.includes(q)) return true;
+    if (r.note && r.note.toLowerCase().includes(q)) return true;
+    if (r.source && r.source.toLowerCase().includes(q)) return true;
+    if (String(r.wt).includes(q)) return true;
+    return false;
+  });
+}

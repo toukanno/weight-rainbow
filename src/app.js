@@ -28,6 +28,7 @@ import {
   buildCalendarMonth,
   calcWeeklyRate,
   calcMonthlyStats,
+  filterRecords,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -62,6 +63,7 @@ let reminderTimer = null;
 let calendarYear = new Date().getFullYear();
 let calendarMonth = new Date().getMonth();
 let showMonthlyStats = false;
+let recordSearchQuery = "";
 
 // Initialize quick weight from last record
 {
@@ -205,6 +207,12 @@ function render() {
   const description = document.querySelector('meta[name="description"]');
   if (description) description.setAttribute("content", t("app.description"));
   document.body.dataset.theme = state.settings.theme;
+  // Update browser theme-color to match current theme accent
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  if (themeColor) {
+    const accent = getComputedStyle(document.body).getPropertyValue("--accent").trim();
+    if (accent) themeColor.setAttribute("content", accent);
+  }
 
   const stats = calcStats(state.records, state.profile);
   const dailyDiff = calcDailyDiff(state.records);
@@ -266,7 +274,7 @@ function render() {
         </div>
 
         <!-- Daily Diff & Goal Progress -->
-        <div class="hero-bottom" style="grid-template-columns: 1fr 1fr; margin-top: 12px;">
+        <div class="hero-bottom hero-sub-2col">
           <div class="diff-box">
             <div class="label">${t("diff.title")}</div>
             ${dailyDiff
@@ -302,12 +310,12 @@ function render() {
           </div>
         </div>
         ${weightComp ? `
-        <div class="hero-bottom" style="grid-template-columns: repeat(3, 1fr); margin-top: 12px;">
+        <div class="hero-bottom hero-sub-3col">
           ${["week", "month", "quarter"].map((key) => {
             const c = weightComp[key];
-            if (!c) return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value zero" style="font-size:1.2rem">--</div></div>`;
+            if (!c) return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value zero compact">--</div></div>`;
             const cls = c.diff > 0 ? "positive" : c.diff < 0 ? "negative" : "zero";
-            return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value ${cls}" style="font-size:1.2rem">${c.diff > 0 ? "+" : ""}${c.diff.toFixed(1)}kg</div></div>`;
+            return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value ${cls} compact">${c.diff > 0 ? "+" : ""}${c.diff.toFixed(1)}kg</div></div>`;
           }).join("")}
         </div>` : ""}
       </section>
@@ -499,7 +507,7 @@ function render() {
             <div class="rate-box">
               <div class="label">${t("rate.title")}</div>
               ${weeklyRate
-                ? `<div class="value" style="font-size:1.1rem;font-weight:700;color:${weeklyRate.weeklyRate < 0 ? "var(--ok, #10b981)" : weeklyRate.weeklyRate > 0 ? "var(--warn, #f59e0b)" : "var(--muted)"}">${weeklyRate.weeklyRate > 0 ? "+" : ""}${t("rate.value").replace("{rate}", weeklyRate.weeklyRate.toFixed(2))}</div>
+                ? `<div class="rate-value ${weeklyRate.weeklyRate < 0 ? "loss" : weeklyRate.weeklyRate > 0 ? "gain" : "neutral"}">${weeklyRate.weeklyRate > 0 ? "+" : ""}${t("rate.value").replace("{rate}", weeklyRate.weeklyRate.toFixed(2))}</div>
                   <div class="helper">${t("rate.period").replace("{days}", weeklyRate.totalDays).replace("{change}", (weeklyRate.totalChange > 0 ? "+" : "") + weeklyRate.totalChange.toFixed(1))}</div>`
                 : `<div class="helper">${t("rate.insufficient")}</div>`}
             </div>
@@ -528,6 +536,11 @@ function render() {
               </div>
               ${state.records.length > 5 ? `<button type="button" class="btn secondary" data-action="toggle-records">${showAllRecords ? t("records.showLess") : t("records.showAll")}</button>` : ""}
             </div>
+            ${state.records.length > 3 ? `
+            <div class="record-search">
+              <input id="recordSearch" type="search" placeholder="${escapeAttr(t("records.search"))}" value="${escapeAttr(recordSearchQuery)}" autocomplete="off" />
+              ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : ""}
+            </div>` : ""}
             <div class="record-list">
               ${state.records.length ? renderRecordList() : `<div class="empty-state"><div style="font-size:2.4rem;margin-bottom:8px;">📊</div><div class="helper">${t("records.empty")}</div></div>`}
             </div>
@@ -863,10 +876,10 @@ function renderRecord(record, prevRecord) {
 }
 
 function renderRecordList() {
-  const reversed = state.records.slice().reverse();
-  const displayed = showAllRecords ? reversed : reversed.slice(0, 5);
-  return displayed.map((record, i) => {
-    // Find previous record (the next in reversed = earlier in time)
+  const filtered = filterRecords(state.records, recordSearchQuery);
+  const reversed = filtered.slice().reverse();
+  const displayed = showAllRecords || recordSearchQuery ? reversed : reversed.slice(0, 5);
+  return displayed.map((record) => {
     const prevIndex = state.records.indexOf(record) - 1;
     const prevRecord = prevIndex >= 0 ? state.records[prevIndex] : null;
     return renderRecord(record, prevRecord);
@@ -914,6 +927,13 @@ function bindEvents() {
   app.querySelector('[data-action="toggle-monthly"]')?.addEventListener("click", () => {
     showMonthlyStats = !showMonthlyStats;
     render();
+  });
+  app.querySelector("#recordSearch")?.addEventListener("input", (e) => {
+    recordSearchQuery = e.target.value;
+    render();
+    // Restore focus and cursor position after render
+    const input = document.getElementById("recordSearch");
+    if (input) { input.focus(); input.selectionStart = input.selectionEnd = input.value.length; }
   });
   app.querySelector('[data-action="export-excel"]')?.addEventListener("click", exportExcel);
   app.querySelector('[data-action="export-csv"]')?.addEventListener("click", exportCSV);
@@ -1130,12 +1150,6 @@ let lastUndoState = null;
 let undoTimer = null;
 
 function saveRecordWithWeight(weight, source) {
-  const profileResult = validateProfile(state.profile);
-  if (!profileResult.valid) {
-    setStatus(t(profileResult.error), "error");
-    return;
-  }
-
   const weightResult = validateWeight(String(weight));
   if (!weightResult.valid) {
     setStatus(t(weightResult.error || "entry.noWeight"), "error");
@@ -1148,21 +1162,27 @@ function saveRecordWithWeight(weight, source) {
     return;
   }
 
-  state.profile = {
+  // Validate profile but don't block weight save — only use valid fields for BMI
+  const profileResult = validateProfile(state.profile);
+  const profileForRecord = profileResult.valid ? {
     ...profileResult.profile,
     heightCm: profileResult.profile.heightCm ?? "",
     age: profileResult.profile.age ?? "",
-  };
+  } : state.profile;
 
   // Save undo state before modifying
   lastUndoState = { records: [...state.records], quickWeight };
 
   checkRainbow(weightResult.weight);
 
+  if (profileResult.valid) {
+    state.profile = profileForRecord;
+  }
+
   const record = buildRecord({
     date: state.form.date || new Date().toISOString().slice(0, 10),
     weight: weightResult.weight,
-    profile: state.profile,
+    profile: profileForRecord,
     source,
     imageName: state.form.imageName,
     bodyFat: bfResult.bodyFat,
@@ -2109,7 +2129,7 @@ async function googleRestore() {
     if (!bd.records?.length) { setStatus(t("google.noData"), "error"); return; }
     let m = [...state.records];
     for (const r of bd.records) {
-      m = upsertRecord(m, { ...r, bmi: r.bmi ?? null, source: r.source || "manual", imageName: "" });
+      m = upsertRecord(m, { ...r, bmi: r.bmi ?? null, bf: r.bf ?? null, note: r.note ?? "", source: r.source || "manual", imageName: "" });
     }
     state.records = trimRecords(m, MAX_RECORDS);
     if (bd.settings?.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;

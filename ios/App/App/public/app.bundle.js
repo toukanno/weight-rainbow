@@ -1139,6 +1139,17 @@ function calcMonthlyStats(records) {
     return { month: key, count: weights.length, avg, min, max, change };
   });
 }
+function filterRecords(records, query) {
+  if (!query || !query.trim()) return records;
+  const q = query.trim().toLowerCase();
+  return records.filter((r) => {
+    if (r.dt.includes(q)) return true;
+    if (r.note && r.note.toLowerCase().includes(q)) return true;
+    if (r.source && r.source.toLowerCase().includes(q)) return true;
+    if (String(r.wt).includes(q)) return true;
+    return false;
+  });
+}
 
 // src/i18n.js
 var translations = {
@@ -1275,6 +1286,8 @@ var translations = {
     "records.delete": "\u524A\u9664",
     "records.showAll": "\u3059\u3079\u3066\u8868\u793A",
     "records.showLess": "\u9589\u3058\u308B",
+    "records.search": "\u65E5\u4ED8\u30FB\u30E1\u30E2\u30FB\u4F53\u91CD\u3067\u691C\u7D22",
+    "records.searchResult": "{count}\u4EF6\u304C\u30D2\u30C3\u30C8",
     "export.excel": "Excel\u51FA\u529B",
     "export.csv": "CSV\u51FA\u529B",
     "export.text": "\u30C6\u30AD\u30B9\u30C8\u51FA\u529B",
@@ -1414,7 +1427,7 @@ var translations = {
     "camera.cancel": "\u30AD\u30E3\u30F3\u30BB\u30EB",
     "camera.photo": "\u30D5\u30A9\u30C8\u30E9\u30A4\u30D6\u30E9\u30EA",
     "camera.picture": "\u30AB\u30E1\u30E9",
-    "record.dailyLimit": "1\u65E510\u56DE\u307E\u3067\u4F53\u91CD\u3092\u8A18\u9332\u3067\u304D\u307E\u3059",
+    "record.dailyLimit": "\u540C\u3058\u65E5\u4ED8\u306E\u8A18\u9332\u306F\u4E0A\u66F8\u304D\u3055\u308C\u307E\u3059",
     "record.dailyLimitReached": "\u672C\u65E5\u306E\u8A18\u9332\u4E0A\u9650\uFF0810\u56DE\uFF09\u306B\u9054\u3057\u307E\u3057\u305F",
     "entry.note": "\u30E1\u30E2",
     "entry.noteHint": "\u98DF\u4E8B\u30FB\u904B\u52D5\u306A\u3069\uFF08100\u6587\u5B57\u307E\u3067\uFF09",
@@ -1562,6 +1575,8 @@ var translations = {
     "records.delete": "Delete",
     "records.showAll": "Show all",
     "records.showLess": "Show less",
+    "records.search": "Search by date, note, or weight",
+    "records.searchResult": "{count} results",
     "export.excel": "Export Excel",
     "export.csv": "Export CSV",
     "export.text": "Export Text",
@@ -1701,7 +1716,7 @@ var translations = {
     "camera.cancel": "Cancel",
     "camera.photo": "Photo Library",
     "camera.picture": "Camera",
-    "record.dailyLimit": "Up to 10 records per day",
+    "record.dailyLimit": "Records on the same date are overwritten",
     "record.dailyLimitReached": "Daily record limit (10) reached",
     "rate.title": "Weekly Rate",
     "rate.value": "{rate}kg/week",
@@ -22252,6 +22267,7 @@ var reminderTimer = null;
 var calendarYear = (/* @__PURE__ */ new Date()).getFullYear();
 var calendarMonth = (/* @__PURE__ */ new Date()).getMonth();
 var showMonthlyStats = false;
+var recordSearchQuery = "";
 {
   const lastRecord = state.records[state.records.length - 1];
   if (lastRecord) quickWeight = lastRecord.wt;
@@ -22381,6 +22397,11 @@ function render() {
   const description = document.querySelector('meta[name="description"]');
   if (description) description.setAttribute("content", t("app.description"));
   document.body.dataset.theme = state.settings.theme;
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  if (themeColor) {
+    const accent = getComputedStyle(document.body).getPropertyValue("--accent").trim();
+    if (accent) themeColor.setAttribute("content", accent);
+  }
   const stats = calcStats(state.records, state.profile);
   const dailyDiff = calcDailyDiff(state.records);
   const weightComp = calcWeightComparison(state.records);
@@ -22438,7 +22459,7 @@ function render() {
         </div>
 
         <!-- Daily Diff & Goal Progress -->
-        <div class="hero-bottom" style="grid-template-columns: 1fr 1fr; margin-top: 12px;">
+        <div class="hero-bottom hero-sub-2col">
           <div class="diff-box">
             <div class="label">${t("diff.title")}</div>
             ${dailyDiff ? `<div class="diff-value ${dailyDiff.diff > 0 ? "positive" : dailyDiff.diff < 0 ? "negative" : "zero"}">
@@ -22465,12 +22486,12 @@ function render() {
           </div>
         </div>
         ${weightComp ? `
-        <div class="hero-bottom" style="grid-template-columns: repeat(3, 1fr); margin-top: 12px;">
+        <div class="hero-bottom hero-sub-3col">
           ${["week", "month", "quarter"].map((key) => {
     const c = weightComp[key];
-    if (!c) return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value zero" style="font-size:1.2rem">--</div></div>`;
+    if (!c) return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value zero compact">--</div></div>`;
     const cls = c.diff > 0 ? "positive" : c.diff < 0 ? "negative" : "zero";
-    return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value ${cls}" style="font-size:1.2rem">${c.diff > 0 ? "+" : ""}${c.diff.toFixed(1)}kg</div></div>`;
+    return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value ${cls} compact">${c.diff > 0 ? "+" : ""}${c.diff.toFixed(1)}kg</div></div>`;
   }).join("")}
         </div>` : ""}
       </section>
@@ -22657,7 +22678,7 @@ function render() {
                 <div class="helper" style="margin-top: 10px;">${t("summary.count")}: ${periodSummary.count}</div>` : `<div class="helper">${t("summary.noData")}</div>`}
             <div class="rate-box">
               <div class="label">${t("rate.title")}</div>
-              ${weeklyRate ? `<div class="value" style="font-size:1.1rem;font-weight:700;color:${weeklyRate.weeklyRate < 0 ? "var(--ok, #10b981)" : weeklyRate.weeklyRate > 0 ? "var(--warn, #f59e0b)" : "var(--muted)"}">${weeklyRate.weeklyRate > 0 ? "+" : ""}${t("rate.value").replace("{rate}", weeklyRate.weeklyRate.toFixed(2))}</div>
+              ${weeklyRate ? `<div class="rate-value ${weeklyRate.weeklyRate < 0 ? "loss" : weeklyRate.weeklyRate > 0 ? "gain" : "neutral"}">${weeklyRate.weeklyRate > 0 ? "+" : ""}${t("rate.value").replace("{rate}", weeklyRate.weeklyRate.toFixed(2))}</div>
                   <div class="helper">${t("rate.period").replace("{days}", weeklyRate.totalDays).replace("{change}", (weeklyRate.totalChange > 0 ? "+" : "") + weeklyRate.totalChange.toFixed(1))}</div>` : `<div class="helper">${t("rate.insufficient")}</div>`}
             </div>
           </section>
@@ -22685,6 +22706,11 @@ function render() {
               </div>
               ${state.records.length > 5 ? `<button type="button" class="btn secondary" data-action="toggle-records">${showAllRecords ? t("records.showLess") : t("records.showAll")}</button>` : ""}
             </div>
+            ${state.records.length > 3 ? `
+            <div class="record-search">
+              <input id="recordSearch" type="search" placeholder="${escapeAttr(t("records.search"))}" value="${escapeAttr(recordSearchQuery)}" autocomplete="off" />
+              ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : ""}
+            </div>` : ""}
             <div class="record-list">
               ${state.records.length ? renderRecordList() : `<div class="empty-state"><div style="font-size:2.4rem;margin-bottom:8px;">\u{1F4CA}</div><div class="helper">${t("records.empty")}</div></div>`}
             </div>
@@ -23009,9 +23035,10 @@ function renderRecord(record, prevRecord) {
   `;
 }
 function renderRecordList() {
-  const reversed = state.records.slice().reverse();
-  const displayed = showAllRecords ? reversed : reversed.slice(0, 5);
-  return displayed.map((record, i) => {
+  const filtered = filterRecords(state.records, recordSearchQuery);
+  const reversed = filtered.slice().reverse();
+  const displayed = showAllRecords || recordSearchQuery ? reversed : reversed.slice(0, 5);
+  return displayed.map((record) => {
     const prevIndex = state.records.indexOf(record) - 1;
     const prevRecord = prevIndex >= 0 ? state.records[prevIndex] : null;
     return renderRecord(record, prevRecord);
@@ -23055,6 +23082,15 @@ function bindEvents() {
   app.querySelector('[data-action="toggle-monthly"]')?.addEventListener("click", () => {
     showMonthlyStats = !showMonthlyStats;
     render();
+  });
+  app.querySelector("#recordSearch")?.addEventListener("input", (e) => {
+    recordSearchQuery = e.target.value;
+    render();
+    const input = document.getElementById("recordSearch");
+    if (input) {
+      input.focus();
+      input.selectionStart = input.selectionEnd = input.value.length;
+    }
   });
   app.querySelector('[data-action="export-excel"]')?.addEventListener("click", exportExcel);
   app.querySelector('[data-action="export-csv"]')?.addEventListener("click", exportCSV);
@@ -23250,11 +23286,6 @@ function quickSaveRecord() {
 var lastUndoState = null;
 var undoTimer = null;
 function saveRecordWithWeight(weight, source) {
-  const profileResult = validateProfile(state.profile);
-  if (!profileResult.valid) {
-    setStatus(t(profileResult.error), "error");
-    return;
-  }
   const weightResult = validateWeight(String(weight));
   if (!weightResult.valid) {
     setStatus(t(weightResult.error || "entry.noWeight"), "error");
@@ -23265,17 +23296,21 @@ function saveRecordWithWeight(weight, source) {
     setStatus(t(bfResult.error), "error");
     return;
   }
-  state.profile = {
+  const profileResult = validateProfile(state.profile);
+  const profileForRecord = profileResult.valid ? {
     ...profileResult.profile,
     heightCm: profileResult.profile.heightCm ?? "",
     age: profileResult.profile.age ?? ""
-  };
+  } : state.profile;
   lastUndoState = { records: [...state.records], quickWeight };
   checkRainbow(weightResult.weight);
+  if (profileResult.valid) {
+    state.profile = profileForRecord;
+  }
   const record = buildRecord({
     date: state.form.date || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
     weight: weightResult.weight,
-    profile: state.profile,
+    profile: profileForRecord,
     source,
     imageName: state.form.imageName,
     bodyFat: bfResult.bodyFat,
@@ -24126,7 +24161,7 @@ async function googleRestore() {
     }
     let m = [...state.records];
     for (const r of bd.records) {
-      m = upsertRecord(m, { ...r, bmi: r.bmi ?? null, source: r.source || "manual", imageName: "" });
+      m = upsertRecord(m, { ...r, bmi: r.bmi ?? null, bf: r.bf ?? null, note: r.note ?? "", source: r.source || "manual", imageName: "" });
     }
     state.records = trimRecords(m, MAX_RECORDS);
     if (bd.settings?.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;
