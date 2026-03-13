@@ -199,6 +199,7 @@ export function createDefaultSettings() {
     goalWeight: null,
     reminderEnabled: false,
     reminderTime: "21:00",
+    autoTheme: false,
   };
 }
 
@@ -295,5 +296,43 @@ export function calcPeriodSummary(records, days) {
     change: filtered.length >= 2
       ? Math.round((weights[weights.length - 1] - weights[0]) * 10) / 10
       : 0,
+  };
+}
+
+export function buildCalendarMonth(records, year, month) {
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const startDow = firstDay.getDay(); // 0=Sun
+
+  const recordMap = {};
+  for (const r of records) {
+    recordMap[r.dt] = r.wt;
+  }
+
+  const monthWeights = [];
+  const days = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    const wt = recordMap[dt] ?? null;
+    if (wt !== null) monthWeights.push(wt);
+    days.push({ day: d, dt, wt });
+  }
+
+  const minWt = monthWeights.length ? Math.min(...monthWeights) : 0;
+  const maxWt = monthWeights.length ? Math.max(...monthWeights) : 0;
+  const range = maxWt - minWt || 1;
+
+  for (const d of days) {
+    d.intensity = d.wt !== null ? (d.wt - minWt) / range : null;
+  }
+
+  return {
+    year,
+    month,
+    startDow,
+    daysInMonth,
+    days,
+    recordCount: monthWeights.length,
+    label: `${year}-${String(month + 1).padStart(2, "0")}`,
   };
 }

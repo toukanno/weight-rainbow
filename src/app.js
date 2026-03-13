@@ -22,6 +22,7 @@ import {
   validateProfile,
   validateWeight,
   THEME_LIST,
+  buildCalendarMonth,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -52,6 +53,8 @@ let rainbowVisible = false;
 let rainbowDetail = "";
 let summaryPeriod = "week";
 let reminderTimer = null;
+let calendarYear = new Date().getFullYear();
+let calendarMonth = new Date().getMonth();
 
 // Initialize quick weight from last record
 {
@@ -68,6 +71,23 @@ if (!window.localStorage.getItem(STORAGE_KEYS.firstLaunchDone)) {
 
 // Initialize reminder system
 initReminder();
+
+// Auto dark mode: listen for system theme changes
+function applySystemTheme() {
+  if (!window.matchMedia) return;
+  const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  if (state.settings.autoTheme) {
+    if (!state.settings._savedTheme) state.settings._savedTheme = state.settings.theme;
+    state.settings.theme = isDark ? "midnight" : (state.settings._savedTheme || "prism");
+    document.body.dataset.theme = state.settings.theme;
+  }
+}
+if (window.matchMedia) {
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (state.settings.autoTheme) { applySystemTheme(); render(); }
+  });
+  applySystemTheme();
+}
 
 function loadState() {
   return {
@@ -152,6 +172,23 @@ function formatBMI(bmi) {
   return bmi ? bmi.toFixed(1) : t("chart.none");
 }
 
+function getMotivationalMessage(streak, trend, records, goalProgress) {
+  if (records.length === 1) return t("motivation.firstRecord");
+  if (goalProgress && goalProgress.remaining > 0 && goalProgress.remaining <= 2) return t("motivation.goalClose");
+  if (records.length >= 2) {
+    const weights = records.map((r) => r.wt);
+    const latest = weights[weights.length - 1];
+    const allTimeMin = Math.min(...weights.slice(0, -1));
+    if (latest < allTimeMin) return t("motivation.newRecord");
+  }
+  if (streak >= 30) return t("motivation.streak30");
+  if (streak >= 14) return t("motivation.streak14");
+  if (streak >= 7) return t("motivation.streak7");
+  if (streak >= 3) return t("motivation.streak3");
+  if (trend === "down") return t("motivation.trendDown");
+  return "";
+}
+
 function render() {
   document.documentElement.lang = state.settings.language;
   document.title = t("app.title");
@@ -169,6 +206,7 @@ function render() {
   const streak = calcStreak(state.records);
   const trend = calcWeightTrend(state.records);
   const bmiStatus = stats?.latestBMI ? t(getBMIStatus(stats.latestBMI)) : t("bmi.unknown");
+  const motivation = getMotivationalMessage(streak, trend, state.records, goalProgress);
   const previewWeightResult = validateWeight(state.form.weight);
   const currentBMI = previewWeightResult.valid && state.profile.heightCm
     ? buildRecord({
@@ -196,6 +234,7 @@ function render() {
               ${streak > 0 ? `<span class="streak-badge${streak >= 7 ? " rainbow" : ""}">🔥 ${streak}${t("streak.days")}</span>` : ""}
               ${trend ? `<span class="trend-indicator ${trend}">${trend === "down" ? "📉" : trend === "up" ? "📈" : "➡️"} ${t("trend." + trend)}</span>` : ""}
             </div>
+            ${motivation ? `<p class="motivation-msg">${motivation}</p>` : ""}
           </div>
           <div class="hero-card">
             <div class="eyebrow">${t("bmi.title")}</div>
@@ -373,7 +412,10 @@ function render() {
               </div>
             </div>
 
-            <div class="status ${statusKind === "error" ? "warn" : ""}" role="status" aria-live="polite">${statusMessage}</div>
+            <div class="status ${statusKind === "error" ? "warn" : ""}" role="status" aria-live="polite">
+              ${statusMessage}
+              ${lastUndoState ? `<button type="button" class="undo-btn" data-action="undo">${t("undo.button")}</button>` : ""}
+            </div>
           </section>
 
           <section class="panel">
@@ -384,6 +426,7 @@ function render() {
               </div>
             </div>
             <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}"></canvas>
+            <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
             <div class="stat-grid">
               ${renderStat(t("chart.latest"), stats ? formatWeight(stats.latestWeight) : "--")}
               ${renderStat(t("chart.min"), stats ? formatWeight(stats.minWeight) : "--")}
@@ -412,6 +455,17 @@ function render() {
                 </div>
                 <div class="helper" style="margin-top: 10px;">${t("summary.count")}: ${periodSummary.count}</div>`
               : `<div class="helper">${t("summary.noData")}</div>`}
+          </section>
+
+          <!-- Calendar Panel -->
+          <section class="panel">
+            <div class="section-header">
+              <div>
+                <h2>${t("calendar.title")}</h2>
+                <p>${t("calendar.hint")}</p>
+              </div>
+            </div>
+            ${renderCalendar()}
           </section>
 
           <!-- Records List Panel -->
@@ -477,6 +531,13 @@ function render() {
                 </select>
               </div>
               <div class="field">
+                <label for="autoTheme">${t("settings.autoTheme")}</label>
+                <select id="autoTheme" name="autoTheme">
+                  ${renderOption("true", String(state.settings.autoTheme), t("settings.autoTheme.on"))}
+                  ${renderOption("false", String(state.settings.autoTheme), t("settings.autoTheme.off"))}
+                </select>
+              </div>
+              <div class="field">
                 <label>${t("settings.platforms")}</label>
                 <input value="${t("settings.platformsValue")}" readonly />
               </div>
@@ -506,11 +567,11 @@ function render() {
               </div>
             </div>
             <div class="row" style="gap: 10px;">
-              <button type="button" class="google-btn" data-action="google-backup">
+              <button type="button" class="google-btn" data-action="google-backup" ${GOOGLE_CLIENT_ID ? "" : 'disabled style="opacity:0.5;cursor:not-allowed;"'}>
                 <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
                 ${t("google.backup")}
               </button>
-              <button type="button" class="google-btn" data-action="google-restore">
+              <button type="button" class="google-btn" data-action="google-restore" ${GOOGLE_CLIENT_ID ? "" : 'disabled style="opacity:0.5;cursor:not-allowed;"'}>
                 <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
                 ${t("google.restore")}
               </button>
@@ -623,6 +684,8 @@ function render() {
 
   if (rainbowVisible) {
     spawnConfetti();
+    // Vibrate on supported devices for haptic feedback
+    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
     setTimeout(() => {
       const overlay = document.getElementById("rainbowOverlay");
       if (overlay) {
@@ -630,14 +693,49 @@ function render() {
         setTimeout(() => {
           rainbowVisible = false;
           overlay.remove();
-        }, 500);
+        }, 600);
       }
-    }, 2500);
+    }, 3500);
   }
 }
 
 function renderMetric(label, value) {
   return `<div class="metric"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+}
+
+function renderCalendar() {
+  const cal = buildCalendarMonth(state.records, calendarYear, calendarMonth);
+  const today = new Date().toISOString().slice(0, 10);
+  const dowHeaders = ["calendar.sun", "calendar.mon", "calendar.tue", "calendar.wed", "calendar.thu", "calendar.fri", "calendar.sat"]
+    .map((k) => `<div class="cal-dow">${t(k)}</div>`).join("");
+
+  let cells = "";
+  for (let i = 0; i < cal.startDow; i++) cells += `<div class="cal-cell empty"></div>`;
+  for (const d of cal.days) {
+    const isToday = d.dt === today;
+    let bg = "";
+    if (d.wt !== null) {
+      const hue = Math.round(120 - d.intensity * 120);
+      bg = `background:hsla(${hue},70%,55%,0.6);`;
+    }
+    const todayCls = isToday ? " today" : "";
+    const recordCls = d.wt !== null ? " has-record" : "";
+    const tooltip = d.wt !== null ? ` title="${d.wt.toFixed(1)}kg"` : "";
+    cells += `<div class="cal-cell${todayCls}${recordCls}" style="${bg}"${tooltip}>${d.day}</div>`;
+  }
+
+  return `
+    <div class="calendar-nav">
+      <button type="button" class="btn secondary" data-action="cal-prev">${t("calendar.prev")}</button>
+      <span class="cal-label">${cal.label}</span>
+      <button type="button" class="btn secondary" data-action="cal-next">${t("calendar.next")}</button>
+    </div>
+    <div class="cal-grid">
+      ${dowHeaders}
+      ${cells}
+    </div>
+    <div class="helper" style="margin-top:8px;text-align:center;">${t("calendar.records").replace("{count}", cal.recordCount)}</div>
+  `;
 }
 
 function renderStat(label, value) {
@@ -652,14 +750,22 @@ function renderTab(mode, label) {
   return `<button type="button" class="tab ${activeEntryMode === mode ? "active" : ""}" data-mode="${mode}">${label}</button>`;
 }
 
-function renderRecord(record) {
+function renderRecord(record, prevRecord) {
   const bmiText = record.bmi ? `${record.bmi.toFixed(1)} / ${t(getBMIStatus(record.bmi))}` : t("chart.none");
+  let diffHtml = "";
+  if (prevRecord) {
+    const diff = Math.round((record.wt - prevRecord.wt) * 10) / 10;
+    if (diff !== 0) {
+      const cls = diff < 0 ? "negative" : "positive";
+      diffHtml = `<span class="record-diff ${cls}">${diff > 0 ? "+" : ""}${diff.toFixed(1)}</span>`;
+    }
+  }
   return `
     <div class="record-item">
       <div class="record-row">
         <div class="tag">${t(`entry.source.${record.source}`)}</div>
         <div>
-          <div class="record-weight">${formatWeight(record.wt)}</div>
+          <div class="record-weight">${formatWeight(record.wt)} ${diffHtml}</div>
           <div class="helper">${escapeAttr(record.dt)}${record.imageName ? ` / ${escapeAttr(record.imageName)}` : ""}</div>
         </div>
         <div class="helper">${t("bmi.title")}: ${bmiText}</div>
@@ -672,7 +778,41 @@ function renderRecord(record) {
 function renderRecordList() {
   const reversed = state.records.slice().reverse();
   const displayed = showAllRecords ? reversed : reversed.slice(0, 5);
-  return displayed.map(renderRecord).join("");
+  return displayed.map((record, i) => {
+    // Find previous record (the next in reversed = earlier in time)
+    const prevIndex = state.records.indexOf(record) - 1;
+    const prevRecord = prevIndex >= 0 ? state.records[prevIndex] : null;
+    return renderRecord(record, prevRecord);
+  }).join("");
+}
+
+function renderCalendar() {
+  const data = buildCalendarMonth(state.records, calendarYear, calendarMonth);
+  const dayNames = ["calendar.sun", "calendar.mon", "calendar.tue", "calendar.wed", "calendar.thu", "calendar.fri", "calendar.sat"];
+  let html = `<div class="calendar-nav">
+    <button type="button" data-action="calendar-prev">${t("calendar.prev")}</button>
+    <span class="calendar-label">${data.label}</span>
+    <button type="button" data-action="calendar-next">${t("calendar.next")}</button>
+  </div>`;
+  html += `<div class="calendar-grid">`;
+  for (const key of dayNames) {
+    html += `<div class="calendar-header">${t(key)}</div>`;
+  }
+  for (let i = 0; i < data.startDow; i++) {
+    html += `<div class="calendar-cell empty"></div>`;
+  }
+  for (const d of data.days) {
+    const hasRecord = d.wt !== null;
+    const intensity = d.intensity !== null ? d.intensity : 0;
+    const bg = hasRecord ? `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)` : "";
+    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}" style="${bg}" title="${hasRecord ? `${d.wt} kg` : ""}">
+      <span class="calendar-day">${d.day}</span>
+      ${hasRecord ? `<span class="calendar-wt">${d.wt}</span>` : ""}
+    </div>`;
+  }
+  html += `</div>`;
+  html += `<div class="helper" style="margin-top:8px">${t("calendar.records").replace("{count}", data.recordCount)}</div>`;
+  return html;
 }
 
 function renderPickerIntOptions(selected) {
@@ -720,7 +860,18 @@ function bindEvents() {
   app.querySelector('[data-action="save-reminder"]')?.addEventListener("click", saveReminder);
   app.querySelector('[data-action="google-backup"]')?.addEventListener("click", googleBackup);
   app.querySelector('[data-action="google-restore"]')?.addEventListener("click", googleRestore);
+  app.querySelector('[data-action="undo"]')?.addEventListener("click", undoLastSave);
   app.querySelector('[data-action="zoom-photo"]')?.addEventListener("click", handlePhotoZoom);
+  app.querySelector('[data-action="cal-prev"]')?.addEventListener("click", () => {
+    calendarMonth--;
+    if (calendarMonth < 0) { calendarMonth = 11; calendarYear--; }
+    render();
+  });
+  app.querySelector('[data-action="cal-next"]')?.addEventListener("click", () => {
+    calendarMonth++;
+    if (calendarMonth > 11) { calendarMonth = 0; calendarYear++; }
+    render();
+  });
 
   app.querySelectorAll("[data-summary]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -788,12 +939,14 @@ function handleFieldInput(event) {
   if (name === "pickerInt") {
     state.form.pickerInt = parseInt(value, 10);
     state.form.weight = `${state.form.pickerInt}.${state.form.pickerDec}`;
+    render();
     return;
   }
 
   if (name === "pickerDec") {
     state.form.pickerDec = parseInt(value, 10);
     state.form.weight = `${state.form.pickerInt}.${state.form.pickerDec}`;
+    render();
     return;
   }
 
@@ -833,6 +986,16 @@ function handleFieldInput(event) {
 
   if (name === "reminderTime") {
     state.settings.reminderTime = value;
+    return;
+  }
+
+  if (name === "autoTheme") {
+    state.settings.autoTheme = value === "true";
+    if (state.settings.autoTheme) {
+      applySystemTheme();
+    }
+    persist();
+    render();
     return;
   }
 }
@@ -884,6 +1047,9 @@ function quickSaveRecord() {
   saveRecordWithWeight(quickWeight, "quick");
 }
 
+let lastUndoState = null;
+let undoTimer = null;
+
 function saveRecordWithWeight(weight, source) {
   const profileResult = validateProfile(state.profile);
   if (!profileResult.valid) {
@@ -902,6 +1068,9 @@ function saveRecordWithWeight(weight, source) {
     heightCm: profileResult.profile.heightCm ?? "",
     age: profileResult.profile.age ?? "",
   };
+
+  // Save undo state before modifying
+  lastUndoState = { records: [...state.records], quickWeight };
 
   checkRainbow(weightResult.weight);
 
@@ -927,7 +1096,31 @@ function saveRecordWithWeight(weight, source) {
     setStatus(t("status.storageError"), "error");
     return;
   }
-  setStatus(`${t("entry.saved")} · ${t("bmi.title")}: ${record.bmi ? record.bmi.toFixed(1) : t("bmi.unknown")}`);
+  showUndoSnackbar(`${t("entry.saved")} · ${record.wt.toFixed(1)}kg`);
+}
+
+function showUndoSnackbar(message) {
+  statusMessage = message;
+  statusKind = "ok";
+  // Clear previous timer
+  if (undoTimer) clearTimeout(undoTimer);
+  render();
+  // Show undo option for 5 seconds
+  undoTimer = setTimeout(() => {
+    lastUndoState = null;
+    undoTimer = null;
+    render();
+  }, 5000);
+}
+
+function undoLastSave() {
+  if (!lastUndoState) return;
+  state.records = lastUndoState.records;
+  quickWeight = lastUndoState.quickWeight;
+  lastUndoState = null;
+  if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+  persist();
+  setStatus(t("undo.done"));
 }
 
 async function preprocessImageForOCR(source) {
@@ -1158,6 +1351,8 @@ async function toggleNativeVoiceInput() {
         const weight = parseVoiceWeight(voiceTranscript, state.records.at(-1)?.wt ?? null);
         if (weight) {
           state.form.weight = weight.toFixed(1);
+          state.form.pickerInt = Math.floor(weight);
+          state.form.pickerDec = Math.round((weight - Math.floor(weight)) * 10);
         }
         render();
       });
@@ -1464,6 +1659,26 @@ function drawChart() {
     context.fill();
   });
 
+  // Goal weight line
+  const goalWeight = Number(state.settings.goalWeight);
+  if (Number.isFinite(goalWeight) && goalWeight >= min && goalWeight <= max) {
+    const goalY = toY(goalWeight);
+    context.save();
+    context.setLineDash([8, 6]);
+    context.strokeStyle = getComputedStyle(document.body).getPropertyValue("--ok") || "#10b981";
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(padX, goalY);
+    context.lineTo(width - padX, goalY);
+    context.stroke();
+    context.setLineDash([]);
+    context.fillStyle = getComputedStyle(document.body).getPropertyValue("--ok") || "#10b981";
+    context.font = "bold 11px sans-serif";
+    context.textAlign = "left";
+    context.fillText(`${t("goal.title")} ${goalWeight.toFixed(1)}`, padX + 4, goalY - 6);
+    context.restore();
+  }
+
   // X-axis labels
   context.fillStyle = getComputedStyle(document.body).getPropertyValue("--muted");
   context.font = "12px sans-serif";
@@ -1474,6 +1689,34 @@ function drawChart() {
       const record = state.records[index];
       context.fillText(record.dt.slice(5), toX(index), height - 8);
     });
+
+  // Touch/click tooltip - store handler on canvas to avoid listener leak
+  if (canvas._chartClickHandler) {
+    canvas.removeEventListener("click", canvas._chartClickHandler);
+  }
+  const snapRecords = [...state.records];
+  canvas._chartClickHandler = (e) => {
+    const cr = canvas.getBoundingClientRect();
+    const cx = (e.touches ? e.touches[0].clientX : e.clientX) - cr.left;
+    let ci = 0;
+    let cd = Infinity;
+    snapRecords.forEach((_, i) => {
+      const d = Math.abs(toX(i) - cx);
+      if (d < cd) { cd = d; ci = i; }
+    });
+    const tip = document.getElementById("chartTooltip");
+    if (cd < 30 && tip) {
+      const r = snapRecords[ci];
+      tip.textContent = `${r.dt}: ${r.wt.toFixed(1)}kg${r.bmi ? ` (BMI ${r.bmi.toFixed(1)})` : ""}`;
+      tip.style.display = "block";
+      // Auto-hide after 3 seconds
+      clearTimeout(canvas._tooltipTimer);
+      canvas._tooltipTimer = setTimeout(() => { tip.style.display = "none"; }, 3000);
+    } else if (tip) {
+      tip.style.display = "none";
+    }
+  };
+  canvas.addEventListener("click", canvas._chartClickHandler);
 }
 
 function signedWeight(weight) {
@@ -1583,6 +1826,7 @@ const GOOGLE_CLIENT_ID = window.__GOOGLE_CLIENT_ID__ || "";
 const BACKUP_FILENAME = "weight-rainbow-backup.json";
 let gTokenClient = null;
 let gToken = null;
+let gTokenExpiresAt = 0;
 
 function googleAuth() {
   if (!GOOGLE_CLIENT_ID || typeof google === "undefined") return null;
@@ -1601,9 +1845,13 @@ function googleGetToken() {
     if (!c) { reject(new Error("not_configured")); return; }
     c.callback = (r) => {
       if (r.error) reject(new Error(r.error));
-      else { gToken = r.access_token; resolve(r.access_token); }
+      else {
+        gToken = r.access_token;
+        gTokenExpiresAt = Date.now() + (r.expires_in || 3600) * 1000 - 60000;
+        resolve(r.access_token);
+      }
     };
-    if (gToken) resolve(gToken);
+    if (gToken && Date.now() < gTokenExpiresAt) resolve(gToken);
     else c.requestAccessToken();
   });
 }
@@ -1696,6 +1944,7 @@ function handlePhotoZoom() {
   ov.addEventListener("click", () => ov.remove());
   document.body.appendChild(ov);
 }
+
 
 window.addEventListener("resize", () => drawChart());
 window.addEventListener("beforeunload", () => {

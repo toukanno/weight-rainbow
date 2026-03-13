@@ -18,6 +18,7 @@ import {
   upsertRecord,
   validateProfile,
   validateWeight,
+  buildCalendarMonth,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -169,6 +170,7 @@ describe("defaults", () => {
       goalWeight: null,
       reminderEnabled: false,
       reminderTime: "21:00",
+      autoTheme: false,
     });
   });
 });
@@ -284,5 +286,70 @@ describe("calcPeriodSummary", () => {
     expect(result.avg).toBe(71);
     expect(result.min).toBe(70);
     expect(result.max).toBe(72);
+  });
+});
+
+describe("calcStreak", () => {
+  it("returns 0 for empty records", () => {
+    expect(calcStreak([])).toBe(0);
+  });
+
+  it("counts consecutive days", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const dayBefore = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
+    const records = [
+      { dt: dayBefore, wt: 70 },
+      { dt: yesterday, wt: 69.5 },
+      { dt: today, wt: 69 },
+    ];
+    expect(calcStreak(records)).toBe(3);
+  });
+
+  it("breaks on gap", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
+    const records = [
+      { dt: twoDaysAgo, wt: 70 },
+      { dt: today, wt: 69 },
+    ];
+    expect(calcStreak(records)).toBe(1);
+  });
+});
+
+describe("calcWeightTrend", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcWeightTrend([])).toBeNull();
+    expect(calcWeightTrend([{ dt: "2026-03-13", wt: 70 }])).toBeNull();
+  });
+
+  it("detects downward trend", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const records = [
+      { dt: yesterday, wt: 70 },
+      { dt: today, wt: 69 },
+    ];
+    expect(calcWeightTrend(records)).toBe("down");
+  });
+
+  it("detects upward trend", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const records = [
+      { dt: yesterday, wt: 69 },
+      { dt: today, wt: 70 },
+    ];
+    expect(calcWeightTrend(records)).toBe("up");
+  });
+
+  it("detects flat trend", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const records = [
+      { dt: yesterday, wt: 70 },
+      { dt: today, wt: 70.05 },
+    ];
+    expect(calcWeightTrend(records)).toBe("flat");
   });
 });
