@@ -3133,6 +3133,59 @@
         font-style: italic;
       }
 
+      .rb-section { margin-top: 14px; }
+      .rb-chart {
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        height: 120px;
+        position: relative;
+        padding: 0 2px;
+      }
+      .rb-col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        height: 100%;
+      }
+      .rb-val { font-size: 0.7rem; font-weight: 700; }
+      .rb-change { font-size: 0.6rem; margin-bottom: 2px; }
+      .rb-up { color: var(--danger); }
+      .rb-down { color: var(--ok); }
+      .rb-bar-wrap {
+        flex: 1;
+        width: 100%;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+      }
+      .rb-bar {
+        width: 70%;
+        max-width: 28px;
+        border-radius: 4px 4px 0 0;
+        background: var(--accent);
+        opacity: 0.7;
+        transition: height 0.3s ease;
+      }
+      .rb-date { font-size: 0.6rem; color: var(--muted); margin-top: 2px; }
+      .rb-goal-line {
+        position: absolute;
+        left: 0;
+        right: 0;
+        border-top: 2px dashed var(--ok);
+        pointer-events: none;
+        z-index: 1;
+      }
+      .rb-goal-label {
+        position: absolute;
+        right: 0;
+        top: -14px;
+        font-size: 0.6rem;
+        color: var(--ok);
+        font-weight: 600;
+      }
+
       .wc-section { margin-top: 14px; }
       .wc-header, .wc-row {
         display: grid;

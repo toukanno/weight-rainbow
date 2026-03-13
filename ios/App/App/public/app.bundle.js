@@ -3743,6 +3743,28 @@ function calcStreakFreezeInfo(records) {
     longestStreak
   };
 }
+function calcRecentWeightBars(records, goalWeight = 0, count = 7) {
+  if (!records || records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-count);
+  const weights = recent.map((r) => r.wt);
+  if (goalWeight > 0) weights.push(goalWeight);
+  const min = Math.min(...weights) - 0.5;
+  const max = Math.max(...weights) + 0.5;
+  const range = max - min || 1;
+  const bars = recent.map((r, i) => {
+    const prev = i > 0 ? recent[i - 1].wt : sorted.length > count ? sorted[sorted.length - count - 1]?.wt : null;
+    const change = prev !== null ? +(r.wt - prev).toFixed(1) : null;
+    return {
+      dt: r.dt,
+      wt: r.wt,
+      change,
+      pct: +((r.wt - min) / range * 100).toFixed(1)
+    };
+  });
+  const goalPct = goalWeight > 0 ? +((goalWeight - min) / range * 100).toFixed(1) : null;
+  return { bars, min, max, goalPct };
+}
 
 // src/i18n.js
 var translations = {
@@ -26696,6 +26718,7 @@ function render() {
             ${renderDailyTarget()}
             ${renderMonthPhaseAvg()}
             ${renderStreakFreeze()}
+            ${renderRecentWeightBars()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -28584,6 +28607,35 @@ function renderStreakFreeze() {
     </div>
   `;
 }
+function renderRecentWeightBars() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const data = calcRecentWeightBars(state.records, goalWeight, 7);
+  if (!data) return "";
+  const barsHtml = data.bars.map((b) => {
+    const changeCls = b.change !== null ? b.change < 0 ? "rb-down" : b.change > 0 ? "rb-up" : "" : "";
+    const changeStr = b.change !== null ? `<span class="rb-change ${changeCls}">${b.change > 0 ? "+" : ""}${b.change.toFixed(1)}</span>` : "";
+    return `
+      <div class="rb-col">
+        <div class="rb-val">${b.wt.toFixed(1)}</div>
+        ${changeStr}
+        <div class="rb-bar-wrap">
+          <div class="rb-bar" style="height:${Math.max(b.pct, 3)}%"></div>
+        </div>
+        <div class="rb-date">${b.dt.slice(5).replace("-", "/")}</div>
+      </div>
+    `;
+  }).join("");
+  const goalLine = data.goalPct !== null ? `<div class="rb-goal-line" style="bottom:${data.goalPct}%"><span class="rb-goal-label">${t("rbars.goal")}</span></div>` : "";
+  return `
+    <div class="rb-section">
+      <div class="helper">${t("rbars.title")}</div>
+      <div class="rb-chart">
+        ${goalLine}
+        ${barsHtml}
+      </div>
+    </div>
+  `;
+}
 function renderRecentEntries() {
   const entries = getRecentEntries(state.records, 5);
   if (entries.length === 0) return "";
@@ -29045,7 +29097,8 @@ function bindEvents() {
     try {
       await navigator.clipboard.writeText(text);
       e.target.textContent = t("share.copied");
-      setTimeout(() => {
+      clearTimeout(e.target._copyTimer);
+      e.target._copyTimer = setTimeout(() => {
         e.target.textContent = t("share.btn");
       }, 2e3);
     } catch {
@@ -30046,7 +30099,23 @@ function resetData() {
     setStatus(t("status.storageError"), "error");
     return;
   }
+  if (undoTimer) {
+    clearTimeout(undoTimer);
+    undoTimer = null;
+  }
+  if (reminderTimer) {
+    clearInterval(reminderTimer);
+    reminderTimer = null;
+  }
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = null;
+  }
+  lastUndoState = null;
+  lastNotifiedDate = "";
   setStatus(t("status.reset"));
+  render();
+  drawChart();
 }
 function drawChart() {
   const canvas = document.getElementById("chart");
@@ -30509,11 +30578,8 @@ async function googleBackup() {
         note: r.note ?? "",
         createdAt: r.createdAt
       })),
-      settings: {
-        goalWeight: state.settings.goalWeight,
-        theme: state.settings.theme,
-        language: state.settings.language
-      }
+      settings: { ...state.settings },
+      profile: { ...state.profile }
     };
     const sr = await fetchWithTimeout(
       `https://www.googleapis.com/drive/v3/files?q=name='${BACKUP_FILENAME}'+and+trashed=false&spaces=appDataFolder&fields=files(id)`,
@@ -30603,7 +30669,12 @@ async function googleRestore() {
     }
     state.records = trimRecords(m, MAX_RECORDS);
     const newCount = state.records.length - beforeCount;
-    if (bd.settings?.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;
+    if (bd.settings) {
+      if (bd.settings.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;
+      if (bd.settings.theme) state.settings.theme = bd.settings.theme;
+      if (bd.settings.reminderEnabled != null) state.settings.reminderEnabled = bd.settings.reminderEnabled;
+      if (bd.settings.reminderTime) state.settings.reminderTime = bd.settings.reminderTime;
+    }
     if (bd.profile && !state.profile.name && !state.profile.heightCm) {
       state.profile = sanitizeProfile({ ...createDefaultProfile(), ...bd.profile });
     }

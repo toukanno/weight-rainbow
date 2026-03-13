@@ -3375,7 +3375,8 @@ function bindEvents() {
     try {
       await navigator.clipboard.writeText(text);
       e.target.textContent = t("share.copied");
-      setTimeout(() => { e.target.textContent = t("share.btn"); }, 2000);
+      clearTimeout(e.target._copyTimer);
+      e.target._copyTimer = setTimeout(() => { e.target.textContent = t("share.btn"); }, 2000);
     } catch { /* clipboard not available */ }
   });
   app.querySelector("#recordSearch")?.addEventListener("input", (e) => {
@@ -4450,7 +4451,16 @@ function resetData() {
     return;
   }
 
+  // Clear active timers
+  if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+  if (reminderTimer) { clearInterval(reminderTimer); reminderTimer = null; }
+  if (searchDebounceTimer) { clearTimeout(searchDebounceTimer); searchDebounceTimer = null; }
+  lastUndoState = null;
+  lastNotifiedDate = "";
+
   setStatus(t("status.reset"));
+  render();
+  drawChart();
 }
 
 function drawChart() {
@@ -4951,11 +4961,8 @@ async function googleBackup() {
       records: state.records.map((r) => ({
         dt: r.dt, wt: r.wt, bmi: r.bmi, bf: r.bf ?? null, source: r.source, note: r.note ?? "", createdAt: r.createdAt,
       })),
-      settings: {
-        goalWeight: state.settings.goalWeight,
-        theme: state.settings.theme,
-        language: state.settings.language,
-      },
+      settings: { ...state.settings },
+      profile: { ...state.profile },
     };
     const sr = await fetchWithTimeout(
       `https://www.googleapis.com/drive/v3/files?q=name='${BACKUP_FILENAME}'+and+trashed=false&spaces=appDataFolder&fields=files(id)`,
@@ -5025,7 +5032,12 @@ async function googleRestore() {
     }
     state.records = trimRecords(m, MAX_RECORDS);
     const newCount = state.records.length - beforeCount;
-    if (bd.settings?.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;
+    if (bd.settings) {
+      if (bd.settings.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;
+      if (bd.settings.theme) state.settings.theme = bd.settings.theme;
+      if (bd.settings.reminderEnabled != null) state.settings.reminderEnabled = bd.settings.reminderEnabled;
+      if (bd.settings.reminderTime) state.settings.reminderTime = bd.settings.reminderTime;
+    }
     // Import profile if present and current one is empty (sanitize)
     if (bd.profile && !state.profile.name && !state.profile.heightCm) {
       state.profile = sanitizeProfile({ ...createDefaultProfile(), ...bd.profile });

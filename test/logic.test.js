@@ -116,6 +116,7 @@ import {
   calcDailyTarget,
   calcMonthPhaseAvg,
   calcStreakFreezeInfo,
+  calcRecentWeightBars,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -8725,5 +8726,61 @@ describe("calcStreakFreezeInfo", () => {
     const result = calcStreakFreezeInfo(records);
     expect(result.currentStreak).toBe(1);
     expect(result.freezesEarned).toBe(0);
+  });
+});
+
+describe("calcRecentWeightBars", () => {
+  it("returns null for fewer than 2 records", () => {
+    expect(calcRecentWeightBars([], 65)).toBeNull();
+    expect(calcRecentWeightBars([{ dt: "2025-01-01", wt: 70 }], 65)).toBeNull();
+    expect(calcRecentWeightBars(null, 65)).toBeNull();
+  });
+
+  it("returns correct number of bars", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 - i * 0.1,
+    }));
+    const result = calcRecentWeightBars(records, 65, 7);
+    expect(result.bars).toHaveLength(7);
+  });
+
+  it("calculates percentage positions", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 75 },
+    ];
+    const result = calcRecentWeightBars(records, 0, 7);
+    expect(result.bars[0].pct).toBeLessThan(result.bars[1].pct);
+  });
+
+  it("includes goal line percentage when goal set", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69 },
+    ];
+    const result = calcRecentWeightBars(records, 65, 7);
+    expect(result.goalPct).not.toBeNull();
+    expect(result.goalPct).toBeGreaterThanOrEqual(0);
+  });
+
+  it("returns null goalPct when no goal", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69 },
+    ];
+    const result = calcRecentWeightBars(records, 0, 7);
+    expect(result.goalPct).toBeNull();
+  });
+
+  it("calculates change from previous", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69.5 },
+      { dt: "2025-01-03", wt: 70.2 },
+    ];
+    const result = calcRecentWeightBars(records, 0, 7);
+    expect(result.bars[1].change).toBe(-0.5);
+    expect(result.bars[2].change).toBe(0.7);
   });
 });
