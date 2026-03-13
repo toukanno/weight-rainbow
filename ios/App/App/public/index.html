@@ -2611,6 +2611,49 @@
       }
       .msh-row:last-child { border-bottom: none; }
 
+      .jny-section {
+        margin-top: 14px;
+      }
+      .jny-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 0;
+        font-size: 0.78rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .jny-row:last-child { border-bottom: none; }
+      .jny-icon { font-size: 0.9rem; }
+      .jny-type {
+        min-width: 40px;
+        font-weight: 600;
+      }
+      .jny-row.loss .jny-type { color: var(--accent-3); }
+      .jny-row.gain .jny-type { color: var(--accent-2); }
+      .jny-row.maintain .jny-type { color: var(--ok); }
+      .jny-dates {
+        color: var(--muted);
+        font-size: 0.75rem;
+      }
+      .jny-change {
+        margin-left: auto;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      .jny-days {
+        color: var(--muted);
+        font-size: 0.7rem;
+        min-width: 28px;
+        text-align: right;
+      }
+      .jny-total {
+        margin-top: 6px;
+        text-align: right;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text);
+      }
+
       .success-section {
         margin-top: 14px;
         text-align: center;
