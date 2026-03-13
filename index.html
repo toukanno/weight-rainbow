@@ -843,20 +843,20 @@
       .tag {
         padding: 8px 10px;
         font-size: 12px;
-        background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, white), color-mix(in srgb, var(--accent-3) 10%, white));
+        background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--bg)), color-mix(in srgb, var(--accent-3) 10%, var(--bg)));
         color: var(--text);
       }
 
       .tag-voice {
-        background: linear-gradient(135deg, color-mix(in srgb, #10b981 14%, white), color-mix(in srgb, #0ea5e9 10%, white));
+        background: linear-gradient(135deg, color-mix(in srgb, #10b981 14%, var(--bg)), color-mix(in srgb, #0ea5e9 10%, var(--bg)));
       }
 
       .tag-photo {
-        background: linear-gradient(135deg, color-mix(in srgb, #8b5cf6 14%, white), color-mix(in srgb, #ec4899 10%, white));
+        background: linear-gradient(135deg, color-mix(in srgb, #8b5cf6 14%, var(--bg)), color-mix(in srgb, #ec4899 10%, var(--bg)));
       }
 
       .tag-quick {
-        background: linear-gradient(135deg, color-mix(in srgb, #f59e0b 14%, white), color-mix(in srgb, #ff5f6d 10%, white));
+        background: linear-gradient(135deg, color-mix(in srgb, #f59e0b 14%, var(--bg)), color-mix(in srgb, #ff5f6d 10%, var(--bg)));
       }
 
       .note-grid {
@@ -1048,7 +1048,7 @@
       .empty-state {
         text-align: center;
         padding: 28px 16px;
-        opacity: 0.7;
+        color: var(--muted);
       }
 
       /* Records List */
@@ -1325,7 +1325,7 @@
       }
 
       .lang-modal {
-        background: white;
+        background: var(--surface-strong, rgba(255, 255, 255, 0.95));
         border-radius: 28px;
         padding: 40px;
         max-width: 400px;
