@@ -3838,3 +3838,55 @@ describe("calcWeightDistribution", () => {
     expect(result.latestBucket).toBeGreaterThanOrEqual(0);
   });
 });
+
+describe("calcRecordingTimeStats edge cases", () => {
+  it("returns null for fewer than 3 records with timestamps", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, createdAt: "2025-01-01T08:00:00" },
+    ];
+    expect(calcRecordingTimeStats(records)).toBeNull();
+  });
+
+  it("returns null for records without createdAt", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 70,
+    }));
+    expect(calcRecordingTimeStats(records)).toBeNull();
+  });
+
+  it("categorizes time periods correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, createdAt: "2025-01-01T07:00:00" }, // morning
+      { dt: "2025-01-02", wt: 70, createdAt: "2025-01-02T13:00:00" }, // afternoon
+      { dt: "2025-01-03", wt: 70, createdAt: "2025-01-03T19:00:00" }, // evening
+      { dt: "2025-01-04", wt: 70, createdAt: "2025-01-04T23:00:00" }, // night
+    ];
+    const result = calcRecordingTimeStats(records);
+    expect(result).not.toBeNull();
+    expect(result.morning.count).toBe(1);
+    expect(result.afternoon.count).toBe(1);
+    expect(result.evening.count).toBe(1);
+    expect(result.night.count).toBe(1);
+    expect(result.total).toBe(4);
+  });
+});
+
+describe("calcMovingAverages edge cases", () => {
+  it("returns null for fewer than 30 records", () => {
+    const records = Array.from({ length: 20 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 70,
+    }));
+    expect(calcMovingAverages(records)).toBeNull();
+  });
+
+  it("returns averages for sufficient records", () => {
+    const records = Array.from({ length: 35 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 70 + (i < 20 ? 0 : -0.1 * (i - 19)),
+    }));
+    const result = calcMovingAverages(records);
+    expect(result).not.toBeNull();
+    expect(result.shortAvg).toBeGreaterThan(0);
+    expect(result.longAvg).toBeGreaterThan(0);
+    expect(["below", "above", "aligned"]).toContain(result.signal);
+  });
+});
