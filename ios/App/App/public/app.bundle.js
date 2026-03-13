@@ -30064,10 +30064,10 @@ function drawChart() {
       movingAvg.push(sum / windowSize);
     }
     context.save();
-    context.setLineDash([4, 4]);
+    context.setLineDash([6, 5]);
     context.strokeStyle = cs.getPropertyValue("--accent-3").trim() || "#0ea5e9";
-    context.lineWidth = 1.5;
-    context.globalAlpha = 0.6;
+    context.lineWidth = 1.8;
+    context.globalAlpha = 0.65;
     context.beginPath();
     movingAvg.forEach((avg, i) => {
       const x = toX(i);
@@ -30148,7 +30148,12 @@ function drawChart() {
   context.fillStyle = cs.getPropertyValue("--muted").trim() || "#6b7280";
   context.font = "12px sans-serif";
   context.textAlign = "center";
-  [0, Math.floor((chartRecords.length - 1) / 2), chartRecords.length - 1].filter((value, index, array) => array.indexOf(value) === index).forEach((index) => {
+  const labelCount = chartRecords.length > 60 ? 5 : chartRecords.length > 20 ? 4 : 3;
+  const labelIndices = Array.from(
+    { length: labelCount },
+    (_, i) => Math.round(i * (chartRecords.length - 1) / (labelCount - 1))
+  ).filter((v, i, a) => a.indexOf(v) === i);
+  labelIndices.forEach((index) => {
     const record = chartRecords[index];
     context.fillText(record.dt.slice(5), toX(index), height - 8);
   });
