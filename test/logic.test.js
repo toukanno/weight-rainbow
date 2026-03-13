@@ -8044,3 +8044,65 @@ describe("calcMovingAvgCrossover", () => {
     expect(result.longMA).toBeCloseTo(70, 1);
   });
 });
+
+describe("calcPredictionAccuracy", () => {
+  it("returns insufficient for fewer than 14 records", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcPredictionAccuracy(records);
+    expect(result.rating).toBe("insufficient");
+    expect(result.accuracy).toBeNull();
+  });
+
+  it("returns high accuracy for constant weight", () => {
+    const records = Array.from({ length: 20 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 65.0,
+    }));
+    const result = calcPredictionAccuracy(records);
+    expect(result.accuracy).toBe(100);
+    expect(result.avgError).toBe(0);
+    expect(result.rating).toBe("excellent");
+  });
+
+  it("returns predictions with date, predicted, actual, error", () => {
+    const records = Array.from({ length: 20 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i * 0.1,
+    }));
+    const result = calcPredictionAccuracy(records);
+    expect(result.predictions.length).toBeGreaterThan(0);
+    const p = result.predictions[0];
+    expect(p).toHaveProperty("date");
+    expect(p).toHaveProperty("predicted");
+    expect(p).toHaveProperty("actual");
+    expect(p).toHaveProperty("error");
+    expect(p.error).toBeGreaterThanOrEqual(0);
+  });
+
+  it("limits predictions to last 10", () => {
+    const records = Array.from({ length: 50 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + Math.sin(i) * 2,
+    }));
+    const result = calcPredictionAccuracy(records);
+    expect(result.predictions.length).toBeLessThanOrEqual(10);
+  });
+
+  it("returns accuracy as a percentage", () => {
+    const records = Array.from({ length: 30 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i * 0.2,
+    }));
+    const result = calcPredictionAccuracy(records);
+    expect(result.accuracy).toBeGreaterThanOrEqual(0);
+    expect(result.accuracy).toBeLessThanOrEqual(100);
+  });
+
+  it("handles empty input", () => {
+    expect(calcPredictionAccuracy([]).rating).toBe("insufficient");
+    expect(calcPredictionAccuracy(null).rating).toBe("insufficient");
+  });
+});

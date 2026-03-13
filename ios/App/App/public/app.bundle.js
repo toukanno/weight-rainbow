@@ -28290,9 +28290,12 @@ function bindEvents() {
   });
   app.querySelectorAll("[data-delete-date]").forEach((button) => {
     button.addEventListener("click", () => {
-      if (!window.confirm(t("confirm.deleteRecord"))) return;
+      const dt = button.dataset.deleteDate;
+      const rec = state.records.find((r) => r.dt === dt);
+      const detail = rec ? `${dt} (${rec.wt.toFixed(1)}kg)` : dt;
+      if (!window.confirm(t("confirm.deleteRecord") + "\n" + detail)) return;
       lastUndoState = { records: [...state.records], quickWeight };
-      state.records = state.records.filter((r) => r.dt !== button.dataset.deleteDate);
+      state.records = state.records.filter((r) => r.dt !== dt);
       persist();
       showUndoSnackbar(t("records.deleted"));
     });
