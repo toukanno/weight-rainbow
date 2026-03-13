@@ -526,6 +526,22 @@ export function filterRecords(records, query) {
   });
 }
 
+export function calcDayOfWeekAvg(records) {
+  if (records.length < 7) return null;
+  const sums = [0, 0, 0, 0, 0, 0, 0];
+  const counts = [0, 0, 0, 0, 0, 0, 0];
+  for (const r of records) {
+    const dow = new Date(r.dt + "T00:00:00").getDay();
+    sums[dow] += r.wt;
+    counts[dow]++;
+  }
+  const avgs = sums.map((s, i) => counts[i] > 0 ? Math.round((s / counts[i]) * 10) / 10 : null);
+  const validAvgs = avgs.filter((a) => a !== null);
+  if (!validAvgs.length) return null;
+  const overallAvg = Math.round((validAvgs.reduce((a, b) => a + b, 0) / validAvgs.length) * 10) / 10;
+  return { avgs, counts, overallAvg };
+}
+
 export function calcSourceBreakdown(records) {
   if (!records.length) return null;
   const counts = {};
