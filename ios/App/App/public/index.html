@@ -555,6 +555,13 @@
         box-shadow: none;
       }
 
+      .btn:disabled,
+      .btn[disabled] {
+        opacity: 0.5;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+
       .row {
         grid-template-columns: 1fr auto;
         gap: 10px;
