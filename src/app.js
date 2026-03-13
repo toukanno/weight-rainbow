@@ -106,6 +106,7 @@ import {
   calcMilestoneHistory,
   calcWeightJourney,
   calcGoalScenarios,
+  calcStreakCalendar,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -784,6 +785,7 @@ function render() {
             ${renderWeightFluctuation()}
             ${renderSuccessRate()}
             ${renderRecordingRate()}
+            ${renderStreakCalendar()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -2378,6 +2380,29 @@ function renderGoalScenarios() {
   `;
 }
 
+function renderStreakCalendar() {
+  if (state.records.length < 3) return "";
+  const cal = calcStreakCalendar(state.records, 12);
+  const cells = cal.weeks.map((week) => {
+    const days = week.map((d) => {
+      const cls = d.recorded ? "sc-day filled" : "sc-day";
+      const todayCls = d.isToday ? " sc-today" : "";
+      return `<div class="${cls}${todayCls}" title="${d.date}"></div>`;
+    }).join("");
+    return `<div class="sc-week">${days}</div>`;
+  }).join("");
+  const summary = t("streakCal.summary")
+    .replace("{recorded}", cal.totalRecorded)
+    .replace("{total}", cal.totalDays);
+  return `
+    <div class="sc-section">
+      <div class="helper">${t("streakCal.title")}</div>
+      <div class="sc-grid">${cells}</div>
+      <div class="helper hint-small">${summary}</div>
+    </div>
+  `;
+}
+
 function renderRecentEntries() {
   const entries = getRecentEntries(state.records, 5);
   if (entries.length === 0) return "";
@@ -2958,7 +2983,7 @@ function bindEvents() {
     button.addEventListener("click", () => {
       const key = button.dataset.dateShortcut;
       if (key === "yesterday") {
-        const d = new Date();
+        const d = new Date(todayLocal() + "T00:00:00");
         d.setDate(d.getDate() - 1);
         state.form.date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       } else {
@@ -3915,7 +3940,7 @@ function drawChart() {
   let chartRecords = state.records;
   if (chartPeriod !== "all") {
     const days = parseInt(chartPeriod, 10);
-    const d = new Date();
+    const d = new Date(todayLocal() + "T00:00:00");
     d.setDate(d.getDate() - days);
     const cutoff = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     chartRecords = state.records.filter((r) => r.dt >= cutoff);

@@ -3266,6 +3266,30 @@ function calcGoalScenarios(records, goalWeight) {
   });
   return { current, goal: goalWeight, remaining, scenarios };
 }
+function calcStreakCalendar(records, numWeeks = 12) {
+  const dateSet = new Set(records.map((r) => r.dt));
+  const today = /* @__PURE__ */ new Date();
+  const todayStr = localDateStr(today);
+  const start = new Date(today);
+  start.setDate(start.getDate() - (numWeeks * 7 - 1) - start.getDay());
+  const weeks = [];
+  let totalRecorded = 0;
+  let totalDays = 0;
+  const d = new Date(start);
+  while (d <= today) {
+    const week = [];
+    for (let dow = 0; dow < 7 && d <= today; dow++) {
+      const ds = localDateStr(d);
+      const recorded = dateSet.has(ds);
+      if (recorded) totalRecorded++;
+      totalDays++;
+      week.push({ date: ds, recorded, isToday: ds === todayStr });
+      d.setDate(d.getDate() + 1);
+    }
+    weeks.push(week);
+  }
+  return { weeks, totalRecorded, totalDays };
+}
 
 // src/i18n.js
 var translations = {
@@ -4055,7 +4079,9 @@ var translations = {
     "scenario.aggressive": "\u7A4D\u6975\u7684",
     "scenario.weeks": "{weeks}\u9031\u9593",
     "scenario.perWeek": "/\u9031",
-    "a11y.skipToEntry": "\u5165\u529B\u30D5\u30A9\u30FC\u30E0\u3078\u30B9\u30AD\u30C3\u30D7"
+    "a11y.skipToEntry": "\u5165\u529B\u30D5\u30A9\u30FC\u30E0\u3078\u30B9\u30AD\u30C3\u30D7",
+    "streakCal.title": "\u8A18\u9332\u30AB\u30EC\u30F3\u30C0\u30FC\uFF0812\u9031\u9593\uFF09",
+    "streakCal.summary": "{recorded}\u65E5 / {total}\u65E5 \u8A18\u9332\u6E08\u307F"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4843,7 +4869,9 @@ var translations = {
     "scenario.aggressive": "Aggressive",
     "scenario.weeks": "{weeks} weeks",
     "scenario.perWeek": "/wk",
-    "a11y.skipToEntry": "Skip to entry form"
+    "a11y.skipToEntry": "Skip to entry form",
+    "streakCal.title": "Streak Calendar (12 weeks)",
+    "streakCal.summary": "{recorded} / {total} days recorded"
   }
 };
 function createTranslator(language) {
@@ -25978,6 +26006,7 @@ function render() {
             ${renderWeightFluctuation()}
             ${renderSuccessRate()}
             ${renderRecordingRate()}
+            ${renderStreakCalendar()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -27486,6 +27515,26 @@ function renderGoalScenarios() {
     </div>
   `;
 }
+function renderStreakCalendar() {
+  if (state.records.length < 3) return "";
+  const cal = calcStreakCalendar(state.records, 12);
+  const cells = cal.weeks.map((week) => {
+    const days2 = week.map((d) => {
+      const cls = d.recorded ? "sc-day filled" : "sc-day";
+      const todayCls = d.isToday ? " sc-today" : "";
+      return `<div class="${cls}${todayCls}" title="${d.date}"></div>`;
+    }).join("");
+    return `<div class="sc-week">${days2}</div>`;
+  }).join("");
+  const summary = t("streakCal.summary").replace("{recorded}", cal.totalRecorded).replace("{total}", cal.totalDays);
+  return `
+    <div class="sc-section">
+      <div class="helper">${t("streakCal.title")}</div>
+      <div class="sc-grid">${cells}</div>
+      <div class="helper hint-small">${summary}</div>
+    </div>
+  `;
+}
 function renderRecentEntries() {
   const entries = getRecentEntries(state.records, 5);
   if (entries.length === 0) return "";
@@ -28049,7 +28098,7 @@ function bindEvents() {
     button.addEventListener("click", () => {
       const key = button.dataset.dateShortcut;
       if (key === "yesterday") {
-        const d = /* @__PURE__ */ new Date();
+        const d = /* @__PURE__ */ new Date(todayLocal() + "T00:00:00");
         d.setDate(d.getDate() - 1);
         state.form.date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       } else {
@@ -28911,7 +28960,7 @@ function drawChart() {
   let chartRecords = state.records;
   if (chartPeriod !== "all") {
     const days2 = parseInt(chartPeriod, 10);
-    const d = /* @__PURE__ */ new Date();
+    const d = /* @__PURE__ */ new Date(todayLocal() + "T00:00:00");
     d.setDate(d.getDate() - days2);
     const cutoff = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     chartRecords = state.records.filter((r) => r.dt >= cutoff);
