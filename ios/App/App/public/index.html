@@ -200,6 +200,27 @@
         scroll-behavior: smooth;
       }
 
+      .skip-link {
+        position: absolute;
+        top: -100%;
+        left: 16px;
+        z-index: 999;
+        padding: 8px 16px;
+        background: var(--accent);
+        color: #fff;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        text-decoration: none;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        transition: top 0.2s ease;
+      }
+      .skip-link:focus {
+        top: 12px;
+        outline: 3px solid var(--accent-2);
+        outline-offset: 2px;
+      }
+
       body {
         margin: 0;
         min-height: 100vh;
@@ -4380,12 +4401,6 @@
       .record-delete:active {
         transform: scale(0.95);
       }
-      @media (hover: hover) {
-        .quick-buttons button:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-      }
 
       /* Rate Box */
       .rate-box {
@@ -4537,7 +4552,7 @@
       body[data-theme="midnight"] .undo-btn {
         background: rgba(30, 35, 55, 0.7);
         border-color: rgba(139, 146, 176, 0.2);
-        color: #818cf8;
+        color: var(--accent);
       }
 
       /* Achievement Badges */
