@@ -1272,7 +1272,7 @@ var translations = {
     "review.checklist.privacy": "\u500B\u4EBA\u60C5\u5831\u306F\u540D\u524D\u30FB\u8EAB\u9577\u30FB\u4F53\u91CD\u30FB\u5E74\u9F62\u30FB\u6027\u5225\u306B\u9650\u5B9A",
     "review.checklist.medical": "BMI \u306F\u533B\u7642\u8A3A\u65AD\u3067\u306F\u306A\u3044\u3053\u3068\u3092\u753B\u9762\u4E0A\u3067\u660E\u793A",
     "review.checklist.ads": "\u5E83\u544A SDK \u672A\u5C0E\u5165\u3002\u5C0E\u5165\u6642\u306F ATT \u3068\u30D7\u30E9\u30A4\u30D0\u30B7\u30FC\u66F4\u65B0\u304C\u5FC5\u8981",
-    "status.ready": "\u5BE9\u67FB\u5411\u3051\u88DC\u8DB3\u3042\u308A",
+    "status.ready": "\u6E96\u5099\u5B8C\u4E86",
     "status.listening": "\u805E\u304D\u53D6\u308A\u4E2D",
     "status.storageError": "\u7AEF\u672B\u5185\u4FDD\u5B58\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002\u30D6\u30E9\u30A6\u30B6\u306E\u4FDD\u5B58\u8A2D\u5B9A\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "status.photoReady": "\u5199\u771F\u3092\u8AAD\u307F\u8FBC\u307F\u307E\u3057\u305F\u3002\u5019\u88DC\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
@@ -1563,7 +1563,7 @@ var translations = {
     "review.checklist.privacy": "Personal data is limited to name, height, weight, age, and gender",
     "review.checklist.medical": "BMI is clearly labeled as a wellness reference, not medical diagnosis",
     "review.checklist.ads": "No ad SDK yet. Add ATT and privacy updates before monetization",
-    "status.ready": "Review support included",
+    "status.ready": "Ready",
     "status.listening": "Listening",
     "status.storageError": "Saving on this device failed. Check browser storage settings.",
     "status.photoReady": "Photo loaded. Review detected candidates.",
@@ -22348,9 +22348,9 @@ function showFirstLaunchModal() {
   document.body.dataset.theme = "prism";
   app.innerHTML = `
     <div class="lang-modal-overlay">
-      <div class="lang-modal">
-        <div style="font-size:2.4rem;margin-bottom:8px;">\u{1F308}</div>
-        <h2>\u3088\u3046\u3053\u305D / Welcome</h2>
+      <div class="lang-modal" role="dialog" aria-modal="true" aria-labelledby="langModalTitle">
+        <div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">\u{1F308}</div>
+        <h2 id="langModalTitle">\u3088\u3046\u3053\u305D / Welcome</h2>
         <p>\u8A00\u8A9E\u3092\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044<br>Choose your language</p>
         <div class="lang-modal-buttons">
           <button type="button" data-lang="ja">\u{1F1EF}\u{1F1F5} \u65E5\u672C\u8A9E</button>
@@ -22457,7 +22457,7 @@ function render() {
               ${trend ? `<span class="trend-indicator ${trend}">${trend === "down" ? "\u{1F4C9}" : trend === "up" ? "\u{1F4C8}" : "\u27A1\uFE0F"} ${t("trend." + trend)}</span>` : ""}
             </div>
             ${motivation ? `<p class="motivation-msg">${motivation}</p>` : ""}
-            ${achievements.length ? `<div class="achievement-row">${achievements.map((a) => `<span class="achievement-badge ${a.tier}" title="${t("achievement." + a.id)}">${a.icon}</span>`).join("")}</div>` : ""}
+            ${achievements.length ? `<div class="achievement-row">${achievements.map((a) => `<span class="achievement-badge ${a.tier}" title="${t("achievement." + a.id)}" aria-label="${escapeAttr(t("achievement." + a.id))}">${a.icon}</span>`).join("")}</div>` : ""}
           </div>
           <div class="hero-card">
             <div class="eyebrow">${t("bmi.title")}</div>
@@ -22731,7 +22731,7 @@ function render() {
               ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : ""}
             </div>` : ""}
             <div class="record-list">
-              ${state.records.length ? renderRecordList() : `<div class="empty-state"><div style="font-size:2.4rem;margin-bottom:8px;">\u{1F4CA}</div><div class="helper">${t("records.empty")}</div></div>`}
+              ${state.records.length ? renderRecordList() : `<div class="empty-state"><div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">\u{1F4CA}</div><div class="helper">${t("records.empty")}</div></div>`}
             </div>
             <div class="export-grid">
               <button type="button" class="btn secondary" data-action="export-excel">\u{1F4CA} ${t("export.excel")}</button>
@@ -23916,7 +23916,7 @@ function drawChart() {
     const y = toY(record.wt);
     context.beginPath();
     context.arc(x, y, 6, 0, Math.PI * 2);
-    context.fillStyle = "white";
+    context.fillStyle = getComputedStyle(document.body).getPropertyValue("--surface-strong").trim() || "white";
     context.fill();
     context.beginPath();
     context.arc(x, y, 4, 0, Math.PI * 2);

@@ -139,9 +139,9 @@ function showFirstLaunchModal() {
   document.body.dataset.theme = "prism";
   app.innerHTML = `
     <div class="lang-modal-overlay">
-      <div class="lang-modal">
-        <div style="font-size:2.4rem;margin-bottom:8px;">🌈</div>
-        <h2>ようこそ / Welcome</h2>
+      <div class="lang-modal" role="dialog" aria-modal="true" aria-labelledby="langModalTitle">
+        <div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">🌈</div>
+        <h2 id="langModalTitle">ようこそ / Welcome</h2>
         <p>言語を選択してください<br>Choose your language</p>
         <div class="lang-modal-buttons">
           <button type="button" data-lang="ja">🇯🇵 日本語</button>
@@ -258,7 +258,7 @@ function render() {
               ${trend ? `<span class="trend-indicator ${trend}">${trend === "down" ? "📉" : trend === "up" ? "📈" : "➡️"} ${t("trend." + trend)}</span>` : ""}
             </div>
             ${motivation ? `<p class="motivation-msg">${motivation}</p>` : ""}
-            ${achievements.length ? `<div class="achievement-row">${achievements.map((a) => `<span class="achievement-badge ${a.tier}" title="${t("achievement." + a.id)}">${a.icon}</span>`).join("")}</div>` : ""}
+            ${achievements.length ? `<div class="achievement-row">${achievements.map((a) => `<span class="achievement-badge ${a.tier}" title="${t("achievement." + a.id)}" aria-label="${escapeAttr(t("achievement." + a.id))}">${a.icon}</span>`).join("")}</div>` : ""}
           </div>
           <div class="hero-card">
             <div class="eyebrow">${t("bmi.title")}</div>
@@ -547,7 +547,7 @@ function render() {
               ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : ""}
             </div>` : ""}
             <div class="record-list">
-              ${state.records.length ? renderRecordList() : `<div class="empty-state"><div style="font-size:2.4rem;margin-bottom:8px;">📊</div><div class="helper">${t("records.empty")}</div></div>`}
+              ${state.records.length ? renderRecordList() : `<div class="empty-state"><div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">📊</div><div class="helper">${t("records.empty")}</div></div>`}
             </div>
             <div class="export-grid">
               <button type="button" class="btn secondary" data-action="export-excel">📊 ${t("export.excel")}</button>
@@ -854,7 +854,7 @@ function renderTab(mode, label) {
   return `<button type="button" class="tab ${isActive ? "active" : ""}" data-mode="${mode}" role="tab" aria-selected="${isActive}" tabindex="${isActive ? "0" : "-1"}">${label}</button>`;
 }
 
-function renderRecord(record, prevRecord) {
+function renderRecord(record, prevRecord, badge) {
   const bmiText = record.bmi ? `${record.bmi.toFixed(1)} / ${t(getBMIStatus(record.bmi))}` : t("chart.none");
   let diffHtml = "";
   if (prevRecord) {
@@ -864,10 +864,11 @@ function renderRecord(record, prevRecord) {
       diffHtml = `<span class="record-diff ${cls}">${diff > 0 ? "+" : ""}${diff.toFixed(1)}</span>`;
     }
   }
+  const badgeHtml = badge ? ` <span class="record-badge record-badge-${badge.type}" title="${badge.label}">${badge.icon}</span>` : "";
   return `
-    <div class="record-item">
+    <div class="record-item${badge ? ` record-${badge.type}` : ""}">
       <div class="record-row">
-        <div class="tag tag-${record.source}">${t(`entry.source.${record.source}`)}</div>
+        <div class="tag tag-${record.source}">${t(`entry.source.${record.source}`)}${badgeHtml}</div>
         <div>
           <div class="record-weight">${formatWeight(record.wt)} ${diffHtml}</div>
           <div class="helper">${escapeAttr(record.dt)}${record.imageName ? ` / ${escapeAttr(record.imageName)}` : ""}</div>
@@ -884,10 +885,26 @@ function renderRecordList() {
   const filtered = filterRecords(state.records, recordSearchQuery);
   const reversed = filtered.slice().reverse();
   const displayed = showAllRecords || recordSearchQuery ? reversed : reversed.slice(0, 5);
+
+  // Find all-time min/max for badge display (only when 3+ records)
+  let minDt = null;
+  let maxDt = null;
+  if (state.records.length >= 3) {
+    let minWt = Infinity;
+    let maxWt = -Infinity;
+    for (const r of state.records) {
+      if (r.wt < minWt) { minWt = r.wt; minDt = r.dt; }
+      if (r.wt > maxWt) { maxWt = r.wt; maxDt = r.dt; }
+    }
+  }
+
   return displayed.map((record) => {
     const prevIndex = state.records.indexOf(record) - 1;
     const prevRecord = prevIndex >= 0 ? state.records[prevIndex] : null;
-    return renderRecord(record, prevRecord);
+    let badge = null;
+    if (record.dt === minDt) badge = { type: "best", icon: "⭐", label: t("records.best") };
+    else if (record.dt === maxDt) badge = { type: "highest", icon: "📍", label: t("records.highest") };
+    return renderRecord(record, prevRecord, badge);
   }).join("");
 }
 
@@ -1860,10 +1877,10 @@ function drawChart() {
   chartRecords.forEach((record, index) => {
     const x = toX(index);
     const y = toY(record.wt);
-    // White outline
+    // Outline (theme-aware)
     context.beginPath();
     context.arc(x, y, 6, 0, Math.PI * 2);
-    context.fillStyle = "white";
+    context.fillStyle = getComputedStyle(document.body).getPropertyValue("--surface-strong").trim() || "white";
     context.fill();
     // Colored dot
     context.beginPath();
