@@ -38,6 +38,7 @@ import {
   detectMilestone,
   exportRecordsToCSV,
   parseCSVImport,
+  calcBodyFatStats,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -1214,5 +1215,47 @@ describe("parseCSVImport", () => {
     const result = parseCSVImport(csv);
     expect(result.records).toHaveLength(1);
     expect(result.records[0].note).toBe("hello, world");
+  });
+});
+
+describe("calcBodyFatStats", () => {
+  it("returns null with fewer than 2 body fat records", () => {
+    const records = [{ dt: "2025-01-01", wt: 70, bf: 20 }];
+    expect(calcBodyFatStats(records)).toBeNull();
+  });
+
+  it("returns null when no body fat data", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69 },
+    ];
+    expect(calcBodyFatStats(records)).toBeNull();
+  });
+
+  it("calculates body fat stats correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72, bf: 22 },
+      { dt: "2025-01-02", wt: 71, bf: 21 },
+      { dt: "2025-01-03", wt: 70, bf: 20 },
+    ];
+    const result = calcBodyFatStats(records);
+    expect(result).not.toBeNull();
+    expect(result.latest).toBe(20);
+    expect(result.first).toBe(22);
+    expect(result.min).toBe(20);
+    expect(result.max).toBe(22);
+    expect(result.change).toBe(-2);
+    expect(result.count).toBe(3);
+  });
+
+  it("ignores records without body fat", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72, bf: 22 },
+      { dt: "2025-01-02", wt: 71 },
+      { dt: "2025-01-03", wt: 70, bf: 20 },
+    ];
+    const result = calcBodyFatStats(records);
+    expect(result.count).toBe(2);
+    expect(result.avg).toBe(21);
   });
 });

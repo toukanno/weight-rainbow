@@ -666,6 +666,21 @@ export function parseCSVImport(csvText) {
   return { records, errors };
 }
 
+export function calcBodyFatStats(records) {
+  const withBF = records.filter((r) => r.bf != null && Number.isFinite(Number(r.bf)));
+  if (withBF.length < 2) return null;
+
+  const values = withBF.map((r) => Number(r.bf));
+  const latest = values[values.length - 1];
+  const first = values[0];
+  const min = Math.round(Math.min(...values) * 10) / 10;
+  const max = Math.round(Math.max(...values) * 10) / 10;
+  const avg = Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 10) / 10;
+  const change = Math.round((latest - first) * 10) / 10;
+
+  return { latest, first, min, max, avg, change, count: withBF.length };
+}
+
 export function exportRecordsToCSV(records) {
   if (!records.length) return "";
   const header = "date,weight,bmi,bodyFat,source,note";
