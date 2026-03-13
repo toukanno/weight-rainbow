@@ -502,6 +502,18 @@ export function calcInsight(records) {
   return { bestDay, weekComparison };
 }
 
+export const NOTE_TAGS = ["exercise", "diet", "cheatday", "sick", "travel", "stress", "sleep", "alcohol"];
+
+export function toggleNoteTag(note, tag) {
+  const tagStr = `#${tag}`;
+  const current = String(note || "").trim();
+  if (current.includes(tagStr)) {
+    return current.replace(tagStr, "").replace(/\s{2,}/g, " ").trim();
+  }
+  const combined = current ? `${current} ${tagStr}` : tagStr;
+  return combined.slice(0, 100);
+}
+
 export function filterRecords(records, query) {
   if (!query || !query.trim()) return records;
   const q = query.trim().toLowerCase();

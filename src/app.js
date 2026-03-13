@@ -31,6 +31,8 @@ import {
   calcMonthlyStats,
   filterRecords,
   calcInsight,
+  NOTE_TAGS,
+  toggleNoteTag,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -404,6 +406,12 @@ function render() {
               <div class="field">
                 <label for="entryNote">${t("entry.note")}</label>
                 <input id="entryNote" name="note" type="text" maxlength="100" placeholder="${escapeAttr(t("entry.noteHint"))}" value="${escapeAttr(state.form.note)}" />
+                <div class="note-tags-row">
+                  ${NOTE_TAGS.map((tag) => {
+                    const active = (state.form.note || "").includes(`#${tag}`);
+                    return `<button type="button" class="note-tag${active ? " active" : ""}" data-note-tag="${tag}">${t("note.tag." + tag)}</button>`;
+                  }).join("")}
+                </div>
               </div>
 
               <!-- Quick Record Section -->
@@ -1054,6 +1062,13 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.settings.theme = button.dataset.themePick;
       persist();
+      render();
+    });
+  });
+
+  app.querySelectorAll("[data-note-tag]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.form.note = toggleNoteTag(state.form.note, button.dataset.noteTag);
       render();
     });
   });

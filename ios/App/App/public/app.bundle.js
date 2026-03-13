@@ -1175,6 +1175,16 @@ function calcInsight(records) {
   }
   return { bestDay, weekComparison };
 }
+var NOTE_TAGS = ["exercise", "diet", "cheatday", "sick", "travel", "stress", "sleep", "alcohol"];
+function toggleNoteTag(note, tag) {
+  const tagStr = `#${tag}`;
+  const current = String(note || "").trim();
+  if (current.includes(tagStr)) {
+    return current.replace(tagStr, "").replace(/\s{2,}/g, " ").trim();
+  }
+  const combined = current ? `${current} ${tagStr}` : tagStr;
+  return combined.slice(0, 100);
+}
 function filterRecords(records, query) {
   if (!query || !query.trim()) return records;
   const q = query.trim().toLowerCase();
@@ -1488,7 +1498,16 @@ var translations = {
     "day.3": "\u6C34\u66DC",
     "day.4": "\u6728\u66DC",
     "day.5": "\u91D1\u66DC",
-    "day.6": "\u571F\u66DC"
+    "day.6": "\u571F\u66DC",
+    "note.tags": "\u30BF\u30B0",
+    "note.tag.exercise": "\u904B\u52D5",
+    "note.tag.diet": "\u98DF\u4E8B\u5236\u9650",
+    "note.tag.cheatday": "\u30C1\u30FC\u30C8\u30C7\u30A4",
+    "note.tag.sick": "\u4F53\u8ABF\u4E0D\u826F",
+    "note.tag.travel": "\u65C5\u884C",
+    "note.tag.stress": "\u30B9\u30C8\u30EC\u30B9",
+    "note.tag.sleep": "\u7761\u7720\u4E0D\u8DB3",
+    "note.tag.alcohol": "\u98F2\u9152"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1789,7 +1808,16 @@ var translations = {
     "day.3": "Wednesday",
     "day.4": "Thursday",
     "day.5": "Friday",
-    "day.6": "Saturday"
+    "day.6": "Saturday",
+    "note.tags": "Tags",
+    "note.tag.exercise": "Exercise",
+    "note.tag.diet": "Diet",
+    "note.tag.cheatday": "Cheat Day",
+    "note.tag.sick": "Sick",
+    "note.tag.travel": "Travel",
+    "note.tag.stress": "Stress",
+    "note.tag.sleep": "Poor Sleep",
+    "note.tag.alcohol": "Alcohol"
   }
 };
 function createTranslator(language) {
@@ -22642,6 +22670,12 @@ function render() {
               <div class="field">
                 <label for="entryNote">${t("entry.note")}</label>
                 <input id="entryNote" name="note" type="text" maxlength="100" placeholder="${escapeAttr(t("entry.noteHint"))}" value="${escapeAttr(state.form.note)}" />
+                <div class="note-tags-row">
+                  ${NOTE_TAGS.map((tag) => {
+    const active = (state.form.note || "").includes(`#${tag}`);
+    return `<button type="button" class="note-tag${active ? " active" : ""}" data-note-tag="${tag}">${t("note.tag." + tag)}</button>`;
+  }).join("")}
+                </div>
               </div>
 
               <!-- Quick Record Section -->
@@ -23268,6 +23302,12 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.settings.theme = button.dataset.themePick;
       persist();
+      render();
+    });
+  });
+  app.querySelectorAll("[data-note-tag]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.form.note = toggleNoteTag(state.form.note, button.dataset.noteTag);
       render();
     });
   });

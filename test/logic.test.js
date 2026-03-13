@@ -25,6 +25,8 @@ import {
   filterRecords,
   calcBMIZoneWeights,
   calcInsight,
+  toggleNoteTag,
+  NOTE_TAGS,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -707,5 +709,41 @@ describe("calcInsight", () => {
     expect(result).not.toBeNull();
     expect(result.bestDay).toBeGreaterThanOrEqual(0);
     expect(result.bestDay).toBeLessThanOrEqual(6);
+  });
+});
+
+describe("toggleNoteTag", () => {
+  it("adds tag to empty note", () => {
+    expect(toggleNoteTag("", "exercise")).toBe("#exercise");
+  });
+
+  it("adds tag to existing note", () => {
+    expect(toggleNoteTag("morning run", "exercise")).toBe("morning run #exercise");
+  });
+
+  it("removes existing tag", () => {
+    expect(toggleNoteTag("#exercise #diet", "exercise")).toBe("#diet");
+  });
+
+  it("handles null note", () => {
+    expect(toggleNoteTag(null, "diet")).toBe("#diet");
+  });
+
+  it("handles empty string note", () => {
+    expect(toggleNoteTag("", "travel")).toBe("#travel");
+  });
+
+  it("truncates to 100 characters", () => {
+    const longNote = "a".repeat(95);
+    const result = toggleNoteTag(longNote, "exercise");
+    expect(result.length).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("NOTE_TAGS", () => {
+  it("has all expected tags", () => {
+    expect(NOTE_TAGS).toContain("exercise");
+    expect(NOTE_TAGS).toContain("diet");
+    expect(NOTE_TAGS.length).toBeGreaterThanOrEqual(6);
   });
 });

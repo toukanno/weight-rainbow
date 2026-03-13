@@ -617,6 +617,40 @@
         opacity: 0.7;
       }
 
+      .note-tags-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+
+      .note-tag {
+        padding: 3px 8px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 0.7rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+
+      .note-tag:hover {
+        color: var(--accent);
+        border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+      }
+
+      .note-tag.active {
+        background: color-mix(in srgb, var(--accent) 14%, transparent);
+        color: var(--accent);
+        border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+      }
+
+      body[data-theme="midnight"] .note-tag {
+        background: rgba(30, 35, 55, 0.6);
+        border-color: rgba(139, 146, 176, 0.18);
+      }
+
       .full-width-btn {
         margin-top: 10px;
         width: 100%;
