@@ -570,7 +570,7 @@
       .tab.active {
         background: linear-gradient(135deg, var(--accent), var(--accent-2));
         color: white;
-        box-shadow: 0 14px 30px color-mix(in srgb, var(--accent) 22%, transparent);
+        box-shadow: 0 14px 30px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
         transform: scale(1.02);
       }
 
@@ -3603,6 +3603,10 @@
         margin-top: 8px;
         font-size: 1.2rem;
         font-weight: 800;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
       }
 
       .record-list {
@@ -3625,6 +3629,10 @@
       @keyframes recordSlideIn {
         from { opacity: 0; transform: translateY(8px); }
         to { opacity: 1; transform: translateY(0); }
+      }
+
+      .record-item:nth-child(even) {
+        background: color-mix(in srgb, var(--accent) 2%, var(--surface));
       }
 
       @media (hover: hover) {
