@@ -108,7 +108,7 @@ export function validateProfile(profile) {
 export function calculateBMI(weightKg, heightCm) {
   const weight = Number(weightKg);
   const height = Number(heightCm);
-  if (!Number.isFinite(weight) || !Number.isFinite(height) || height <= 0) {
+  if (!Number.isFinite(weight) || !Number.isFinite(height) || weight <= 0 || height <= 0) {
     return null;
   }
 
@@ -1087,4 +1087,30 @@ export function calcWeeklyFrequency(records, weeks = 8) {
   const totalRecords = buckets.reduce((s, b) => s + b.count, 0);
   const avgPerWeek = Math.round((totalRecords / weeks) * 10) / 10;
   return { buckets, maxCount, avgPerWeek, weeks };
+}
+
+export function calcWeightVelocity(records) {
+  if (records.length < 3) return null;
+  const calc = (days) => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+    const recent = records.filter((r) => r.dt >= cutoffStr);
+    if (recent.length < 2) return null;
+    const first = recent[0];
+    const last = recent[recent.length - 1];
+    const daySpan = (new Date(last.dt + "T00:00:00") - new Date(first.dt + "T00:00:00")) / 86400000;
+    if (daySpan < 1) return null;
+    const dailyRate = (last.wt - first.wt) / daySpan;
+    return {
+      dailyRate: Math.round(dailyRate * 100) / 100,
+      monthlyProjection: Math.round(dailyRate * 30 * 10) / 10,
+      change: Math.round((last.wt - first.wt) * 10) / 10,
+      days: Math.round(daySpan),
+    };
+  };
+  const week = calc(7);
+  const month = calc(30);
+  if (!week && !month) return null;
+  return { week, month };
 }

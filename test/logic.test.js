@@ -57,6 +57,14 @@ import {
   calcTagImpact,
   calcBestPeriod,
   calcWeeklyFrequency,
+  calcWeightVelocity,
+  THEME_LIST,
+  MAX_RECORDS,
+  WEIGHT_RANGE,
+  HEIGHT_RANGE,
+  AGE_RANGE,
+  BODY_FAT_RANGE,
+  STORAGE_KEYS,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -2489,5 +2497,152 @@ describe("calcWeeklyFrequency", () => {
     const result = calcWeeklyFrequency(records, 4);
     expect(result.buckets.length).toBe(4);
     expect(result.weeks).toBe(4);
+  });
+});
+
+describe("calcWeightVelocity", () => {
+  it("returns null for fewer than 3 records", () => {
+    expect(calcWeightVelocity([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("calculates velocity for recent records", () => {
+    const today = new Date();
+    const records = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      records.push({ dt, wt: 70 + (6 - i) * 0.1 });
+    }
+    const result = calcWeightVelocity(records);
+    expect(result).not.toBeNull();
+    expect(result.week).not.toBeNull();
+    expect(result.week.dailyRate).toBeGreaterThan(0);
+    expect(result.week.monthlyProjection).toBeGreaterThan(0);
+  });
+
+  it("detects weight loss velocity", () => {
+    const today = new Date();
+    const records = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      records.push({ dt, wt: 75 - (6 - i) * 0.2 });
+    }
+    const result = calcWeightVelocity(records);
+    expect(result.week).not.toBeNull();
+    expect(result.week.dailyRate).toBeLessThan(0);
+    expect(result.week.monthlyProjection).toBeLessThan(0);
+  });
+
+  it("returns null week/month when no recent data", () => {
+    const records = [
+      { dt: "2020-01-01", wt: 70 },
+      { dt: "2020-01-02", wt: 69 },
+      { dt: "2020-01-03", wt: 68 },
+    ];
+    const result = calcWeightVelocity(records);
+    // Old records won't be within 7 or 30 day window
+    expect(result).toBeNull();
+  });
+});
+
+describe("calculateBMI edge cases", () => {
+  it("returns null for zero height", () => {
+    expect(calculateBMI(65, 0)).toBeNull();
+  });
+
+  it("returns null for negative height", () => {
+    expect(calculateBMI(65, -170)).toBeNull();
+  });
+
+  it("returns null for zero weight", () => {
+    expect(calculateBMI(0, 170)).toBeNull();
+  });
+
+  it("calculates correct BMI at boundary values", () => {
+    // 18.5 BMI boundary: weight = 18.5 * (1.70)^2 = 53.465
+    expect(calculateBMI(53.5, 170)).toBe(18.5);
+    // 25.0 BMI boundary: weight = 25 * (1.70)^2 = 72.25
+    expect(calculateBMI(72.3, 170)).toBe(25.0);
+  });
+
+  it("handles very tall height correctly", () => {
+    const bmi = calculateBMI(100, 220);
+    expect(bmi).toBe(20.7);
+  });
+
+  it("handles very short height correctly", () => {
+    const bmi = calculateBMI(40, 130);
+    expect(bmi).toBe(23.7);
+  });
+});
+
+describe("constants validation", () => {
+  it("THEME_LIST has unique ids and valid colors", () => {
+    const ids = THEME_LIST.map((t) => t.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    THEME_LIST.forEach((theme) => {
+      expect(theme.id).toBeTruthy();
+      expect(theme.color).toMatch(/^#[0-9a-fA-F]{6}$/);
+    });
+  });
+
+  it("WEIGHT_RANGE has valid min < max", () => {
+    expect(WEIGHT_RANGE.min).toBeLessThan(WEIGHT_RANGE.max);
+    expect(WEIGHT_RANGE.min).toBeGreaterThan(0);
+  });
+
+  it("HEIGHT_RANGE has valid min < max", () => {
+    expect(HEIGHT_RANGE.min).toBeLessThan(HEIGHT_RANGE.max);
+    expect(HEIGHT_RANGE.min).toBeGreaterThan(0);
+  });
+
+  it("AGE_RANGE has valid min < max", () => {
+    expect(AGE_RANGE.min).toBeLessThan(AGE_RANGE.max);
+    expect(AGE_RANGE.min).toBeGreaterThanOrEqual(0);
+  });
+
+  it("BODY_FAT_RANGE has valid min < max", () => {
+    expect(BODY_FAT_RANGE.min).toBeLessThan(BODY_FAT_RANGE.max);
+    expect(BODY_FAT_RANGE.min).toBeGreaterThanOrEqual(0);
+  });
+
+  it("MAX_RECORDS is a positive number", () => {
+    expect(MAX_RECORDS).toBeGreaterThan(0);
+    expect(Number.isInteger(MAX_RECORDS)).toBe(true);
+  });
+
+  it("STORAGE_KEYS has non-empty string values", () => {
+    Object.values(STORAGE_KEYS).forEach((key) => {
+      expect(typeof key).toBe("string");
+      expect(key.length).toBeGreaterThan(0);
+    });
+  });
+});
+
+describe("createDefaultProfile", () => {
+  it("returns object with required fields", () => {
+    const profile = createDefaultProfile();
+    expect(profile).toHaveProperty("heightCm");
+    expect(profile).toHaveProperty("age");
+    expect(profile).toHaveProperty("gender");
+  });
+
+  it("returns independent objects on each call", () => {
+    const a = createDefaultProfile();
+    const b = createDefaultProfile();
+    a.heightCm = 999;
+    expect(b.heightCm).not.toBe(999);
+  });
+});
+
+describe("createDefaultSettings edge cases", () => {
+  it("returns independent objects on each call", () => {
+    const a = createDefaultSettings();
+    const b = createDefaultSettings();
+    a.language = "xx";
+    expect(b.language).not.toBe("xx");
   });
 });

@@ -2346,15 +2346,21 @@ function handleImportData(event) {
         return;
       }
 
-      if (!window.confirm(t("import.confirm"))) return;
+      const validImportRecords = data.records.filter((r) => r.dt && Number.isFinite(r.wt));
+      if (!validImportRecords.length) {
+        setStatus(t("import.csv.empty"), "error");
+        return;
+      }
 
+      if (!window.confirm(t("import.confirm").replace("{count}", validImportRecords.length))) return;
+
+      const beforeCount = state.records.length;
       // Merge records by date (imported records fill gaps, don't overwrite)
-      for (const record of data.records) {
-        if (record.dt && Number.isFinite(record.wt)) {
-          state.records = upsertRecord(state.records, record);
-        }
+      for (const record of validImportRecords) {
+        state.records = upsertRecord(state.records, record);
       }
       state.records = trimRecords(state.records, MAX_RECORDS);
+      const newCount = state.records.length - beforeCount;
 
       // Import profile if present and current one is empty
       if (data.profile && !state.profile.name) {
@@ -2366,7 +2372,8 @@ function handleImportData(event) {
         return;
       }
       quickWeight = state.records.length ? state.records[state.records.length - 1].wt : 65.0;
-      setStatus(t("import.success"));
+      const msg = t("import.success") + ` (${validImportRecords.length} ${t("chart.records")}${newCount > 0 ? `, +${newCount} ${t("import.new")}` : ""})`;
+      setStatus(msg);
     } catch {
       setStatus(t("import.invalid"), "error");
     }
@@ -2963,16 +2970,18 @@ async function googleRestore() {
     if (!cr.ok) throw new Error("drive_error");
     const bd = await cr.json();
     if (!bd.records?.length) { setStatus(t("google.noData"), "error"); return; }
-    if (!window.confirm(t("google.restoreConfirm"))) return;
+    const validBackupRecords = bd.records.filter((r) => r.dt && Number.isFinite(r.wt));
+    if (!window.confirm(t("google.restoreConfirm") + ` (${validBackupRecords.length} ${t("chart.records")})`)) return;
+    const beforeCount = state.records.length;
     let m = [...state.records];
-    for (const r of bd.records) {
-      if (!r.dt || !Number.isFinite(r.wt)) continue;
+    for (const r of validBackupRecords) {
       m = upsertRecord(m, { ...r, bmi: r.bmi ?? null, bf: r.bf ?? null, note: r.note ?? "", source: r.source || "manual", imageName: "" });
     }
     state.records = trimRecords(m, MAX_RECORDS);
+    const newCount = state.records.length - beforeCount;
     if (bd.settings?.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;
     if (!persist()) { setStatus(t("status.storageError"), "error"); return; }
-    setStatus(t("google.restoreDone"));
+    setStatus(t("google.restoreDone") + ` (${validBackupRecords.length} ${t("chart.records")}${newCount > 0 ? `, +${newCount} ${t("import.new")}` : ""})`);
     render();
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
