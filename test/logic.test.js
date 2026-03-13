@@ -98,6 +98,7 @@ import {
   calcLongTermProgress,
   calcWeightFluctuation,
   calcWeightAnomalies,
+  calcSuccessRate,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -1158,7 +1159,7 @@ describe("exportRecordsToCSV", () => {
       { dt: "2025-01-02", wt: 70.0, bmi: null, bf: null, source: "quick", note: "" },
     ];
     const csv = exportRecordsToCSV(records);
-    const lines = csv.split("\n");
+    const lines = csv.replace(/^\uFEFF/, "").split("\n");
     expect(lines[0]).toBe("date,weight,bmi,bodyFat,source,note");
     expect(lines[1]).toBe("2025-01-01,70.5,24.4,20,manual,good");
     expect(lines[2]).toBe("2025-01-02,70,,,quick,");
@@ -5905,7 +5906,7 @@ describe("exportRecordsToCSV", () => {
   });
   it("includes header row", () => {
     const csv = exportRecordsToCSV([{ dt: "2024-01-01", wt: 70, bmi: 22.5, bf: 15, source: "manual", note: "" }]);
-    const lines = csv.split("\n");
+    const lines = csv.replace(/^\uFEFF/, "").split("\n");
     expect(lines[0]).toBe("date,weight,bmi,bodyFat,source,note");
   });
   it("correctly formats record data", () => {
@@ -5919,6 +5920,20 @@ describe("exportRecordsToCSV", () => {
   it("escapes notes with commas", () => {
     const csv = exportRecordsToCSV([{ dt: "2024-01-01", wt: 70, note: "a,b" }]);
     expect(csv).toContain('"a,b"');
+  });
+  it("includes UTF-8 BOM for Excel compatibility", () => {
+    const csv = exportRecordsToCSV([{ dt: "2024-01-01", wt: 70, bmi: 22.5, bf: 15, source: "manual", note: "" }]);
+    expect(csv.charCodeAt(0)).toBe(0xFEFF);
+  });
+});
+
+describe("parseCSVImport BOM handling", () => {
+  it("strips BOM from CSV input", () => {
+    const bom = "\uFEFF";
+    const csv = bom + "date,weight,bmi,bodyFat,source,note\n2024-01-01,70,22.5,15,manual,test";
+    const result = parseCSVImport(csv);
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].dt).toBe("2024-01-01");
   });
 });
 

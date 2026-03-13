@@ -646,8 +646,9 @@ export function filterRecordsByDateRange(records, fromDate, toDate) {
 export function parseCSVImport(csvText) {
   if (!csvText || !csvText.trim()) return { records: [], errors: [] };
 
+  // Strip UTF-8 BOM if present (Excel exports BOM-prefixed files)
   // Single-pass CSV parser handling quoted fields with newlines, commas, and escaped quotes
-  const text = csvText.trim();
+  const text = csvText.replace(/^\uFEFF/, "").trim();
   const allRows = [];
   let fields = [];
   let field = "";
@@ -999,7 +1000,7 @@ export function exportRecordsToCSV(records) {
   const rows = records.map((r) =>
     [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source ?? "", r.note ?? ""].map(csvEscape).join(",")
   );
-  return [header, ...rows].join("\n");
+  return "\uFEFF" + [header, ...rows].join("\n");
 }
 
 export function calcWeightRangePosition(records) {
@@ -2852,4 +2853,35 @@ export function calcWeightAnomalies(records, threshold = 3) {
     }
   }
   return anomalies.sort((a, b) => b.diff - a.diff);
+}
+
+/**
+ * Calculate success rate — percentage of recordings where weight decreased or stayed the same.
+ * Returns { total, down, same, up, successRate, recentRate (last 30 entries) }
+ */
+export function calcSuccessRate(records) {
+  if (records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  let down = 0, same = 0, up = 0;
+  for (let i = 1; i < sorted.length; i++) {
+    const diff = sorted[i].wt - sorted[i - 1].wt;
+    if (diff < -0.05) down++;
+    else if (diff > 0.05) up++;
+    else same++;
+  }
+  const total = sorted.length - 1;
+  const successRate = Math.round(((down + same) / total) * 100);
+
+  // Recent rate (last 30 entries)
+  const recent = sorted.slice(-31);
+  let rDown = 0, rSame = 0;
+  for (let i = 1; i < recent.length; i++) {
+    const diff = recent[i].wt - recent[i - 1].wt;
+    if (diff < -0.05) rDown++;
+    else if (Math.abs(diff) <= 0.05) rSame++;
+  }
+  const rTotal = recent.length - 1;
+  const recentRate = rTotal > 0 ? Math.round(((rDown + rSame) / rTotal) * 100) : null;
+
+  return { total, down, same, up, successRate, recentRate };
 }

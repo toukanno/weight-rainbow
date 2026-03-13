@@ -1298,7 +1298,7 @@ function filterRecordsByDateRange(records, fromDate, toDate) {
 }
 function parseCSVImport(csvText) {
   if (!csvText || !csvText.trim()) return { records: [], errors: [] };
-  const text = csvText.trim();
+  const text = csvText.replace(/^\uFEFF/, "").trim();
   const allRows = [];
   let fields = [];
   let field = "";
@@ -3102,6 +3102,29 @@ function calcWeightAnomalies(records, threshold = 3) {
   }
   return anomalies.sort((a, b) => b.diff - a.diff);
 }
+function calcSuccessRate(records) {
+  if (records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  let down = 0, same = 0, up = 0;
+  for (let i = 1; i < sorted.length; i++) {
+    const diff = sorted[i].wt - sorted[i - 1].wt;
+    if (diff < -0.05) down++;
+    else if (diff > 0.05) up++;
+    else same++;
+  }
+  const total = sorted.length - 1;
+  const successRate = Math.round((down + same) / total * 100);
+  const recent = sorted.slice(-31);
+  let rDown = 0, rSame = 0;
+  for (let i = 1; i < recent.length; i++) {
+    const diff = recent[i].wt - recent[i - 1].wt;
+    if (diff < -0.05) rDown++;
+    else if (Math.abs(diff) <= 0.05) rSame++;
+  }
+  const rTotal = recent.length - 1;
+  const recentRate = rTotal > 0 ? Math.round((rDown + rSame) / rTotal * 100) : null;
+  return { total, down, same, up, successRate, recentRate };
+}
 
 // src/i18n.js
 var translations = {
@@ -3863,7 +3886,13 @@ var translations = {
     "fluct.range": "\u5E45",
     "anomaly.title": "\u7570\u5E38\u5024\u691C\u51FA",
     "anomaly.entry": "{date}\u306E\u8A18\u9332 {wt}kg\uFF08\u4E88\u6E2C: {expected}kg\u3001\u5DEE: {diff}kg\uFF09",
-    "anomaly.hint": "\u5165\u529B\u30DF\u30B9\u306E\u53EF\u80FD\u6027\u304C\u3042\u308B\u30C7\u30FC\u30BF\u3067\u3059"
+    "anomaly.hint": "\u5165\u529B\u30DF\u30B9\u306E\u53EF\u80FD\u6027\u304C\u3042\u308B\u30C7\u30FC\u30BF\u3067\u3059",
+    "success.title": "\u6210\u529F\u7387",
+    "success.rate": "\u6E1B\u5C11\u30FB\u7DAD\u6301\u3057\u305F\u5272\u5408",
+    "success.recent": "\u76F4\u8FD130\u56DE",
+    "success.down": "\u6E1B\u5C11",
+    "success.same": "\u7DAD\u6301",
+    "success.up": "\u5897\u52A0"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4623,7 +4652,13 @@ var translations = {
     "fluct.range": "Range",
     "anomaly.title": "Anomaly Detection",
     "anomaly.entry": "{date}: {wt}kg (expected: {expected}kg, diff: {diff}kg)",
-    "anomaly.hint": "These entries may contain data entry errors"
+    "anomaly.hint": "These entries may contain data entry errors",
+    "success.title": "Success Rate",
+    "success.rate": "Days weight decreased or stayed",
+    "success.recent": "Last 30",
+    "success.down": "Down",
+    "success.same": "Same",
+    "success.up": "Up"
   }
 };
 function createTranslator(language) {
@@ -25233,7 +25268,7 @@ function sanitizeProfile(p) {
     name: typeof p.name === "string" ? p.name.slice(0, 50) : defaults.name,
     heightCm: hc === "" || Number.isFinite(Number(hc)) && Number(hc) >= 50 && Number(hc) <= 300 ? hc : defaults.heightCm,
     age: ag === "" || Number.isFinite(Number(ag)) && Number(ag) >= 1 && Number(ag) <= 150 ? ag : defaults.age,
-    gender: ["male", "female", "other", "unspecified", ""].includes(p.gender) ? p.gender : defaults.gender
+    gender: ["male", "female", "nonbinary", "other", "unspecified", ""].includes(p.gender) ? p.gender : defaults.gender
   };
 }
 function loadState() {
@@ -25732,6 +25767,7 @@ function render() {
             ${renderRecordingCalendar()}
             ${renderLongTermProgress()}
             ${renderWeightFluctuation()}
+            ${renderSuccessRate()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -27125,6 +27161,31 @@ function renderWeightAnomalies() {
       <div class="helper">${t("anomaly.title")}</div>
       <div class="helper hint-small">${t("anomaly.hint")}</div>
       ${rows}
+    </div>
+  `;
+}
+function renderSuccessRate() {
+  const sr = calcSuccessRate(state.records);
+  if (!sr) return "";
+  const total = sr.down + sr.same + sr.up;
+  const downPct = Math.round(sr.down / total * 100);
+  const samePct = Math.round(sr.same / total * 100);
+  const upPct = 100 - downPct - samePct;
+  return `
+    <div class="success-section">
+      <div class="helper">${t("success.title")}</div>
+      <div class="success-rate-big">${sr.successRate}%</div>
+      <div class="success-bar">
+        <div class="success-seg down" style="width:${downPct}%" title="${t("success.down")} ${downPct}%"></div>
+        <div class="success-seg same" style="width:${samePct}%" title="${t("success.same")} ${samePct}%"></div>
+        <div class="success-seg up" style="width:${upPct}%" title="${t("success.up")} ${upPct}%"></div>
+      </div>
+      <div class="success-legend">
+        <span class="success-leg-item"><span class="success-dot down"></span>${t("success.down")} ${sr.down}</span>
+        <span class="success-leg-item"><span class="success-dot same"></span>${t("success.same")} ${sr.same}</span>
+        <span class="success-leg-item"><span class="success-dot up"></span>${t("success.up")} ${sr.up}</span>
+      </div>
+      ${sr.recentRate !== null ? `<div class="helper hint-small" style="margin-top:4px;">${t("success.recent")}: ${sr.recentRate}%</div>` : ""}
     </div>
   `;
 }

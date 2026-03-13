@@ -101,6 +101,7 @@ import {
   calcLongTermProgress,
   calcWeightFluctuation,
   calcWeightAnomalies,
+  calcSuccessRate,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -211,7 +212,7 @@ function sanitizeProfile(p) {
     name: typeof p.name === "string" ? p.name.slice(0, 50) : defaults.name,
     heightCm: hc === "" || (Number.isFinite(Number(hc)) && Number(hc) >= 50 && Number(hc) <= 300) ? hc : defaults.heightCm,
     age: ag === "" || (Number.isFinite(Number(ag)) && Number(ag) >= 1 && Number(ag) <= 150) ? ag : defaults.age,
-    gender: ["male", "female", "other", "unspecified", ""].includes(p.gender) ? p.gender : defaults.gender,
+    gender: ["male", "female", "nonbinary", "other", "unspecified", ""].includes(p.gender) ? p.gender : defaults.gender,
   };
 }
 
@@ -753,6 +754,7 @@ function render() {
             ${renderRecordingCalendar()}
             ${renderLongTermProgress()}
             ${renderWeightFluctuation()}
+            ${renderSuccessRate()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -2223,6 +2225,32 @@ function renderWeightAnomalies() {
       <div class="helper">${t("anomaly.title")}</div>
       <div class="helper hint-small">${t("anomaly.hint")}</div>
       ${rows}
+    </div>
+  `;
+}
+
+function renderSuccessRate() {
+  const sr = calcSuccessRate(state.records);
+  if (!sr) return "";
+  const total = sr.down + sr.same + sr.up;
+  const downPct = Math.round((sr.down / total) * 100);
+  const samePct = Math.round((sr.same / total) * 100);
+  const upPct = 100 - downPct - samePct;
+  return `
+    <div class="success-section">
+      <div class="helper">${t("success.title")}</div>
+      <div class="success-rate-big">${sr.successRate}%</div>
+      <div class="success-bar">
+        <div class="success-seg down" style="width:${downPct}%" title="${t("success.down")} ${downPct}%"></div>
+        <div class="success-seg same" style="width:${samePct}%" title="${t("success.same")} ${samePct}%"></div>
+        <div class="success-seg up" style="width:${upPct}%" title="${t("success.up")} ${upPct}%"></div>
+      </div>
+      <div class="success-legend">
+        <span class="success-leg-item"><span class="success-dot down"></span>${t("success.down")} ${sr.down}</span>
+        <span class="success-leg-item"><span class="success-dot same"></span>${t("success.same")} ${sr.same}</span>
+        <span class="success-leg-item"><span class="success-dot up"></span>${t("success.up")} ${sr.up}</span>
+      </div>
+      ${sr.recentRate !== null ? `<div class="helper hint-small" style="margin-top:4px;">${t("success.recent")}: ${sr.recentRate}%</div>` : ""}
     </div>
   `;
 }
