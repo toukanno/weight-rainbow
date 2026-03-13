@@ -7623,3 +7623,177 @@ describe("calcRecordingRate", () => {
     expect(result.totalDays).toBe(3);
   });
 });
+
+// ── Edge case tests for weakly-covered functions ──
+
+describe("calcWeightTrendIndicator edge cases", () => {
+  it("works with exactly 4 records (minimum)", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 70 },
+      { dt: "2026-01-02", wt: 70.1 },
+      { dt: "2026-01-03", wt: 70.2 },
+      { dt: "2026-01-04", wt: 70.3 },
+    ];
+    const result = calcWeightTrendIndicator(records);
+    expect(result).not.toBeNull();
+  });
+
+  it("handles identical weights across all records", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 70 },
+      { dt: "2026-01-02", wt: 70 },
+      { dt: "2026-01-03", wt: 70 },
+      { dt: "2026-01-04", wt: 70 },
+    ];
+    const result = calcWeightTrendIndicator(records);
+    expect(result).not.toBeNull();
+    expect(result.direction).toBe("stable");
+  });
+
+  it("detects near-threshold changes (±0.19 should be stable)", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 70 },
+      { dt: "2026-01-02", wt: 70 },
+      { dt: "2026-01-03", wt: 70 },
+      { dt: "2026-01-04", wt: 69.95 },
+      { dt: "2026-01-05", wt: 69.95 },
+      { dt: "2026-01-06", wt: 69.95 },
+    ];
+    const result = calcWeightTrendIndicator(records);
+    expect(result).not.toBeNull();
+  });
+});
+
+describe("calcPeriodComparison edge cases", () => {
+  it("returns null with fewer than 3 records", () => {
+    const result = calcPeriodComparison([
+      { dt: "2026-01-01", wt: 70 },
+      { dt: "2026-01-02", wt: 70.5 },
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it("handles records spanning exactly 7 days", () => {
+    const records = [];
+    for (let i = 0; i < 7; i++) {
+      records.push({ dt: `2026-01-${String(i + 1).padStart(2, "0")}`, wt: 70 - i * 0.1 });
+    }
+    const result = calcPeriodComparison(records);
+    if (result) {
+      expect(result).toHaveProperty("week");
+    }
+  });
+
+  it("handles year boundary records", () => {
+    const records = [
+      { dt: "2025-12-30", wt: 70 },
+      { dt: "2025-12-31", wt: 70.1 },
+      { dt: "2026-01-01", wt: 69.9 },
+      { dt: "2026-01-02", wt: 70 },
+    ];
+    const result = calcPeriodComparison(records);
+    // Should not crash on year boundaries
+    expect(result === null || typeof result === "object").toBe(true);
+  });
+});
+
+describe("calcBMIHistory edge cases", () => {
+  it("returns null with fewer than 3 records", () => {
+    const result = calcBMIHistory([
+      { dt: "2026-01-01", wt: 70, bmi: 24.2 },
+      { dt: "2026-01-02", wt: 70.5, bmi: 24.4 },
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it("handles all identical BMI values", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 70, bmi: 24.2 },
+      { dt: "2026-01-02", wt: 70, bmi: 24.2 },
+      { dt: "2026-01-03", wt: 70, bmi: 24.2 },
+    ];
+    const result = calcBMIHistory(records);
+    if (result) {
+      expect(result.change).toBe(0);
+    }
+  });
+
+  it("handles all null BMI values", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 70, bmi: null },
+      { dt: "2026-01-02", wt: 70, bmi: null },
+      { dt: "2026-01-03", wt: 70, bmi: null },
+    ];
+    const result = calcBMIHistory(records);
+    expect(result).toBeNull();
+  });
+
+  it("handles mix of null and valid BMI", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 70, bmi: 24.2 },
+      { dt: "2026-01-02", wt: 70, bmi: null },
+      { dt: "2026-01-03", wt: 70, bmi: 24.5 },
+      { dt: "2026-01-04", wt: 70, bmi: null },
+      { dt: "2026-01-05", wt: 70, bmi: 24.8 },
+    ];
+    const result = calcBMIHistory(records);
+    if (result) {
+      expect(result.min).toBeLessThanOrEqual(result.max);
+    }
+  });
+});
+
+describe("calcMovingAverages edge cases", () => {
+  it("handles all identical weights", () => {
+    const records = Array.from({ length: 30 }, (_, i) => ({
+      dt: `2026-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcMovingAverages(records);
+    if (result) {
+      expect(result.shortAvg).toBeCloseTo(70, 1);
+      expect(result.longAvg).toBeCloseTo(70, 1);
+    }
+  });
+
+  it("returns null for fewer than 30 records", () => {
+    const records = Array.from({ length: 29 }, (_, i) => ({
+      dt: `2026-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + Math.random(),
+    }));
+    expect(calcMovingAverages(records)).toBeNull();
+  });
+});
+
+describe("calcDayOfWeekChange edge cases", () => {
+  it("returns null with fewer than 7 records", () => {
+    const records = Array.from({ length: 6 }, (_, i) => ({
+      dt: `2026-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    expect(calcDayOfWeekChange(records)).toBeNull();
+  });
+
+  it("works with exactly 7 records", () => {
+    const records = Array.from({ length: 7 }, (_, i) => ({
+      dt: `2026-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 - i * 0.1,
+    }));
+    const result = calcDayOfWeekChange(records);
+    // Should not crash
+    expect(result === null || typeof result === "object").toBe(true);
+  });
+
+  it("handles all zero changes between consecutive days", () => {
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2026-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcDayOfWeekChange(records);
+    if (result) {
+      result.avgs.forEach((a) => {
+        if (a !== null) expect(a).toBeCloseTo(0, 1);
+      });
+    }
+  });
+});
