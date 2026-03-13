@@ -1958,6 +1958,33 @@ function calcSeasonality(records) {
     seasonalRange
   };
 }
+function calcWeightDistribution(records, bucketSize = 1) {
+  if (records.length < 5) return null;
+  const weights = records.map((r) => r.wt);
+  const min = Math.floor(Math.min(...weights));
+  const max = Math.ceil(Math.max(...weights));
+  if (min === max) return null;
+  const buckets = [];
+  for (let start = min; start < max; start += bucketSize) {
+    const end = start + bucketSize;
+    const count = weights.filter((w) => w >= start && w < end).length;
+    buckets.push({ start, end, count });
+  }
+  const lastBucket = buckets[buckets.length - 1];
+  lastBucket.count += weights.filter((w) => w === max).length;
+  const maxCount = Math.max(...buckets.map((b) => b.count));
+  const latest = weights[weights.length - 1];
+  const latestBucket = buckets.findIndex((b) => latest >= b.start && latest < b.end) ?? buckets.length - 1;
+  const modeBucket = buckets.reduce((best, b, i) => b.count > buckets[best].count ? i : best, 0);
+  return {
+    buckets,
+    maxCount,
+    latestBucket: latestBucket >= 0 ? latestBucket : buckets.length - 1,
+    modeBucket,
+    modeRange: `${buckets[modeBucket].start}-${buckets[modeBucket].end}`,
+    total: records.length
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -2472,7 +2499,11 @@ var translations = {
     "season.month.9": "9\u6708",
     "season.month.10": "10\u6708",
     "season.month.11": "11\u6708",
-    "season.month.12": "12\u6708"
+    "season.month.12": "12\u6708",
+    "dist.title": "\u4F53\u91CD\u5206\u5E03",
+    "dist.mode": "\u6700\u983B\u5024\u5E2F: {range}kg ({count}\u56DE)",
+    "dist.current": "\u25BC \u73FE\u5728",
+    "dist.hint": "\u4F53\u91CD\u304C\u3069\u306E\u7BC4\u56F2\u306B\u96C6\u4E2D\u3057\u3066\u3044\u308B\u304B\u3092\u8868\u793A"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2985,7 +3016,11 @@ var translations = {
     "season.month.9": "Sep",
     "season.month.10": "Oct",
     "season.month.11": "Nov",
-    "season.month.12": "Dec"
+    "season.month.12": "Dec",
+    "dist.title": "Weight Distribution",
+    "dist.mode": "Most common: {range}kg ({count} times)",
+    "dist.current": "\u25BC Current",
+    "dist.hint": "Shows where your weights cluster"
   }
 };
 function createTranslator(language) {
@@ -24067,6 +24102,7 @@ function render() {
                 ${renderWeightPlateau()}
                 ${renderRecordGaps()}
                 ${renderSeasonality()}
+                ${renderWeightDistribution()}
               </div>
               ` : ""}
             </div>
@@ -24790,6 +24826,29 @@ function renderSeasonality() {
         <div>${t("season.range").replace("{range}", s.seasonalRange)}</div>
       </div>
       <div class="helper hint-small">${t("season.hint")}</div>
+    </div>
+  `;
+}
+function renderWeightDistribution() {
+  const d = calcWeightDistribution(state.records);
+  if (!d) return "";
+  const bars = d.buckets.map((b, i) => {
+    const pct = d.maxCount > 0 ? Math.round(b.count / d.maxCount * 100) : 0;
+    const isCurrent = i === d.latestBucket;
+    const isMode = i === d.modeBucket;
+    const color = isCurrent ? "var(--accent)" : isMode ? "var(--ok, #10b981)" : "color-mix(in srgb, var(--accent) 40%, transparent)";
+    return `<div class="dist-bar-wrap">
+      ${isCurrent ? `<div class="dist-current-marker">${t("dist.current")}</div>` : ""}
+      <div class="dist-bar" style="height:${Math.max(2, pct)}%;background:${color};" title="${b.start}-${b.end}kg: ${b.count}"></div>
+      <div class="dist-bar-label">${b.start}</div>
+    </div>`;
+  }).join("");
+  return `
+    <div class="dist-section">
+      <div class="helper">${t("dist.title")}</div>
+      <div class="dist-chart">${bars}</div>
+      <div class="dist-info">${t("dist.mode").replace("{range}", d.modeRange).replace("{count}", d.buckets[d.modeBucket].count)}</div>
+      <div class="helper hint-small">${t("dist.hint")}</div>
     </div>
   `;
 }
