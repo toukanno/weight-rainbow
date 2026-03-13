@@ -318,6 +318,7 @@ function getMotivationalMessage(streak, trend, records, goalProgress) {
 
 function render() {
   try {
+  const scrollY = window.scrollY;
   document.documentElement.lang = state.settings.language;
   document.title = t("app.title");
   const description = document.querySelector('meta[name="description"]');
@@ -989,6 +990,7 @@ function render() {
 
   bindEvents();
   drawChart();
+  window.scrollTo(0, scrollY);
 
   if (rainbowVisible) {
     spawnConfetti();
