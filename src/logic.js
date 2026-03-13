@@ -1201,3 +1201,27 @@ export function calcRecordGaps(records) {
     recordCount: records.length,
   };
 }
+
+export function calcCalorieEstimate(records) {
+  if (records.length < 3) return null;
+  const KCAL_PER_KG = 7700;
+  const calc = (days) => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+    const recent = records.filter((r) => r.dt >= cutoffStr);
+    if (recent.length < 2) return null;
+    const first = recent[0];
+    const last = recent[recent.length - 1];
+    const daySpan = (new Date(last.dt + "T00:00:00") - new Date(first.dt + "T00:00:00")) / 86400000;
+    if (daySpan < 1) return null;
+    const weightChange = last.wt - first.wt;
+    const totalKcal = Math.round(weightChange * KCAL_PER_KG);
+    const dailyKcal = Math.round(totalKcal / daySpan);
+    return { weightChange: Math.round(weightChange * 10) / 10, totalKcal, dailyKcal, days: Math.round(daySpan) };
+  };
+  const week = calc(7);
+  const month = calc(30);
+  if (!week && !month) return null;
+  return { week, month };
+}

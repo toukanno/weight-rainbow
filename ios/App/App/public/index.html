@@ -728,7 +728,9 @@
       .note-tag {
         font-size: 0.72rem;
         padding: 6px 12px;
-        min-height: 32px;
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
         border-radius: 12px;
         border: 1px solid var(--border);
         background: var(--surface);
@@ -1272,6 +1274,45 @@
         color: var(--ok, #10b981);
         font-weight: 600;
         margin-top: 4px;
+      }
+
+      .calorie-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .calorie-cards {
+        display: flex;
+        gap: 12px;
+        margin-top: 8px;
+      }
+      .calorie-card {
+        flex: 1;
+        padding: 8px;
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--accent) 8%, transparent);
+        border: 1px solid var(--border);
+        text-align: center;
+      }
+      .calorie-label {
+        font-size: 0.75rem;
+        color: var(--text);
+        opacity: 0.7;
+      }
+      .calorie-status {
+        font-size: 0.9rem;
+        margin-top: 2px;
+      }
+      .calorie-value {
+        font-size: 0.8rem;
+        color: var(--text);
+        margin-top: 2px;
+      }
+      .calorie-total {
+        font-size: 0.72rem;
+        color: var(--text);
+        opacity: 0.7;
+        margin-top: 2px;
       }
 
       .consistency-display {
@@ -2325,7 +2366,9 @@
 
       .summary-tab {
         padding: 10px 18px;
-        min-height: 40px;
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
         border-radius: 999px;
         border: 1px solid var(--border);
         background: var(--surface);
@@ -2356,6 +2399,7 @@
       }
       .calendar-nav button {
         padding: 6px 14px;
+        min-height: 44px;
         border-radius: 12px;
         border: 1px solid var(--border);
         background: var(--surface);
@@ -2611,6 +2655,7 @@
         align-items: center;
         gap: 6px;
         padding: 8px 16px;
+        min-height: 44px;
         border-radius: 999px;
         border: 1px solid var(--border);
         background: var(--surface-strong);
@@ -2873,7 +2918,12 @@
       body[data-theme="midnight"] .freq-section,
       body[data-theme="midnight"] .variance-section,
       body[data-theme="midnight"] .plateau-section,
-      body[data-theme="midnight"] .gaps-section {
+      body[data-theme="midnight"] .gaps-section,
+      body[data-theme="midnight"] .calorie-section {
+        border-color: rgba(139, 146, 176, 0.14);
+      }
+      body[data-theme="midnight"] .calorie-card {
+        background: rgba(139, 146, 176, 0.08);
         border-color: rgba(139, 146, 176, 0.14);
       }
 
@@ -3082,21 +3132,24 @@
           break-inside: avoid;
         }
         .hero::after, .rainbow-overlay, .confetti-container,
-        #statusBar, .entry-tabs, .btn-row, .import-export,
-        .settings-section, .review-section, .footer-section,
-        .lang-modal-overlay, .photo-preview, .summary-tabs {
+        .lang-modal-overlay, .photo-preview, .summary-tabs,
+        .tab-row, .export-row, .export-grid, .data-actions,
+        .google-actions, .record-delete, .quick-section,
+        .voice-box, .photo-box, .note-tags-row, .date-shortcuts,
+        .record-search, .record-date-range, .ad-slot,
+        [data-action="save-record"], [data-action="save-profile"],
+        [data-action="save-settings"], [data-action="toggle-records"] {
           display: none !important;
         }
-        .container {
+        .content-grid {
+          display: block !important;
+        }
+        .column {
           max-width: 100% !important;
-          padding: 0 !important;
         }
         canvas#chart {
           max-width: 100% !important;
           height: auto !important;
-        }
-        .record-actions {
-          display: none !important;
         }
         a { color: #222 !important; text-decoration: none !important; }
       }

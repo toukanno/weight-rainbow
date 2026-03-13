@@ -61,6 +61,7 @@ import {
   calcWeightVariance,
   calcWeightPlateau,
   calcRecordGaps,
+  calcCalorieEstimate,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -2920,6 +2921,118 @@ describe("upsertRecord edge cases", () => {
   });
 });
 
+describe("calcGoalProgress edge cases", () => {
+  it("returns null with no records", () => {
+    expect(calcGoalProgress([], 60)).toBeNull();
+  });
+
+  it("returns null when goalWeight is not finite", () => {
+    expect(calcGoalProgress([{ dt: "2025-01-01", wt: 70 }], NaN)).toBeNull();
+    expect(calcGoalProgress([{ dt: "2025-01-01", wt: 70 }], null)).toBeNull();
+  });
+
+  it("returns 100% when already at goal", () => {
+    const records = [{ dt: "2025-01-01", wt: 65 }, { dt: "2025-01-02", wt: 60 }];
+    const result = calcGoalProgress(records, 60);
+    expect(result.percent).toBe(100);
+    expect(result.remaining).toBe(0);
+  });
+
+  it("calculates partial progress correctly", () => {
+    const records = [{ dt: "2025-01-01", wt: 80 }, { dt: "2025-01-10", wt: 75 }];
+    const result = calcGoalProgress(records, 70);
+    expect(result.percent).toBe(50);
+    expect(result.remaining).toBe(5);
+  });
+});
+
+describe("calcGoalMilestones edge cases", () => {
+  it("returns null when goal equals or exceeds first weight", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    expect(calcGoalMilestones(records, 70)).toBeNull();
+    expect(calcGoalMilestones(records, 80)).toBeNull();
+  });
+
+  it("marks reached milestones correctly", () => {
+    const records = [{ dt: "2025-01-01", wt: 80 }, { dt: "2025-01-10", wt: 72 }];
+    const milestones = calcGoalMilestones(records, 60);
+    // totalToLose = 20, 25% = 75kg (reached), 50% = 70kg (not reached)
+    expect(milestones[0].reached).toBe(true); // 25%
+    expect(milestones[1].reached).toBe(false); // 50%
+  });
+});
+
+describe("calcMonthlyStats edge cases", () => {
+  it("returns empty array for no records", () => {
+    expect(calcMonthlyStats([])).toEqual([]);
+  });
+
+  it("groups by month and computes stats", () => {
+    const records = [
+      { dt: "2025-01-05", wt: 70 },
+      { dt: "2025-01-15", wt: 72 },
+      { dt: "2025-02-01", wt: 68 },
+    ];
+    const stats = calcMonthlyStats(records);
+    expect(stats.length).toBe(2);
+    // Sorted reverse chronologically
+    expect(stats[0].month).toBe("2025-02");
+    expect(stats[1].month).toBe("2025-01");
+    expect(stats[1].count).toBe(2);
+    expect(stats[1].min).toBe(70);
+    expect(stats[1].max).toBe(72);
+  });
+});
+
+describe("calcWeeklyRate edge cases", () => {
+  it("returns null with fewer than 7 days span", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-05", wt: 69 },
+    ];
+    expect(calcWeeklyRate(records)).toBeNull();
+  });
+
+  it("calculates rate for 14-day span", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-15", wt: 68 },
+    ];
+    const rate = calcWeeklyRate(records);
+    expect(rate).not.toBeNull();
+    expect(rate.weeklyRate).toBeLessThan(0);
+    expect(rate.totalDays).toBe(14);
+  });
+});
+
+describe("validateProfile edge cases", () => {
+  it("accepts empty profile", () => {
+    const result = validateProfile({ name: "", heightCm: "", age: "", gender: "" });
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects invalid gender by setting default", () => {
+    const result = validateProfile({ name: "", heightCm: "", age: "", gender: "alien" });
+    expect(result.valid).toBe(true);
+    expect(result.profile.gender).toBe("unspecified");
+  });
+
+  it("accepts full-width numeric height", () => {
+    const result = validateProfile({ name: "Test", heightCm: "１７０", age: "", gender: "male" });
+    expect(result.valid).toBe(true);
+    expect(result.profile.heightCm).toBe(170);
+  });
+
+  it("rejects height out of range", () => {
+    expect(validateProfile({ name: "", heightCm: "50", age: "", gender: "" }).valid).toBe(false);
+    expect(validateProfile({ name: "", heightCm: "300", age: "", gender: "" }).valid).toBe(false);
+  });
+
+  it("rejects non-integer age", () => {
+    expect(validateProfile({ name: "", heightCm: "", age: "25.5", gender: "" }).valid).toBe(false);
+  });
+});
+
 describe("calcRecordGaps", () => {
   it("returns null with fewer than 2 records", () => {
     expect(calcRecordGaps([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
@@ -2959,5 +3072,54 @@ describe("calcRecordGaps", () => {
     const result = calcRecordGaps(records);
     expect(result).not.toBeNull();
     expect(result.gaps.length).toBeLessThanOrEqual(5);
+  });
+});
+
+describe("calcCalorieEstimate", () => {
+  it("returns null with fewer than 3 records", () => {
+    expect(calcCalorieEstimate([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns null when no recent records match", () => {
+    const records = [
+      { dt: "2020-01-01", wt: 70 },
+      { dt: "2020-01-02", wt: 71 },
+      { dt: "2020-01-03", wt: 72 },
+    ];
+    const result = calcCalorieEstimate(records);
+    expect(result).toBeNull();
+  });
+
+  it("calculates calorie estimates for recent records", () => {
+    const today = new Date();
+    const records = Array.from({ length: 8 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (7 - i));
+      return {
+        dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+        wt: 70 - i * 0.1,
+      };
+    });
+    const result = calcCalorieEstimate(records);
+    expect(result).not.toBeNull();
+    expect(result.week).not.toBeNull();
+    expect(result.week.totalKcal).toBeLessThan(0);
+    expect(result.week.dailyKcal).toBeLessThan(0);
+  });
+
+  it("shows surplus for weight gain", () => {
+    const today = new Date();
+    const records = Array.from({ length: 8 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (7 - i));
+      return {
+        dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+        wt: 70 + i * 0.2,
+      };
+    });
+    const result = calcCalorieEstimate(records);
+    expect(result).not.toBeNull();
+    expect(result.week.totalKcal).toBeGreaterThan(0);
+    expect(result.week.dailyKcal).toBeGreaterThan(0);
   });
 });

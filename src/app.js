@@ -63,6 +63,7 @@ import {
   calcWeightVariance,
   calcWeightPlateau,
   calcRecordGaps,
+  calcCalorieEstimate,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -672,6 +673,7 @@ function render() {
             ${renderWeightVariance()}
             ${renderWeightPlateau()}
             ${renderRecordGaps()}
+            ${renderCalorieEstimate()}
             ${renderBodyFatStats()}
           </section>
 
@@ -701,7 +703,7 @@ function render() {
             ${state.records.length > 3 ? `
             <div class="record-search">
               <input id="recordSearch" type="search" placeholder="${escapeAttr(t("records.search"))}" value="${escapeAttr(recordSearchQuery)}" autocomplete="off" aria-label="${t("records.search")}" />
-              ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : ""}
+              ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : `<span class="helper hint-small desktop-only">⌘K</span>`}
             </div>
             <div class="record-date-range">
               <div class="helper hint-small">${t("records.dateRange")}</div>
@@ -1336,6 +1338,33 @@ function renderRecordGaps() {
   `;
 }
 
+function renderCalorieEstimate() {
+  const c = calcCalorieEstimate(state.records);
+  if (!c) return "";
+  const renderPeriod = (data, labelKey) => {
+    if (!data) return "";
+    const status = data.dailyKcal > 50 ? "surplus" : data.dailyKcal < -50 ? "deficit" : "balanced";
+    const color = status === "deficit" ? "var(--ok, #10b981)" : status === "surplus" ? "var(--warn, #f59e0b)" : "var(--text)";
+    return `
+      <div class="calorie-card">
+        <div class="calorie-label">${t("calorie." + labelKey)}</div>
+        <div class="calorie-status" style="color:${color};font-weight:600;">${t("calorie." + status)}</div>
+        <div class="calorie-value">${t("calorie.daily").replace("{kcal}", Math.abs(data.dailyKcal))}</div>
+        <div class="calorie-total">${t("calorie.total").replace("{kcal}", Math.abs(data.totalKcal))}</div>
+      </div>`;
+  };
+  return `
+    <div class="calorie-section">
+      <div class="helper">${t("calorie.title")}</div>
+      <div class="calorie-cards">
+        ${renderPeriod(c.week, "week")}
+        ${renderPeriod(c.month, "month")}
+      </div>
+      <div class="helper hint-small">${t("calorie.hint")}</div>
+    </div>
+  `;
+}
+
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -1601,9 +1630,9 @@ function bindEvents() {
     recordDateTo = "";
     render();
   });
-  app.querySelector('[data-action="export-excel"]')?.addEventListener("click", exportExcel);
-  app.querySelector('[data-action="export-csv"]')?.addEventListener("click", exportCSV);
-  app.querySelector('[data-action="export-text"]')?.addEventListener("click", exportText);
+  app.querySelectorAll('[data-action="export-excel"]').forEach((b) => b.addEventListener("click", exportExcel));
+  app.querySelectorAll('[data-action="export-csv"]').forEach((b) => b.addEventListener("click", exportCSV));
+  app.querySelectorAll('[data-action="export-text"]').forEach((b) => b.addEventListener("click", exportText));
   app.querySelector('[data-action="import-csv"]')?.addEventListener("click", () => {
     document.getElementById("csvImportInput")?.click();
   });

@@ -1796,6 +1796,29 @@ function calcRecordGaps(records) {
     recordCount: records.length
   };
 }
+function calcCalorieEstimate(records) {
+  if (records.length < 3) return null;
+  const KCAL_PER_KG = 7700;
+  const calc = (days2) => {
+    const cutoff = /* @__PURE__ */ new Date();
+    cutoff.setDate(cutoff.getDate() - days2);
+    const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+    const recent = records.filter((r) => r.dt >= cutoffStr);
+    if (recent.length < 2) return null;
+    const first = recent[0];
+    const last = recent[recent.length - 1];
+    const daySpan = (/* @__PURE__ */ new Date(last.dt + "T00:00:00") - /* @__PURE__ */ new Date(first.dt + "T00:00:00")) / 864e5;
+    if (daySpan < 1) return null;
+    const weightChange = last.wt - first.wt;
+    const totalKcal = Math.round(weightChange * KCAL_PER_KG);
+    const dailyKcal = Math.round(totalKcal / daySpan);
+    return { weightChange: Math.round(weightChange * 10) / 10, totalKcal, dailyKcal, days: Math.round(daySpan) };
+  };
+  const week = calc(7);
+  const month = calc(30);
+  if (!week && !month) return null;
+  return { week, month };
+}
 
 // src/i18n.js
 var translations = {
@@ -2270,7 +2293,16 @@ var translations = {
     "gaps.total": "{count}\u56DE\u306E\u7A7A\u767D\u671F\u9593",
     "gaps.period": "{from} \u301C {to} ({days}\u65E5\u9593)",
     "gaps.perfect": "\u7A7A\u767D\u306A\u3057\uFF01\u6BCE\u65E5\u8A18\u9332\u3057\u3066\u3044\u307E\u3059",
-    "gaps.hint": "\u8A18\u9332\u306E\u7D99\u7D9A\u6027\u3092\u78BA\u8A8D\u3067\u304D\u307E\u3059"
+    "gaps.hint": "\u8A18\u9332\u306E\u7D99\u7D9A\u6027\u3092\u78BA\u8A8D\u3067\u304D\u307E\u3059",
+    "calorie.title": "\u63A8\u5B9A\u30AB\u30ED\u30EA\u30FC\u53CE\u652F",
+    "calorie.week": "\u76F4\u8FD17\u65E5\u9593",
+    "calorie.month": "\u76F4\u8FD130\u65E5\u9593",
+    "calorie.daily": "1\u65E5\u3042\u305F\u308A\u7D04{kcal}kcal",
+    "calorie.total": "\u5408\u8A08 \u7D04{kcal}kcal",
+    "calorie.surplus": "\u4F59\u5270",
+    "calorie.deficit": "\u4E0D\u8DB3",
+    "calorie.balanced": "\u5747\u8861",
+    "calorie.hint": "\u4F53\u91CD\u5909\u5316\u304B\u3089\u63A8\u5B9A\uFF081kg \u2248 7,700kcal\uFF09"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2743,7 +2775,16 @@ var translations = {
     "gaps.total": "{count} gap periods",
     "gaps.period": "{from} to {to} ({days} days)",
     "gaps.perfect": "No gaps! Recording every day",
-    "gaps.hint": "Review your recording consistency"
+    "gaps.hint": "Review your recording consistency",
+    "calorie.title": "Estimated Calorie Balance",
+    "calorie.week": "Last 7 days",
+    "calorie.month": "Last 30 days",
+    "calorie.daily": "~{kcal}kcal/day",
+    "calorie.total": "Total ~{kcal}kcal",
+    "calorie.surplus": "Surplus",
+    "calorie.deficit": "Deficit",
+    "calorie.balanced": "Balanced",
+    "calorie.hint": "Estimated from weight change (1kg \u2248 7,700kcal)"
   }
 };
 function createTranslator(language) {
@@ -23812,6 +23853,7 @@ function render() {
             ${renderWeightVariance()}
             ${renderWeightPlateau()}
             ${renderRecordGaps()}
+            ${renderCalorieEstimate()}
             ${renderBodyFatStats()}
           </section>
 
@@ -23841,7 +23883,7 @@ function render() {
             ${state.records.length > 3 ? `
             <div class="record-search">
               <input id="recordSearch" type="search" placeholder="${escapeAttr(t("records.search"))}" value="${escapeAttr(recordSearchQuery)}" autocomplete="off" aria-label="${t("records.search")}" />
-              ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : ""}
+              ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : `<span class="helper hint-small desktop-only">\u2318K</span>`}
             </div>
             <div class="record-date-range">
               <div class="helper hint-small">${t("records.dateRange")}</div>
@@ -24450,6 +24492,32 @@ function renderRecordGaps() {
     </div>
   `;
 }
+function renderCalorieEstimate() {
+  const c = calcCalorieEstimate(state.records);
+  if (!c) return "";
+  const renderPeriod = (data, labelKey) => {
+    if (!data) return "";
+    const status = data.dailyKcal > 50 ? "surplus" : data.dailyKcal < -50 ? "deficit" : "balanced";
+    const color = status === "deficit" ? "var(--ok, #10b981)" : status === "surplus" ? "var(--warn, #f59e0b)" : "var(--text)";
+    return `
+      <div class="calorie-card">
+        <div class="calorie-label">${t("calorie." + labelKey)}</div>
+        <div class="calorie-status" style="color:${color};font-weight:600;">${t("calorie." + status)}</div>
+        <div class="calorie-value">${t("calorie.daily").replace("{kcal}", Math.abs(data.dailyKcal))}</div>
+        <div class="calorie-total">${t("calorie.total").replace("{kcal}", Math.abs(data.totalKcal))}</div>
+      </div>`;
+  };
+  return `
+    <div class="calorie-section">
+      <div class="helper">${t("calorie.title")}</div>
+      <div class="calorie-cards">
+        ${renderPeriod(c.week, "week")}
+        ${renderPeriod(c.month, "month")}
+      </div>
+      <div class="helper hint-small">${t("calorie.hint")}</div>
+    </div>
+  `;
+}
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -24702,9 +24770,9 @@ function bindEvents() {
     recordDateTo = "";
     render();
   });
-  app.querySelector('[data-action="export-excel"]')?.addEventListener("click", exportExcel);
-  app.querySelector('[data-action="export-csv"]')?.addEventListener("click", exportCSV);
-  app.querySelector('[data-action="export-text"]')?.addEventListener("click", exportText);
+  app.querySelectorAll('[data-action="export-excel"]').forEach((b) => b.addEventListener("click", exportExcel));
+  app.querySelectorAll('[data-action="export-csv"]').forEach((b) => b.addEventListener("click", exportCSV));
+  app.querySelectorAll('[data-action="export-text"]').forEach((b) => b.addEventListener("click", exportText));
   app.querySelector('[data-action="import-csv"]')?.addEventListener("click", () => {
     document.getElementById("csvImportInput")?.click();
   });
