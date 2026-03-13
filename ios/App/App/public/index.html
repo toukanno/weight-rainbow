@@ -2166,7 +2166,7 @@
         flex-wrap: wrap;
         gap: 10px 16px;
         margin-top: 8px;
-        font-size: 11px;
+        font-size: 0.72rem;
         color: var(--muted);
       }
 
@@ -3544,10 +3544,16 @@
         border-color: rgba(139, 146, 176, 0.2);
       }
 
-      body[data-theme="midnight"] .record-search input[type="search"] {
+      body[data-theme="midnight"] .record-search input[type="search"],
+      body[data-theme="midnight"] .record-search-btn,
+      body[data-theme="midnight"] .filter-btn {
         background: rgba(30, 35, 55, 0.7);
         border-color: rgba(139, 146, 176, 0.24);
         color: #e4e7f0;
+      }
+
+      body[data-theme="midnight"] .freshness-indicator {
+        background: rgba(30, 35, 55, 0.5);
       }
 
       body[data-theme="midnight"] .date-range-fields input[type="date"] {

@@ -27202,7 +27202,7 @@ function drawChart() {
     canvas._tooltipTimer = setTimeout(() => {
       const tip = document.getElementById("chartTooltip");
       if (tip) tip.style.display = "none";
-    }, 3e3);
+    }, 3500);
   };
   canvas._chartMoveHandler = (e) => {
     showTooltipForEvent(e);
