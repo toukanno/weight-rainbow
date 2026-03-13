@@ -2784,3 +2784,69 @@ describe("calcWeightPlateau", () => {
     expect(result.isPlateau).toBe(true);
   });
 });
+
+describe("trimRecords edge cases", () => {
+  it("keeps only the most recent records when over limit", () => {
+    const records = Array.from({ length: 200 }, (_, i) => ({
+      dt: `2025-${String(Math.floor(i / 28) + 1).padStart(2, "0")}-${String((i % 28) + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const trimmed = trimRecords(records, 180);
+    expect(trimmed.length).toBe(180);
+    // Should keep the latest records
+    expect(trimmed[trimmed.length - 1]).toEqual(records[records.length - 1]);
+  });
+
+  it("does not trim when under limit", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    expect(trimRecords(records, 180)).toHaveLength(1);
+  });
+});
+
+describe("filterRecordsByDateRange edge cases", () => {
+  const records = [
+    { dt: "2025-01-01", wt: 70 },
+    { dt: "2025-01-15", wt: 71 },
+    { dt: "2025-02-01", wt: 72 },
+  ];
+
+  it("returns all records when no range specified", () => {
+    expect(filterRecordsByDateRange(records, "", "")).toHaveLength(3);
+  });
+
+  it("filters with only from date", () => {
+    const result = filterRecordsByDateRange(records, "2025-01-10", "");
+    expect(result).toHaveLength(2);
+    expect(result[0].dt).toBe("2025-01-15");
+  });
+
+  it("filters with only to date", () => {
+    const result = filterRecordsByDateRange(records, "", "2025-01-20");
+    expect(result).toHaveLength(2);
+    expect(result[1].dt).toBe("2025-01-15");
+  });
+
+  it("returns empty array for non-overlapping range", () => {
+    const result = filterRecordsByDateRange(records, "2025-03-01", "2025-04-01");
+    expect(result).toHaveLength(0);
+  });
+});
+
+describe("upsertRecord edge cases", () => {
+  it("replaces existing record with same date", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    const updated = upsertRecord(records, { dt: "2025-01-01", wt: 72 });
+    expect(updated).toHaveLength(1);
+    expect(updated[0].wt).toBe(72);
+  });
+
+  it("inserts in sorted order", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-03", wt: 72 },
+    ];
+    const updated = upsertRecord(records, { dt: "2025-01-02", wt: 71 });
+    expect(updated).toHaveLength(3);
+    expect(updated[1].dt).toBe("2025-01-02");
+  });
+});
