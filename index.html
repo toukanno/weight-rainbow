@@ -892,9 +892,11 @@
         transition: transform 0.12s, border-color 0.12s;
       }
 
-      .chip:hover {
-        border-color: var(--accent);
-        transform: translateY(-1px);
+      @media (hover: hover) {
+        .chip:hover {
+          border-color: var(--accent);
+          transform: translateY(-1px);
+        }
       }
 
       .hidden {
@@ -1563,11 +1565,13 @@
         transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
       }
 
-      .lang-modal-buttons button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-        background: linear-gradient(135deg, var(--accent), var(--accent-2));
-        color: white;
+      @media (hover: hover) {
+        .lang-modal-buttons button:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+          background: linear-gradient(135deg, var(--accent), var(--accent-2));
+          color: white;
+        }
       }
 
       /* Theme color swatches in settings */
@@ -1734,8 +1738,10 @@
         cursor: pointer;
         transition: transform 0.15s;
       }
-      .calendar-nav button:hover {
-        transform: translateY(-1px);
+      @media (hover: hover) {
+        .calendar-nav button:hover {
+          transform: translateY(-1px);
+        }
       }
       .calendar-label {
         font-weight: 700;
@@ -1856,9 +1862,11 @@
       }
 
       /* Hover/active enhancements */
-      .summary-tab:hover {
-        transform: translateY(-1px);
-        opacity: 0.85;
+      @media (hover: hover) {
+        .summary-tab:hover {
+          transform: translateY(-1px);
+          opacity: 0.85;
+        }
       }
       .record-delete:active {
         transform: scale(0.95);
@@ -1966,9 +1974,11 @@
         animation: rainbow-fade-in 0.3s ease-out;
       }
 
-      .undo-btn:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      @media (hover: hover) {
+        .undo-btn:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
       }
 
       body[data-theme="midnight"] .undo-btn {
