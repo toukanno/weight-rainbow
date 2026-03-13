@@ -25063,6 +25063,7 @@ function saveRecordWithWeight(weight, source) {
   state.form = {
     ...state.form,
     weight: weightResult.weight.toFixed(1),
+    date: todayLocal(),
     pickerInt: Math.floor(weightResult.weight),
     pickerDec: Math.round((weightResult.weight - Math.floor(weightResult.weight)) * 10),
     imageName: "",
@@ -25576,6 +25577,12 @@ function resetData() {
   detectedWeights = [];
   imagePreviewUrl = "";
   activeEntryMode = "manual";
+  showAllRecords = false;
+  showMonthlyStats = false;
+  showAdvancedAnalytics = false;
+  recordSearchQuery = "";
+  recordDateFrom = "";
+  recordDateTo = "";
   try {
     window.localStorage.removeItem(STORAGE_KEYS.records);
     window.localStorage.removeItem(STORAGE_KEYS.profile);
