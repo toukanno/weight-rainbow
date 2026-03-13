@@ -3760,6 +3760,10 @@
           box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
         }
       }
+      .google-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
 
       .google-btn svg {
         width: 18px;
@@ -4023,6 +4027,7 @@
         justify-content: center;
         gap: 4px;
         padding: 4px;
+        min-height: 44px;
         background: none;
       }
 
@@ -4031,6 +4036,10 @@
           transform: translateY(-2px);
           box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
         }
+      }
+      .theme-swatch:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
       }
 
       .theme-swatch.active {
@@ -4187,6 +4196,10 @@
       .summary-tab:active {
         transform: scale(0.95);
       }
+      .summary-tab:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
 
       /* Calendar */
       .calendar-nav {
@@ -4210,6 +4223,10 @@
         .calendar-nav button:hover {
           transform: translateY(-1px);
         }
+      }
+      .calendar-nav button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
       }
       .calendar-label {
         font-weight: 700;
@@ -4511,6 +4528,10 @@
           transform: translateY(-1px);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         }
+      }
+      .undo-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
       }
 
       body[data-theme="midnight"] .undo-btn {
