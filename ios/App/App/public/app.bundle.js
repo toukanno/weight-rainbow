@@ -4025,6 +4025,7 @@ var translations = {
     "dupes.clean": "\u554F\u984C\u306A\u3057",
     "validate.largeDiff": "\u524D\u56DE\uFF08{previous}kg\u3001{date}\uFF09\u304B\u3089{diff}kg\u4EE5\u4E0A\u306E\u5909\u52D5\u3067\u3059\u3002\u5165\u529B\u5024\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "validate.outsideRange": "\u5165\u529B\u5024\u304C\u904E\u53BB\u306E\u8A18\u9332\u7BC4\u56F2\uFF08{min}\u301C{max}kg\uFF09\u3092\u5927\u304D\u304F\u8D85\u3048\u3066\u3044\u307E\u3059\u3002",
+    "validate.goalWeight": "\u76EE\u6A19\u4F53\u91CD\u306F20\u301C300kg\u306E\u7BC4\u56F2\u3067\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "validate.title": "\u5165\u529B\u78BA\u8A8D",
     "weeklyAvg.title": "\u9031\u9593\u5E73\u5747\u63A8\u79FB",
     "weeklyAvg.week": "{start}\u301C",
@@ -4181,7 +4182,13 @@ var translations = {
     "pred.nodata": "14\u4EF6\u4EE5\u4E0A\u306E\u8A18\u9332\u304C\u5FC5\u8981\u3067\u3059",
     "pred.recent": "\u6700\u8FD1\u306E\u4E88\u6E2C",
     "pred.predicted": "\u4E88\u6E2C",
-    "pred.actual": "\u5B9F\u6E2C"
+    "pred.actual": "\u5B9F\u6E2C",
+    "cscore.title": "\u7D99\u7D9A\u30B9\u30B3\u30A2",
+    "cscore.recording": "\u8A18\u9332\u306E\u898F\u5247\u6027",
+    "cscore.stability": "\u4F53\u91CD\u306E\u5B89\u5B9A\u6027",
+    "cscore.momentum": "\u76EE\u6A19\u3078\u306E\u9032\u6357",
+    "cscore.grade": "\u7DCF\u5408\u8A55\u4FA1",
+    "cscore.nodata": "7\u4EF6\u4EE5\u4E0A\u306E\u8A18\u9332\u304C\u5FC5\u8981\u3067\u3059"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4838,6 +4845,7 @@ var translations = {
     "dupes.clean": "No issues found",
     "validate.largeDiff": "Weight changed by {diff}kg or more from last entry ({previous}kg on {date}). Please verify.",
     "validate.outsideRange": "Weight is well outside your historical range ({min} \u2013 {max}kg).",
+    "validate.goalWeight": "Goal weight must be between 20 and 300 kg.",
     "validate.title": "Entry Validation",
     "weeklyAvg.title": "Weekly Averages",
     "weeklyAvg.week": "{start}\u2013",
@@ -4994,7 +5002,13 @@ var translations = {
     "pred.nodata": "Need 14+ records",
     "pred.recent": "Recent Predictions",
     "pred.predicted": "Predicted",
-    "pred.actual": "Actual"
+    "pred.actual": "Actual",
+    "cscore.title": "Consistency Score",
+    "cscore.recording": "Recording Regularity",
+    "cscore.stability": "Weight Stability",
+    "cscore.momentum": "Goal Progress",
+    "cscore.grade": "Overall Grade",
+    "cscore.nodata": "Need 7+ records"
   }
 };
 function createTranslator(language) {
@@ -28385,7 +28399,16 @@ function handleFieldInput(event) {
     return;
   }
   if (name === "goalWeight") {
-    state.settings.goalWeight = value;
+    if (value !== "" && value != null) {
+      const gw = parseFloat(value);
+      if (!Number.isFinite(gw) || gw < 20 || gw > 300) {
+        setStatus(t("validate.goalWeight"), "error");
+        return;
+      }
+      state.settings.goalWeight = gw;
+    } else {
+      state.settings.goalWeight = "";
+    }
     persist();
     return;
   }

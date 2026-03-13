@@ -3201,3 +3201,70 @@ export function calcPredictionAccuracy(records) {
     rating,
   };
 }
+
+/**
+ * Calculate a consistency score (0-100) based on recording regularity,
+ * weight stability, and trend adherence over the last 30 days.
+ * Returns { score, components: { recording, stability, momentum }, grade }
+ */
+export function calcConsistencyScore(records, goalWeight) {
+  if (!records || records.length < 7) {
+    return { score: null, components: { recording: 0, stability: 0, momentum: 0 }, grade: "N/A" };
+  }
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const today = localDateStr();
+
+  // Last 30 days window
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  const cutoffStr = localDateStr(cutoff);
+  const recent = sorted.filter((r) => r.dt >= cutoffStr && r.dt <= today);
+
+  // 1. Recording regularity (0-100): % of last 30 days with records
+  const dateSet = new Set(recent.map((r) => r.dt));
+  const totalDays = Math.min(30, Math.max(1,
+    Math.ceil((new Date(today + "T00:00:00") - new Date(cutoffStr + "T00:00:00")) / 86400000) + 1
+  ));
+  const recordingScore = Math.min(100, Math.round((dateSet.size / totalDays) * 100));
+
+  // 2. Weight stability (0-100): inverse of coefficient of variation
+  let stabilityScore = 50;
+  if (recent.length >= 3) {
+    const weights = recent.map((r) => r.wt);
+    const mean = weights.reduce((s, w) => s + w, 0) / weights.length;
+    const variance = weights.reduce((s, w) => s + (w - mean) ** 2, 0) / weights.length;
+    const cv = mean > 0 ? Math.sqrt(variance) / mean : 0;
+    // CV of 0 = perfect stability (100), CV >= 0.03 = low stability (0)
+    stabilityScore = Math.min(100, Math.max(0, Math.round((1 - cv / 0.03) * 100)));
+  }
+
+  // 3. Momentum (0-100): are we moving toward goal?
+  let momentumScore = 50;
+  if (recent.length >= 2 && Number.isFinite(goalWeight) && goalWeight > 0) {
+    const first = recent[0].wt;
+    const last = recent[recent.length - 1].wt;
+    const needed = goalWeight - first;
+    const actual = last - first;
+    if (Math.abs(needed) > 0.1) {
+      const progress = actual / needed; // 1.0 = perfect, 0 = no progress, negative = wrong direction
+      momentumScore = Math.min(100, Math.max(0, Math.round(progress * 100)));
+    } else {
+      // Already at goal
+      momentumScore = 100;
+    }
+  }
+
+  const score = Math.round(recordingScore * 0.4 + stabilityScore * 0.3 + momentumScore * 0.3);
+  const grade = score >= 90 ? "S" : score >= 80 ? "A" : score >= 70 ? "B" : score >= 50 ? "C" : "D";
+
+  return {
+    score,
+    components: {
+      recording: recordingScore,
+      stability: stabilityScore,
+      momentum: momentumScore,
+    },
+    grade,
+  };
+}

@@ -109,6 +109,7 @@ import {
   calcStreakCalendar,
   calcMovingAvgCrossover,
   calcPredictionAccuracy,
+  calcConsistencyScore,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -2476,6 +2477,36 @@ function renderPredictionAccuracy() {
   `;
 }
 
+function renderConsistencyScore() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const data = calcConsistencyScore(state.records, goalWeight);
+  if (data.score === null) return "";
+
+  const gradeColors = { S: "cs-s", A: "cs-a", B: "cs-b", C: "cs-c", D: "cs-d" };
+  const gradeCls = gradeColors[data.grade] || "";
+
+  const bar = (label, value) =>
+    `<div class="cs-bar-row"><span class="cs-bar-label">${label}</span><div class="cs-bar-track"><div class="cs-bar-fill" style="width:${value}%"></div></div><span class="cs-bar-val">${value}</span></div>`;
+
+  return `
+    <div class="cs-section">
+      <div class="helper">${t("cscore.title")}</div>
+      <div class="cs-top">
+        <div class="cs-score-circle ${gradeCls}">
+          <span class="cs-score-num">${data.score}</span>
+          <span class="cs-score-label">/100</span>
+        </div>
+        <div class="cs-grade ${gradeCls}">${data.grade}</div>
+      </div>
+      <div class="cs-bars">
+        ${bar(t("cscore.recording"), data.components.recording)}
+        ${bar(t("cscore.stability"), data.components.stability)}
+        ${bar(t("cscore.momentum"), data.components.momentum)}
+      </div>
+    </div>
+  `;
+}
+
 function renderRecentEntries() {
   const entries = getRecentEntries(state.records, 5);
   if (entries.length === 0) return "";
@@ -3173,7 +3204,16 @@ function handleFieldInput(event) {
   }
 
   if (name === "goalWeight") {
-    state.settings.goalWeight = value;
+    if (value !== "" && value != null) {
+      const gw = parseFloat(value);
+      if (!Number.isFinite(gw) || gw < 20 || gw > 300) {
+        setStatus(t("validate.goalWeight"), "error");
+        return;
+      }
+      state.settings.goalWeight = gw;
+    } else {
+      state.settings.goalWeight = "";
+    }
     persist();
     return;
   }
