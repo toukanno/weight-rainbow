@@ -655,7 +655,7 @@ function render() {
                   <div class="helper hint-small desktop-only">⌘+Enter</div>
                 </div>
               </div>
-              <div class="validate-warnings" role="alert" style="display:none"></div>
+              <div class="validate-warnings" role="alert" aria-live="assertive" style="display:none"></div>
             </div>
 
             <div class="status ${statusKind === "error" ? "warn" : ""}" role="status" aria-live="polite">
@@ -1223,7 +1223,7 @@ function renderSourceBreakdown() {
         ${entries.map(([src, count]) => {
           const icon = sourceIcons[src] || "📊";
           const pct = Math.round((count / state.records.length) * 100);
-          return `<span class="source-chip"><span class="source-icon">${icon}</span> ${t("entry.source." + src)} <strong>${count}</strong> (${pct}%)</span>`;
+          return `<span class="source-chip"><span class="source-icon" aria-hidden="true">${icon}</span> ${t("entry.source." + src)} <strong>${count}</strong> (${pct}%)</span>`;
         }).join("")}
       </div>
     </div>
@@ -1728,7 +1728,7 @@ function renderStreakRewards() {
     <div class="streak-reward-section">
       <div class="helper">${t("streakReward.title")}</div>
       <div class="streak-reward-main">
-        <span class="streak-reward-icon">${icon}</span>
+        <span class="streak-reward-icon" aria-hidden="true">${icon}</span>
         <div class="streak-reward-info">
           <div class="streak-reward-badge">${t("streakReward." + sr.level)}</div>
           <div class="streak-reward-days">${t("streakReward.days").replace("{streak}", sr.streak)}</div>
@@ -1813,7 +1813,7 @@ function renderMilestoneTimeline() {
         ? t("timeline.bmi.normal")
         : t("timeline.bmi.change").replace("{from}", e.from).replace("{to}", e.to);
     }
-    return `<div class="timeline-item"><span class="timeline-icon">${icons[e.type]}</span><div class="timeline-content"><span class="timeline-date">${e.date}</span><span class="timeline-label">${label}</span></div></div>`;
+    return `<div class="timeline-item"><span class="timeline-icon" aria-hidden="true">${icons[e.type]}</span><div class="timeline-content"><span class="timeline-date">${e.date}</span><span class="timeline-label">${label}</span></div></div>`;
   }).join("");
   return `
     <div class="timeline-section">
@@ -3623,7 +3623,9 @@ function handleImportData(event) {
         return;
       }
 
-      const validImportRecords = data.records.filter((r) => r.dt && Number.isFinite(r.wt));
+      const validImportRecords = data.records.filter((r) =>
+        r.dt && /^\d{4}-\d{2}-\d{2}$/.test(r.dt) && Number.isFinite(r.wt) && r.wt >= 20 && r.wt <= 300
+      );
       if (!validImportRecords.length) {
         setStatus(t("import.csv.empty"), "error");
         return;
@@ -3638,6 +3640,16 @@ function handleImportData(event) {
       }
       state.records = trimRecords(state.records, MAX_RECORDS);
       const newCount = state.records.length - beforeCount;
+
+      // Import settings if present
+      if (data.settings) {
+        if (data.settings.goalWeight != null && Number.isFinite(Number(data.settings.goalWeight))) {
+          state.settings.goalWeight = data.settings.goalWeight;
+        }
+        if (data.settings.theme && THEME_LIST.some((th) => th.id === data.settings.theme)) {
+          state.settings.theme = data.settings.theme;
+        }
+      }
 
       // Import profile if present and current one is empty (sanitize fields)
       if (data.profile && !state.profile.name) {
