@@ -850,7 +850,7 @@ function validateProfile(profile) {
 function calculateBMI(weightKg, heightCm) {
   const weight = Number(weightKg);
   const height = Number(heightCm);
-  if (!Number.isFinite(weight) || !Number.isFinite(height) || height <= 0) {
+  if (!Number.isFinite(weight) || !Number.isFinite(height) || weight <= 0 || height <= 0) {
     return null;
   }
   const bmi = weight / (height / 100) ** 2;
@@ -1060,7 +1060,7 @@ function calcGoalPrediction(records, goalWeight) {
   if (recent.length < 2) return { achieved: false, insufficient: true };
   const firstRecent = recent[0].wt;
   const lastRecent = recent[recent.length - 1].wt;
-  const daySpan = Math.max(1, (new Date(recent[recent.length - 1].dt) - new Date(recent[0].dt)) / 864e5);
+  const daySpan = Math.max(1, (/* @__PURE__ */ new Date(recent[recent.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(recent[0].dt + "T00:00:00")) / 864e5);
   const dailyChange = (lastRecent - firstRecent) / daySpan;
   if (dailyChange >= 0) return { achieved: false, noTrend: true };
   const remaining = latestWeight - goalWeight;
@@ -1088,7 +1088,7 @@ function calcWeeklyRate(records) {
   if (records.length < 2) return null;
   const first = records[0];
   const last = records[records.length - 1];
-  const daySpan = (new Date(last.dt) - new Date(first.dt)) / 864e5;
+  const daySpan = (/* @__PURE__ */ new Date(last.dt + "T00:00:00") - /* @__PURE__ */ new Date(first.dt + "T00:00:00")) / 864e5;
   if (daySpan < 7) return null;
   const totalChange = last.wt - first.wt;
   const weeklyRate = Math.round(totalChange / daySpan * 7 * 100) / 100;
@@ -1164,11 +1164,12 @@ function calcMonthlyStats(records) {
   for (const r of records) {
     const key = r.dt.slice(0, 7);
     if (!byMonth[key]) byMonth[key] = [];
-    byMonth[key].push(r.wt);
+    byMonth[key].push(r);
   }
-  const months2 = Object.keys(byMonth).sort().reverse();
+  const months2 = Object.keys(byMonth).sort((a, b) => b.localeCompare(a));
   return months2.map((key) => {
-    const weights = byMonth[key];
+    const sorted = byMonth[key].sort((a, b) => a.dt.localeCompare(b.dt));
+    const weights = sorted.map((r) => r.wt);
     const avg = Math.round(weights.reduce((a, b) => a + b, 0) / weights.length * 10) / 10;
     const min = Math.round(Math.min(...weights) * 10) / 10;
     const max = Math.round(Math.max(...weights) * 10) / 10;
@@ -1382,7 +1383,7 @@ function calcDaysSinceLastRecord(records) {
 function calcLongestStreak(records) {
   if (!records.length) return 0;
   const dates = new Set(records.map((r) => r.dt));
-  const sorted = [...dates].sort();
+  const sorted = [...dates].sort((a, b) => a.localeCompare(b));
   let longest = 1;
   let current = 1;
   for (let i = 1; i < sorted.length; i++) {
@@ -1557,10 +1558,1387 @@ function calcConsistencyStreak(records, tolerance = 0.5) {
   }
   return { streak, best, tolerance, latest };
 }
+function calcDataHealth(records) {
+  if (records.length < 2) return null;
+  const issues = [];
+  for (let i = 1; i < records.length; i++) {
+    const prev = /* @__PURE__ */ new Date(records[i - 1].dt + "T00:00:00");
+    const curr = /* @__PURE__ */ new Date(records[i].dt + "T00:00:00");
+    const gap = Math.round((curr - prev) / (1e3 * 60 * 60 * 24));
+    if (gap > 7) {
+      issues.push({ type: "gap", days: gap, from: records[i - 1].dt, to: records[i].dt });
+    }
+  }
+  for (let i = 1; i < records.length - 1; i++) {
+    const avg = (records[i - 1].wt + records[i + 1].wt) / 2;
+    const diff = Math.abs(records[i].wt - avg);
+    if (diff > 3) {
+      issues.push({ type: "outlier", date: records[i].dt, weight: records[i].wt, expected: Math.round(avg * 10) / 10 });
+    }
+  }
+  const missingBMI = records.filter((r) => r.bmi == null).length;
+  if (missingBMI > 0 && missingBMI === records.length) {
+    issues.push({ type: "noBMI", count: missingBMI });
+  }
+  const score = Math.max(0, 100 - issues.length * 15);
+  return { score, issues, total: records.length };
+}
+function calcWeekdayVsWeekend(records) {
+  if (records.length < 5) return null;
+  const weekday = [];
+  const weekend = [];
+  for (const r of records) {
+    const day = (/* @__PURE__ */ new Date(r.dt + "T00:00:00")).getDay();
+    if (day === 0 || day === 6) weekend.push(r.wt);
+    else weekday.push(r.wt);
+  }
+  if (!weekday.length || !weekend.length) return null;
+  const wdAvg = Math.round(weekday.reduce((s, w) => s + w, 0) / weekday.length * 10) / 10;
+  const weAvg = Math.round(weekend.reduce((s, w) => s + w, 0) / weekend.length * 10) / 10;
+  const diff = Math.round((weAvg - wdAvg) * 10) / 10;
+  return {
+    weekdayAvg: wdAvg,
+    weekendAvg: weAvg,
+    diff,
+    weekdayCount: weekday.length,
+    weekendCount: weekend.length,
+    heavier: diff > 0.2 ? "weekend" : diff < -0.2 ? "weekday" : "similar"
+  };
+}
 function csvEscape(val) {
   const str = String(val ?? "");
   if (/[,"\r\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
   return str;
+}
+function calcWeightRangePosition(records) {
+  if (records.length < 3) return null;
+  const latest = records[records.length - 1].wt;
+  const weights = records.map((r) => r.wt);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  const range = max - min;
+  if (range === 0) return { position: 50, latest, min, max, zone: "middle" };
+  const position = Math.round((latest - min) / range * 100);
+  const zone = position <= 25 ? "low" : position >= 75 ? "high" : "middle";
+  return { position, latest, min, max, zone };
+}
+function calcTagImpact(records) {
+  if (records.length < 5) return null;
+  const tagData = {};
+  for (let i = 1; i < records.length; i++) {
+    const note = records[i].note || "";
+    const diff = Math.round((records[i].wt - records[i - 1].wt) * 10) / 10;
+    for (const tag of NOTE_TAGS) {
+      if (note.includes(`#${tag}`)) {
+        if (!tagData[tag]) tagData[tag] = { diffs: [], count: 0 };
+        tagData[tag].diffs.push(diff);
+        tagData[tag].count++;
+      }
+    }
+  }
+  const results = [];
+  for (const [tag, data] of Object.entries(tagData)) {
+    if (data.count < 2) continue;
+    const avg = Math.round(data.diffs.reduce((s, d) => s + d, 0) / data.count * 100) / 100;
+    results.push({ tag, avgChange: avg, count: data.count });
+  }
+  if (!results.length) return null;
+  results.sort((a, b) => a.avgChange - b.avgChange);
+  return results;
+}
+function calcBestPeriod(records) {
+  if (records.length < 7) return null;
+  const result = {};
+  for (const window2 of [7, 30]) {
+    if (records.length < window2) continue;
+    let bestChange = Infinity;
+    let bestStart = 0;
+    for (let i = 0; i <= records.length - window2; i++) {
+      const change = records[i + window2 - 1].wt - records[i].wt;
+      if (change < bestChange) {
+        bestChange = change;
+        bestStart = i;
+      }
+    }
+    if (bestChange === Infinity) continue;
+    result[window2] = {
+      change: Math.round(bestChange * 10) / 10,
+      from: records[bestStart].dt,
+      to: records[bestStart + window2 - 1].dt,
+      startWeight: records[bestStart].wt,
+      endWeight: records[bestStart + window2 - 1].wt
+    };
+  }
+  return Object.keys(result).length ? result : null;
+}
+function calcWeeklyFrequency(records, weeks = 8) {
+  if (!records.length) return null;
+  const today = /* @__PURE__ */ new Date();
+  today.setHours(0, 0, 0, 0);
+  const dayOfWeek = today.getDay();
+  const currentWeekStart = new Date(today);
+  currentWeekStart.setDate(today.getDate() - dayOfWeek);
+  const buckets = [];
+  for (let w = weeks - 1; w >= 0; w--) {
+    const weekStart = new Date(currentWeekStart);
+    weekStart.setDate(currentWeekStart.getDate() - w * 7);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    const startStr = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, "0")}-${String(weekStart.getDate()).padStart(2, "0")}`;
+    const endStr = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth() + 1).padStart(2, "0")}-${String(weekEnd.getDate()).padStart(2, "0")}`;
+    const count = records.filter((r) => r.dt >= startStr && r.dt <= endStr).length;
+    buckets.push({ startStr, count });
+  }
+  const maxCount = Math.max(...buckets.map((b) => b.count), 1);
+  const totalRecords = buckets.reduce((s, b) => s + b.count, 0);
+  const avgPerWeek = Math.round(totalRecords / weeks * 10) / 10;
+  return { buckets, maxCount, avgPerWeek, weeks };
+}
+function calcWeightVelocity(records) {
+  if (records.length < 3) return null;
+  const calc = (days2) => {
+    const cutoff = /* @__PURE__ */ new Date();
+    cutoff.setDate(cutoff.getDate() - days2);
+    const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+    const recent = records.filter((r) => r.dt >= cutoffStr);
+    if (recent.length < 2) return null;
+    const first = recent[0];
+    const last = recent[recent.length - 1];
+    const daySpan = (/* @__PURE__ */ new Date(last.dt + "T00:00:00") - /* @__PURE__ */ new Date(first.dt + "T00:00:00")) / 864e5;
+    if (daySpan < 1) return null;
+    const dailyRate = (last.wt - first.wt) / daySpan;
+    return {
+      dailyRate: Math.round(dailyRate * 100) / 100,
+      monthlyProjection: Math.round(dailyRate * 30 * 10) / 10,
+      change: Math.round((last.wt - first.wt) * 10) / 10,
+      days: Math.round(daySpan)
+    };
+  };
+  const week = calc(7);
+  const month = calc(30);
+  if (!week && !month) return null;
+  return { week, month };
+}
+function calcWeightVariance(records) {
+  if (records.length < 5) return null;
+  const last14 = records.slice(-14);
+  const weights = last14.map((r) => r.wt);
+  const avg = weights.reduce((s, w) => s + w, 0) / weights.length;
+  if (avg === 0) return null;
+  const variance = weights.reduce((s, w) => s + (w - avg) ** 2, 0) / weights.length;
+  const stdDev = Math.sqrt(variance);
+  const cv = stdDev / avg * 100;
+  const maxSwing = Math.round((Math.max(...weights) - Math.min(...weights)) * 10) / 10;
+  const diffs = [];
+  for (let i = 1; i < weights.length; i++) {
+    diffs.push(Math.abs(weights[i] - weights[i - 1]));
+  }
+  const avgDailySwing = diffs.length ? Math.round(diffs.reduce((s, d) => s + d, 0) / diffs.length * 100) / 100 : 0;
+  const level = cv < 0.5 ? "veryLow" : cv < 1 ? "low" : cv < 2 ? "moderate" : "high";
+  return {
+    cv: Math.round(cv * 100) / 100,
+    stdDev: Math.round(stdDev * 100) / 100,
+    avg: Math.round(avg * 10) / 10,
+    maxSwing,
+    avgDailySwing,
+    count: weights.length,
+    level
+  };
+}
+function calcWeightPlateau(records) {
+  if (records.length < 14) return null;
+  const recent = records.slice(-14);
+  const weights = recent.map((r) => r.wt);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  const range = Math.round((max - min) * 10) / 10;
+  const avg = Math.round(weights.reduce((s, w) => s + w, 0) / weights.length * 10) / 10;
+  const first = recent[0];
+  const last = recent[recent.length - 1];
+  const daySpan = Math.max(1, (/* @__PURE__ */ new Date(last.dt + "T00:00:00") - /* @__PURE__ */ new Date(first.dt + "T00:00:00")) / 864e5);
+  const recentChange = Math.abs(last.wt - first.wt);
+  let previousRate = null;
+  if (records.length >= 28) {
+    const prev = records.slice(-28, -14);
+    const prevFirst = prev[0];
+    const prevLast = prev[prev.length - 1];
+    const prevDays = Math.max(1, (/* @__PURE__ */ new Date(prevLast.dt + "T00:00:00") - /* @__PURE__ */ new Date(prevFirst.dt + "T00:00:00")) / 864e5);
+    previousRate = Math.round((prevLast.wt - prevFirst.wt) / prevDays * 100) / 100;
+  }
+  const isPlateau = range <= 1 && recentChange <= 0.5;
+  return {
+    isPlateau,
+    days: Math.round(daySpan),
+    range,
+    avg,
+    recentChange: Math.round(recentChange * 10) / 10,
+    previousRate
+  };
+}
+function calcRecordGaps(records) {
+  if (records.length < 2) return null;
+  const gaps = [];
+  for (let i = 1; i < records.length; i++) {
+    const prev = /* @__PURE__ */ new Date(records[i - 1].dt + "T00:00:00");
+    const curr = /* @__PURE__ */ new Date(records[i].dt + "T00:00:00");
+    const days2 = Math.round((curr - prev) / 864e5);
+    if (days2 > 1) {
+      gaps.push({ from: records[i - 1].dt, to: records[i].dt, days: days2 });
+    }
+  }
+  gaps.sort((a, b) => b.days - a.days);
+  const totalDays = Math.max(1, (/* @__PURE__ */ new Date(records[records.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(records[0].dt + "T00:00:00")) / 864e5);
+  const coverage = Math.round(records.length / (totalDays + 1) * 100);
+  return {
+    gaps: gaps.slice(0, 5),
+    totalGaps: gaps.length,
+    longestGap: gaps.length ? gaps[0].days : 0,
+    coverage,
+    totalDays: Math.round(totalDays),
+    recordCount: records.length
+  };
+}
+function calcCalorieEstimate(records) {
+  if (records.length < 3) return null;
+  const KCAL_PER_KG = 7700;
+  const calc = (days2) => {
+    const cutoff = /* @__PURE__ */ new Date();
+    cutoff.setDate(cutoff.getDate() - days2);
+    const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+    const recent = records.filter((r) => r.dt >= cutoffStr);
+    if (recent.length < 2) return null;
+    const first = recent[0];
+    const last = recent[recent.length - 1];
+    const daySpan = (/* @__PURE__ */ new Date(last.dt + "T00:00:00") - /* @__PURE__ */ new Date(first.dt + "T00:00:00")) / 864e5;
+    if (daySpan < 1) return null;
+    const weightChange = last.wt - first.wt;
+    const totalKcal = Math.round(weightChange * KCAL_PER_KG);
+    const dailyKcal = Math.round(totalKcal / daySpan);
+    return { weightChange: Math.round(weightChange * 10) / 10, totalKcal, dailyKcal, days: Math.round(daySpan) };
+  };
+  const week = calc(7);
+  const month = calc(30);
+  if (!week && !month) return null;
+  return { week, month };
+}
+function calcMomentumScore(records, goalWeight = null) {
+  if (records.length < 7) return null;
+  let score = 50;
+  const factors = [];
+  const recent7 = records.slice(-7);
+  const change7 = recent7[recent7.length - 1].wt - recent7[0].wt;
+  const isLossGoal = !Number.isFinite(goalWeight) || goalWeight < records[0].wt;
+  if (isLossGoal) {
+    if (change7 < -0.3) {
+      score += 20;
+      factors.push("trendGood");
+    } else if (change7 < 0) {
+      score += 10;
+      factors.push("trendOk");
+    } else if (change7 > 0.3) {
+      score -= 15;
+      factors.push("trendBad");
+    }
+  } else {
+    if (change7 > 0.3) {
+      score += 20;
+      factors.push("trendGood");
+    } else if (change7 > 0) {
+      score += 10;
+      factors.push("trendOk");
+    } else if (change7 < -0.3) {
+      score -= 15;
+      factors.push("trendBad");
+    }
+  }
+  const now = /* @__PURE__ */ new Date();
+  let freq = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (records.some((r) => r.dt === ds)) freq++;
+  }
+  if (freq >= 6) {
+    score += 15;
+    factors.push("consistencyHigh");
+  } else if (freq >= 4) {
+    score += 5;
+    factors.push("consistencyMed");
+  } else {
+    score -= 10;
+    factors.push("consistencyLow");
+  }
+  if (records.length >= 5) {
+    const last5 = records.slice(-5).map((r) => r.wt);
+    const avg5 = last5.reduce((s, w) => s + w, 0) / last5.length;
+    const maxDev = Math.max(...last5.map((w) => Math.abs(w - avg5)));
+    if (maxDev < 0.5) {
+      score += 10;
+      factors.push("stable");
+    } else if (maxDev > 2) {
+      score -= 10;
+      factors.push("volatile");
+    }
+  }
+  if (Number.isFinite(goalWeight)) {
+    const latest = records[records.length - 1].wt;
+    if (Math.abs(latest - goalWeight) < 1) {
+      score += 5;
+      factors.push("nearGoal");
+    }
+  }
+  score = Math.max(0, Math.min(100, score));
+  const level = score >= 75 ? "great" : score >= 50 ? "good" : score >= 25 ? "fair" : "low";
+  return { score, level, factors };
+}
+function calcNextMilestones(records, heightCm = null) {
+  if (!records.length) return null;
+  const latest = records[records.length - 1].wt;
+  const milestones = [];
+  const nextRoundDown = Math.floor(latest);
+  if (nextRoundDown >= WEIGHT_RANGE.min && nextRoundDown < latest) {
+    milestones.push({
+      type: "roundDown",
+      target: nextRoundDown,
+      remaining: Math.round((latest - nextRoundDown) * 10) / 10
+    });
+  }
+  const next5Down = Math.floor(latest / 5) * 5;
+  if (next5Down >= WEIGHT_RANGE.min && next5Down < latest && next5Down !== nextRoundDown) {
+    milestones.push({
+      type: "fiveDown",
+      target: next5Down,
+      remaining: Math.round((latest - next5Down) * 10) / 10
+    });
+  }
+  if (heightCm) {
+    const hm2 = (heightCm / 100) ** 2;
+    const currentBMI = latest / hm2;
+    const boundaries = [
+      { bmi: 25, label: "normalMax" },
+      { bmi: 18.5, label: "underMax" },
+      { bmi: 30, label: "overMax" }
+    ];
+    for (const b of boundaries) {
+      const targetWt = Math.round(b.bmi * hm2 * 10) / 10;
+      if (currentBMI > b.bmi && targetWt < latest) {
+        milestones.push({
+          type: "bmiZone",
+          target: targetWt,
+          remaining: Math.round((latest - targetWt) * 10) / 10,
+          bmiLabel: b.label,
+          bmiValue: b.bmi
+        });
+      }
+    }
+  }
+  milestones.sort((a, b) => a.remaining - b.remaining);
+  return milestones.length ? milestones.slice(0, 3) : null;
+}
+function calcSeasonality(records) {
+  if (records.length < 30) return null;
+  const monthData = Array.from({ length: 12 }, () => ({ sum: 0, count: 0 }));
+  for (const r of records) {
+    const month = parseInt(r.dt.slice(5, 7), 10) - 1;
+    monthData[month].sum += r.wt;
+    monthData[month].count++;
+  }
+  const avgs = monthData.map((m) => m.count > 0 ? Math.round(m.sum / m.count * 10) / 10 : null);
+  const validAvgs = avgs.filter((a) => a !== null);
+  if (validAvgs.length < 3) return null;
+  const overallAvg = Math.round(validAvgs.reduce((s, a) => s + a, 0) / validAvgs.length * 10) / 10;
+  const lightest = avgs.reduce((best, a, i) => a !== null && (best === null || a < avgs[best]) ? i : best, null);
+  const heaviest = avgs.reduce((best, a, i) => a !== null && (best === null || a > avgs[best]) ? i : best, null);
+  const seasonalRange = lightest !== null && heaviest !== null ? Math.round((avgs[heaviest] - avgs[lightest]) * 10) / 10 : 0;
+  return {
+    monthAvgs: avgs,
+    counts: monthData.map((m) => m.count),
+    overallAvg,
+    lightestMonth: lightest,
+    heaviestMonth: heaviest,
+    seasonalRange
+  };
+}
+function calcWeightDistribution(records, bucketSize = 1) {
+  if (records.length < 5) return null;
+  const weights = records.map((r) => r.wt);
+  const min = Math.floor(Math.min(...weights));
+  const max = Math.ceil(Math.max(...weights));
+  if (min === max) return null;
+  const buckets = [];
+  for (let start = min; start < max; start += bucketSize) {
+    const end = start + bucketSize;
+    const count = weights.filter((w) => w >= start && w < end).length;
+    buckets.push({ start, end, count });
+  }
+  const lastBucket = buckets[buckets.length - 1];
+  lastBucket.count += weights.filter((w) => w === max).length;
+  const maxCount = Math.max(...buckets.map((b) => b.count));
+  const latest = weights[weights.length - 1];
+  const latestBucketIdx = buckets.findIndex((b) => latest >= b.start && latest < b.end);
+  const latestBucket = latestBucketIdx >= 0 ? latestBucketIdx : buckets.length - 1;
+  const modeBucket = buckets.reduce((best, b, i) => b.count > buckets[best].count ? i : best, 0);
+  return {
+    buckets,
+    maxCount,
+    latestBucket,
+    modeBucket,
+    modeRange: `${buckets[modeBucket].start}-${buckets[modeBucket].end}`,
+    total: records.length
+  };
+}
+function calcDayOfWeekChange(records) {
+  if (records.length < 7) return null;
+  const sums = [0, 0, 0, 0, 0, 0, 0];
+  const counts = [0, 0, 0, 0, 0, 0, 0];
+  for (let i = 1; i < records.length; i++) {
+    const prev = /* @__PURE__ */ new Date(records[i - 1].dt + "T00:00:00");
+    const curr = /* @__PURE__ */ new Date(records[i].dt + "T00:00:00");
+    const gap = (curr - prev) / 864e5;
+    if (gap !== 1) continue;
+    const dow = curr.getDay();
+    const diff = records[i].wt - records[i - 1].wt;
+    sums[dow] += diff;
+    counts[dow]++;
+  }
+  const avgs = sums.map((s, i) => counts[i] > 0 ? Math.round(s / counts[i] * 100) / 100 : null);
+  const valid = avgs.filter((a) => a !== null);
+  if (valid.length < 3) return null;
+  const worstDay = avgs.reduce((best, a, i) => a !== null && (best === null || a > avgs[best]) ? i : best, null);
+  const bestDay = avgs.reduce((best, a, i) => a !== null && (best === null || a < avgs[best]) ? i : best, null);
+  return { avgs, counts, worstDay, bestDay };
+}
+function calcPersonalRecords(records) {
+  if (records.length < 3) return null;
+  const weights = records.map((r) => r.wt);
+  const allTimeLow = Math.min(...weights);
+  const allTimeLowDate = records.find((r) => r.wt === allTimeLow)?.dt ?? null;
+  let biggestDrop = 0;
+  let biggestDropDate = null;
+  for (let i = 1; i < records.length; i++) {
+    const drop = records[i - 1].wt - records[i].wt;
+    if (drop > biggestDrop) {
+      biggestDrop = drop;
+      biggestDropDate = records[i].dt;
+    }
+  }
+  biggestDrop = Math.round(biggestDrop * 10) / 10;
+  let best7 = Infinity;
+  let best7From = null;
+  if (records.length >= 7) {
+    for (let i = 0; i <= records.length - 7; i++) {
+      const change = records[i + 6].wt - records[i].wt;
+      if (change < best7) {
+        best7 = change;
+        best7From = records[i].dt;
+      }
+    }
+  }
+  best7 = best7 === Infinity ? null : Math.round(best7 * 10) / 10;
+  const totalChange = Math.round((weights[weights.length - 1] - weights[0]) * 10) / 10;
+  return {
+    allTimeLow,
+    allTimeLowDate,
+    biggestDrop,
+    biggestDropDate,
+    best7DayChange: best7,
+    best7DayFrom: best7From,
+    totalChange,
+    totalRecords: records.length,
+    firstDate: records[0].dt,
+    latestDate: records[records.length - 1].dt
+  };
+}
+function calcWeightRegression(records) {
+  if (records.length < 5) return null;
+  const startDate = /* @__PURE__ */ new Date(records[0].dt + "T00:00:00");
+  const points = records.map((r) => ({
+    x: (/* @__PURE__ */ new Date(r.dt + "T00:00:00") - startDate) / 864e5,
+    y: r.wt
+  }));
+  const n = points.length;
+  const sumX = points.reduce((s, p) => s + p.x, 0);
+  const sumY = points.reduce((s, p) => s + p.y, 0);
+  const sumXY = points.reduce((s, p) => s + p.x * p.y, 0);
+  const sumX2 = points.reduce((s, p) => s + p.x * p.x, 0);
+  const denom = n * sumX2 - sumX * sumX;
+  if (denom === 0) return null;
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  const meanY = sumY / n;
+  const ssTotal = points.reduce((s, p) => s + (p.y - meanY) ** 2, 0);
+  const ssResidual = points.reduce((s, p) => s + (p.y - (slope * p.x + intercept)) ** 2, 0);
+  const r2 = ssTotal > 0 ? Math.round((1 - ssResidual / ssTotal) * 1e3) / 1e3 : 0;
+  const totalDays = points[points.length - 1].x;
+  const weeklyRate = Math.round(slope * 7 * 100) / 100;
+  const direction = slope < -0.01 ? "losing" : slope > 0.01 ? "gaining" : "maintaining";
+  const fit = r2 >= 0.7 ? "strong" : r2 >= 0.3 ? "moderate" : "weak";
+  return {
+    slope: Math.round(slope * 1e3) / 1e3,
+    intercept: Math.round(intercept * 10) / 10,
+    r2,
+    weeklyRate,
+    direction,
+    fit,
+    totalDays: Math.round(totalDays)
+  };
+}
+function calcBMIHistory(records) {
+  const withBMI = records.filter((r) => r.bmi != null && Number.isFinite(r.bmi));
+  if (withBMI.length < 3) return null;
+  const bmis = withBMI.map((r) => r.bmi);
+  const first = bmis[0];
+  const latest = bmis[bmis.length - 1];
+  const min = Math.round(Math.min(...bmis) * 10) / 10;
+  const max = Math.round(Math.max(...bmis) * 10) / 10;
+  const change = Math.round((latest - first) * 10) / 10;
+  const avg = Math.round(bmis.reduce((s, b) => s + b, 0) / bmis.length * 10) / 10;
+  const zones = { under: 0, normal: 0, over: 0, obese: 0 };
+  for (const b of bmis) {
+    if (b < 18.5) zones.under++;
+    else if (b < 25) zones.normal++;
+    else if (b < 30) zones.over++;
+    else zones.obese++;
+  }
+  const total = bmis.length;
+  const zonePcts = {
+    under: Math.round(zones.under / total * 100),
+    normal: Math.round(zones.normal / total * 100),
+    over: Math.round(zones.over / total * 100),
+    obese: Math.round(zones.obese / total * 100)
+  };
+  const currentZone = latest < 18.5 ? "under" : latest < 25 ? "normal" : latest < 30 ? "over" : "obese";
+  const improving = change < 0 && first > 18.5;
+  return { first, latest, min, max, change, avg, zones: zonePcts, currentZone, improving, count: total };
+}
+function calcWeightHeatmap(records) {
+  if (records.length < 7) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const byDate = new Map(sorted.map((r) => [r.dt, r.wt]));
+  const today = /* @__PURE__ */ new Date();
+  const dayOfWeek = today.getDay();
+  const startOffset = dayOfWeek + 7 * 11;
+  const weeks = [];
+  let totalChanges = 0;
+  let changeCount = 0;
+  for (let w = 0; w < 12; w++) {
+    const week = [];
+    for (let d = 0; d < 7; d++) {
+      const daysBack = startOffset - (w * 7 + d);
+      const date = new Date(today);
+      date.setDate(date.getDate() - daysBack);
+      const ds = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      const wt = byDate.get(ds) ?? null;
+      const prevDate = new Date(date);
+      prevDate.setDate(prevDate.getDate() - 1);
+      const prevDs = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}-${String(prevDate.getDate()).padStart(2, "0")}`;
+      const prevWt = byDate.get(prevDs) ?? null;
+      let change = null;
+      if (wt != null && prevWt != null) {
+        change = Math.round((wt - prevWt) * 100) / 100;
+        totalChanges += Math.abs(change);
+        changeCount++;
+      }
+      week.push({ date: ds, weight: wt, change, isFuture: daysBack < 0 });
+    }
+    weeks.push(week);
+  }
+  const avgChange = changeCount > 0 ? totalChanges / changeCount : 0.3;
+  const threshold = Math.max(avgChange, 0.1);
+  for (const week of weeks) {
+    for (const day of week) {
+      if (day.isFuture || day.weight == null) {
+        day.level = 0;
+      } else if (day.change == null) {
+        day.level = 1;
+      } else {
+        const absChange = Math.abs(day.change);
+        if (absChange < threshold * 0.5) day.level = 1;
+        else if (absChange < threshold) day.level = 2;
+        else if (absChange < threshold * 2) day.level = 3;
+        else day.level = 4;
+        day.direction = day.change < 0 ? "loss" : day.change > 0 ? "gain" : "same";
+      }
+    }
+  }
+  return { weeks, threshold: Math.round(threshold * 100) / 100, daysWithData: changeCount };
+}
+function calcStreakRewards(records) {
+  if (records.length < 1) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const today = /* @__PURE__ */ new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const dateSet = new Set(sorted.map((r) => r.dt));
+  let streak = 0;
+  const d = new Date(today);
+  if (!dateSet.has(todayStr)) {
+    d.setDate(d.getDate() - 1);
+  }
+  while (true) {
+    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (dateSet.has(ds)) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  const milestones = [3, 7, 14, 21, 30, 60, 90, 120, 180, 365];
+  const earned = milestones.filter((m) => streak >= m);
+  const next = milestones.find((m) => streak < m) || null;
+  const nextRemaining = next ? next - streak : 0;
+  let level = "starter";
+  if (streak >= 365) level = "legend";
+  else if (streak >= 180) level = "master";
+  else if (streak >= 90) level = "expert";
+  else if (streak >= 30) level = "dedicated";
+  else if (streak >= 14) level = "committed";
+  else if (streak >= 7) level = "steady";
+  else if (streak >= 3) level = "beginner";
+  return { streak, level, earned, next, nextRemaining, totalRecords: records.length };
+}
+function calcWeightConfidence(records) {
+  if (records.length < 7) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-30);
+  if (recent.length < 7) return null;
+  const firstDate = /* @__PURE__ */ new Date(recent[0].dt + "T00:00:00");
+  const xs = recent.map((r) => (/* @__PURE__ */ new Date(r.dt + "T00:00:00") - firstDate) / 864e5);
+  const ys = recent.map((r) => r.wt);
+  const n = xs.length;
+  const sumX = xs.reduce((a, b) => a + b, 0);
+  const sumY = ys.reduce((a, b) => a + b, 0);
+  const sumXY = xs.reduce((a, x, i) => a + x * ys[i], 0);
+  const sumX2 = xs.reduce((a, x) => a + x * x, 0);
+  const denom = n * sumX2 - sumX * sumX;
+  if (denom === 0) return null;
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  const residuals = xs.map((x, i) => ys[i] - (intercept + slope * x));
+  const residualSq = residuals.reduce((a, r) => a + r * r, 0);
+  const stdDev = Math.sqrt(residualSq / (n - 2));
+  const latest = recent[recent.length - 1].wt;
+  const lastDay = xs[xs.length - 1];
+  const forecasts = [7, 14, 30].map((days2) => {
+    const futureX = lastDay + days2;
+    const predicted = intercept + slope * futureX;
+    const margin = stdDev * 1.96;
+    return {
+      days: days2,
+      predicted: Math.round(predicted * 10) / 10,
+      low: Math.round((predicted - margin) * 10) / 10,
+      high: Math.round((predicted + margin) * 10) / 10,
+      margin: Math.round(margin * 10) / 10
+    };
+  });
+  const ssTotal = ys.reduce((a, y) => a + (y - sumY / n) ** 2, 0);
+  const r2 = ssTotal > 0 ? 1 - residualSq / ssTotal : 0;
+  let confidence = "low";
+  if (r2 > 0.7 && n >= 14) confidence = "high";
+  else if (r2 > 0.4 && n >= 7) confidence = "medium";
+  return {
+    dailyRate: Math.round(slope * 100) / 100,
+    weeklyRate: Math.round(slope * 7 * 100) / 100,
+    stdDev: Math.round(stdDev * 100) / 100,
+    confidence,
+    r2: Math.round(r2 * 100) / 100,
+    forecasts,
+    latest,
+    dataPoints: n
+  };
+}
+function calcProgressSummary(records) {
+  if (records.length < 4) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const mid = Math.floor(sorted.length / 2);
+  const firstHalf = sorted.slice(0, mid);
+  const secondHalf = sorted.slice(mid);
+  const avg = (arr) => Math.round(arr.reduce((s, r) => s + r.wt, 0) / arr.length * 10) / 10;
+  const stdDev = (arr) => {
+    const mean = arr.reduce((s, r) => s + r.wt, 0) / arr.length;
+    return Math.round(Math.sqrt(arr.reduce((s, r) => s + (r.wt - mean) ** 2, 0) / arr.length) * 100) / 100;
+  };
+  const firstAvg = avg(firstHalf);
+  const secondAvg = avg(secondHalf);
+  const change = Math.round((secondAvg - firstAvg) * 10) / 10;
+  const firstStd = stdDev(firstHalf);
+  const secondStd = stdDev(secondHalf);
+  const moreStable = secondStd < firstStd;
+  const firstWt = sorted[0].wt;
+  const lastWt = sorted[sorted.length - 1].wt;
+  const totalChange = Math.round((lastWt - firstWt) * 10) / 10;
+  const totalDays = Math.max(1, Math.round((/* @__PURE__ */ new Date(sorted[sorted.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(sorted[0].dt + "T00:00:00")) / 864e5));
+  let trend = "stable";
+  if (change < -0.5) trend = "improving";
+  else if (change > 0.5) trend = "gaining";
+  return {
+    firstHalfAvg: firstAvg,
+    secondHalfAvg: secondAvg,
+    change,
+    trend,
+    moreStable,
+    firstStd,
+    secondStd,
+    totalChange,
+    totalDays,
+    firstDate: sorted[0].dt,
+    lastDate: sorted[sorted.length - 1].dt,
+    recordCount: sorted.length
+  };
+}
+function calcMilestoneTimeline(records) {
+  if (records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const events = [];
+  let allTimeLow = sorted[0].wt;
+  let prevBmiZone = null;
+  for (let i = 0; i < sorted.length; i++) {
+    const r = sorted[i];
+    const prev = i > 0 ? sorted[i - 1] : null;
+    if (r.wt < allTimeLow) {
+      allTimeLow = r.wt;
+      events.push({ type: "low", date: r.dt, weight: r.wt });
+    }
+    if (prev) {
+      const prevMark = Math.floor(prev.wt / 5) * 5;
+      const curMark = Math.floor(r.wt / 5) * 5;
+      if (curMark < prevMark) {
+        events.push({ type: "mark", date: r.dt, weight: r.wt, mark: prevMark });
+      }
+    }
+    if (r.bmi != null) {
+      const zone = r.bmi < 18.5 ? "under" : r.bmi < 25 ? "normal" : r.bmi < 30 ? "over" : "obese";
+      if (prevBmiZone && zone !== prevBmiZone) {
+        events.push({ type: "bmi", date: r.dt, weight: r.wt, from: prevBmiZone, to: zone });
+      }
+      prevBmiZone = zone;
+    }
+  }
+  const dedupLows = /* @__PURE__ */ new Map();
+  const filtered = [];
+  for (const e of events) {
+    if (e.type === "low") {
+      const month = e.date.slice(0, 7);
+      dedupLows.set(month, e);
+    } else {
+      filtered.push(e);
+    }
+  }
+  filtered.push(...dedupLows.values());
+  filtered.sort((a, b) => a.date.localeCompare(b.date));
+  return { events: filtered.slice(-10), total: filtered.length };
+}
+function calcVolatilityIndex(records) {
+  if (records.length < 5) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const changes = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const dayDiff = Math.round((/* @__PURE__ */ new Date(sorted[i].dt + "T00:00:00") - /* @__PURE__ */ new Date(sorted[i - 1].dt + "T00:00:00")) / 864e5);
+    if (dayDiff === 1) {
+      changes.push(Math.abs(sorted[i].wt - sorted[i - 1].wt));
+    }
+  }
+  if (changes.length < 3) return null;
+  const avg = (arr) => arr.reduce((s, v) => s + v, 0) / arr.length;
+  const overallAvg = Math.round(avg(changes) * 100) / 100;
+  const recentChanges = changes.slice(-7);
+  const recentAvg = Math.round(avg(recentChanges) * 100) / 100;
+  const maxSwing = Math.round(Math.max(...changes) * 100) / 100;
+  let level = "moderate";
+  if (overallAvg < 0.3) level = "low";
+  else if (overallAvg > 0.8) level = "high";
+  let trend = "stable";
+  if (recentAvg > overallAvg * 1.3) trend = "increasing";
+  else if (recentAvg < overallAvg * 0.7) trend = "decreasing";
+  return {
+    overall: overallAvg,
+    recent: recentAvg,
+    maxSwing,
+    level,
+    trend,
+    dataPoints: changes.length
+  };
+}
+function calcPeriodComparison(records) {
+  if (records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const today = /* @__PURE__ */ new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  function statsForRange(recs) {
+    if (recs.length === 0) return null;
+    const weights = recs.map((r) => r.wt);
+    const avg = Math.round(weights.reduce((s, w) => s + w, 0) / weights.length * 10) / 10;
+    const min = Math.round(Math.min(...weights) * 10) / 10;
+    const max = Math.round(Math.max(...weights) * 10) / 10;
+    return { avg, min, max, count: recs.length };
+  }
+  const dayOfWeek = today.getDay();
+  const weekStart = new Date(today);
+  weekStart.setDate(weekStart.getDate() - dayOfWeek);
+  const prevWeekStart = new Date(weekStart);
+  prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+  function dateStr(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  const weekStartStr = dateStr(weekStart);
+  const prevWeekStartStr = dateStr(prevWeekStart);
+  const thisWeek = sorted.filter((r) => r.dt >= weekStartStr && r.dt <= todayStr);
+  const prevWeek = sorted.filter((r) => r.dt >= prevWeekStartStr && r.dt < weekStartStr);
+  const monthStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
+  const prevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const prevMonthStart = dateStr(prevMonth);
+  const prevMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+  const prevMonthEndStr = dateStr(prevMonthEnd);
+  const thisMonth = sorted.filter((r) => r.dt >= monthStart && r.dt <= todayStr);
+  const lastMonth = sorted.filter((r) => r.dt >= prevMonthStart && r.dt <= prevMonthEndStr);
+  const weekly = {
+    current: statsForRange(thisWeek),
+    previous: statsForRange(prevWeek)
+  };
+  if (weekly.current && weekly.previous) {
+    weekly.avgDiff = Math.round((weekly.current.avg - weekly.previous.avg) * 10) / 10;
+  }
+  const monthly = {
+    current: statsForRange(thisMonth),
+    previous: statsForRange(lastMonth)
+  };
+  if (monthly.current && monthly.previous) {
+    monthly.avgDiff = Math.round((monthly.current.avg - monthly.previous.avg) * 10) / 10;
+  }
+  if (!weekly.current && !monthly.current) return null;
+  return { weekly, monthly };
+}
+function calcGoalCountdown(records, goalWeight) {
+  if (!goalWeight || records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1].wt;
+  const remaining = Math.round((latest - goalWeight) * 10) / 10;
+  const absRemaining = Math.abs(remaining);
+  const first = sorted[0].wt;
+  const isLossGoal = first > goalWeight;
+  if (absRemaining < 0.1 || isLossGoal && latest <= goalWeight || !isLossGoal && latest >= goalWeight) {
+    return { reached: true, latest, goal: goalWeight, remaining: 0, pct: 100 };
+  }
+  const totalToLose = first - goalWeight;
+  const lost = first - latest;
+  const pct = totalToLose !== 0 ? Math.max(0, Math.min(100, Math.round(lost / totalToLose * 100))) : 0;
+  const recent = sorted.slice(-14);
+  let etaDays = null;
+  if (recent.length >= 3) {
+    const daySpan = Math.max(1, Math.round((/* @__PURE__ */ new Date(recent[recent.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(recent[0].dt + "T00:00:00")) / 864e5));
+    const rate = (recent[recent.length - 1].wt - recent[0].wt) / daySpan;
+    if (rate < -0.01 && remaining > 0) {
+      etaDays = Math.ceil(remaining / Math.abs(rate));
+    } else if (rate > 0.01 && remaining < 0) {
+      etaDays = Math.ceil(absRemaining / rate);
+    }
+  }
+  return {
+    reached: false,
+    latest,
+    goal: goalWeight,
+    remaining,
+    absRemaining,
+    pct,
+    etaDays,
+    direction: remaining > 0 ? "lose" : "gain"
+  };
+}
+function calcBodyComposition(records) {
+  const withBf = records.filter((r) => r.bf != null && Number.isFinite(r.bf) && r.bf > 0);
+  if (withBf.length < 3) return null;
+  const sorted = [...withBf].sort((a, b) => a.dt.localeCompare(b.dt));
+  const first = sorted[0];
+  const latest = sorted[sorted.length - 1];
+  const bfChange = Math.round((latest.bf - first.bf) * 10) / 10;
+  const wtChange = Math.round((latest.wt - first.wt) * 10) / 10;
+  const firstFatMass = Math.round(first.wt * first.bf / 100 * 10) / 10;
+  const latestFatMass = Math.round(latest.wt * latest.bf / 100 * 10) / 10;
+  const firstLeanMass = Math.round((first.wt - firstFatMass) * 10) / 10;
+  const latestLeanMass = Math.round((latest.wt - latestFatMass) * 10) / 10;
+  const fatMassChange = Math.round((latestFatMass - firstFatMass) * 10) / 10;
+  const leanMassChange = Math.round((latestLeanMass - firstLeanMass) * 10) / 10;
+  let trend = "mixed";
+  if (fatMassChange < -0.3 && leanMassChange >= 0) trend = "fatLoss";
+  else if (fatMassChange >= 0 && leanMassChange > 0.3) trend = "muscleGain";
+  else if (fatMassChange < -0.3 && leanMassChange > 0.3) trend = "recomp";
+  else if (fatMassChange > 0.3 && leanMassChange < 0) trend = "decline";
+  const avgBf = Math.round(sorted.reduce((s, r) => s + r.bf, 0) / sorted.length * 10) / 10;
+  return {
+    firstBf: first.bf,
+    latestBf: latest.bf,
+    bfChange,
+    wtChange,
+    fatMassChange,
+    leanMassChange,
+    firstFatMass,
+    latestFatMass,
+    firstLeanMass,
+    latestLeanMass,
+    trend,
+    avgBf,
+    dataPoints: sorted.length
+  };
+}
+function generateWeightSummary(records, profile = {}) {
+  if (records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const first = sorted[0];
+  const latest = sorted[sorted.length - 1];
+  const weights = sorted.map((r) => r.wt);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  const avg = Math.round(weights.reduce((s, w) => s + w, 0) / weights.length * 10) / 10;
+  const totalChange = Math.round((latest.wt - first.wt) * 10) / 10;
+  const days2 = Math.max(1, Math.round((/* @__PURE__ */ new Date(latest.dt + "T00:00:00") - /* @__PURE__ */ new Date(first.dt + "T00:00:00")) / 864e5));
+  let bmiInfo = null;
+  if (profile.heightCm) {
+    const h = profile.heightCm / 100;
+    const latestBmi = Math.round(latest.wt / (h * h) * 10) / 10;
+    const zone = latestBmi < 18.5 ? "underweight" : latestBmi < 25 ? "normal" : latestBmi < 30 ? "overweight" : "obese";
+    bmiInfo = { bmi: latestBmi, zone };
+  }
+  return {
+    period: { from: first.dt, to: latest.dt, days: days2 },
+    weight: { first: first.wt, latest: latest.wt, min, max, avg, totalChange },
+    records: sorted.length,
+    bmi: bmiInfo
+  };
+}
+function getFrequentNotes(records, maxResults = 5) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const r of records) {
+    if (r.note && r.note.trim()) {
+      const note = r.note.trim();
+      counts.set(note, (counts.get(note) || 0) + 1);
+    }
+  }
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, maxResults);
+  return sorted.map(([text, count]) => ({ text, count }));
+}
+function detectDuplicates(records) {
+  if (records.length < 2) return { duplicates: [], suspicious: [] };
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const dateGroups = /* @__PURE__ */ new Map();
+  for (const r of sorted) {
+    if (!dateGroups.has(r.dt)) dateGroups.set(r.dt, []);
+    dateGroups.get(r.dt).push(r);
+  }
+  const duplicates = [];
+  for (const [date, recs] of dateGroups) {
+    if (recs.length > 1) {
+      duplicates.push({ date, count: recs.length, weights: recs.map((r) => r.wt) });
+    }
+  }
+  const suspicious = [];
+  let run = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].wt === sorted[i - 1].wt) {
+      run++;
+    } else {
+      if (run >= 3) {
+        suspicious.push({
+          weight: sorted[i - 1].wt,
+          from: sorted[i - run].dt,
+          to: sorted[i - 1].dt,
+          count: run
+        });
+      }
+      run = 1;
+    }
+  }
+  if (run >= 3) {
+    suspicious.push({
+      weight: sorted[sorted.length - 1].wt,
+      from: sorted[sorted.length - run].dt,
+      to: sorted[sorted.length - 1].dt,
+      count: run
+    });
+  }
+  return { duplicates, suspicious };
+}
+function validateWeightEntry(newWeight, records, threshold = 3) {
+  const warnings = [];
+  if (!Number.isFinite(newWeight) || records.length === 0) return warnings;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1];
+  const diff = Math.abs(newWeight - latest.wt);
+  if (diff >= threshold) {
+    warnings.push({
+      type: "largeDiff",
+      diff: Math.round(diff * 10) / 10,
+      previous: latest.wt,
+      date: latest.dt
+    });
+  }
+  const weights = sorted.map((r) => r.wt);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  if (newWeight < min - 2 || newWeight > max + 2) {
+    warnings.push({
+      type: "outsideRange",
+      min,
+      max
+    });
+  }
+  return warnings;
+}
+function calcWeeklyAverages(records, numWeeks = 8) {
+  if (records.length === 0) return [];
+  const now = /* @__PURE__ */ new Date();
+  const todayDay = now.getDay();
+  const currentWeekStart = new Date(now);
+  currentWeekStart.setDate(now.getDate() - (todayDay + 6) % 7);
+  currentWeekStart.setHours(0, 0, 0, 0);
+  const weeks = [];
+  for (let i = numWeeks - 1; i >= 0; i--) {
+    const start = new Date(currentWeekStart);
+    start.setDate(start.getDate() - i * 7);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    const startStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+    const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+    const inWeek = records.filter((r) => r.dt >= startStr && r.dt <= endStr);
+    if (inWeek.length === 0) {
+      weeks.push({ weekStart: startStr, weekEnd: endStr, avg: null, count: 0, min: null, max: null });
+    } else {
+      const weights = inWeek.map((r) => r.wt);
+      const sum = weights.reduce((s, w) => s + w, 0);
+      weeks.push({
+        weekStart: startStr,
+        weekEnd: endStr,
+        avg: Math.round(sum / weights.length * 10) / 10,
+        count: weights.length,
+        min: Math.round(Math.min(...weights) * 10) / 10,
+        max: Math.round(Math.max(...weights) * 10) / 10
+      });
+    }
+  }
+  return weeks;
+}
+function calcMonthlyRecordingMap(records, year, month) {
+  const y = year ?? (/* @__PURE__ */ new Date()).getFullYear();
+  const m = month ?? (/* @__PURE__ */ new Date()).getMonth();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const prefix = `${y}-${String(m + 1).padStart(2, "0")}`;
+  const dateMap = /* @__PURE__ */ new Map();
+  for (const r of records) {
+    if (r.dt.startsWith(prefix)) {
+      dateMap.set(r.dt, r.wt);
+    }
+  }
+  const days2 = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt = `${prefix}-${String(d).padStart(2, "0")}`;
+    const dow = new Date(y, m, d).getDay();
+    days2.push({
+      date: dt,
+      day: d,
+      dayOfWeek: dow,
+      recorded: dateMap.has(dt),
+      weight: dateMap.get(dt) ?? null
+    });
+  }
+  const recordedCount = dateMap.size;
+  return {
+    year: y,
+    month: m,
+    monthName: `${y}-${String(m + 1).padStart(2, "0")}`,
+    days: days2,
+    recordedCount,
+    totalDays: daysInMonth,
+    rate: daysInMonth > 0 ? Math.round(recordedCount / daysInMonth * 100) : 0
+  };
+}
+function calcWeightTrendIndicator(records) {
+  if (records.length < 4) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent3 = sorted.slice(-3);
+  const prev3 = sorted.slice(-6, -3);
+  if (prev3.length === 0) return null;
+  const recentAvg = recent3.reduce((s, r) => s + r.wt, 0) / recent3.length;
+  const prevAvg = prev3.reduce((s, r) => s + r.wt, 0) / prev3.length;
+  const change = Math.round((recentAvg - prevAvg) * 10) / 10;
+  let direction = "stable";
+  if (change <= -0.2) direction = "down";
+  else if (change >= 0.2) direction = "up";
+  return {
+    direction,
+    change,
+    recentAvg: Math.round(recentAvg * 10) / 10,
+    previousAvg: Math.round(prevAvg * 10) / 10,
+    dataPoints: sorted.length
+  };
+}
+function calcNoteTagStats(records) {
+  if (records.length < 2) return { tags: [], totalTagged: 0, totalRecords: records.length };
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const tagCounts = {};
+  const tagChanges = {};
+  for (let i = 0; i < sorted.length; i++) {
+    const r = sorted[i];
+    if (!r.note) continue;
+    const tags2 = (r.note.match(/#[\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF66-\uFF9F]+/g) || []).map((s) => s.slice(1));
+    const prev = i > 0 ? sorted[i - 1] : null;
+    const change = prev ? r.wt - prev.wt : 0;
+    for (const tag of tags2) {
+      tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+      if (!tagChanges[tag]) tagChanges[tag] = [];
+      if (prev) tagChanges[tag].push(change);
+    }
+  }
+  const totalTagged = Object.values(tagCounts).reduce((s, c) => s + c, 0);
+  const tags = Object.entries(tagCounts).map(([tag, count]) => {
+    const changes = tagChanges[tag] || [];
+    const avgChange = changes.length > 0 ? Math.round(changes.reduce((s, c) => s + c, 0) / changes.length * 10) / 10 : 0;
+    return {
+      tag,
+      count,
+      pct: records.length > 0 ? Math.round(count / records.length * 100) : 0,
+      avgChange
+    };
+  }).sort((a, b) => b.count - a.count);
+  return { tags, totalTagged, totalRecords: records.length };
+}
+function calcIdealWeightRange(heightCm, currentWeight) {
+  if (!heightCm || heightCm <= 0 || !currentWeight || currentWeight <= 0) return null;
+  const heightM = heightCm / 100;
+  const h2 = heightM * heightM;
+  const minWeight = Math.round(18.5 * h2 * 10) / 10;
+  const maxWeight = Math.round(24.9 * h2 * 10) / 10;
+  const midWeight = Math.round(22 * h2 * 10) / 10;
+  const currentBMI = Math.round(currentWeight / h2 * 10) / 10;
+  const bmiRange = 30 - 15;
+  const position = Math.max(0, Math.min(100, Math.round((currentBMI - 15) / bmiRange * 100)));
+  let zone = "normal";
+  if (currentBMI < 18.5) zone = "underweight";
+  else if (currentBMI >= 25 && currentBMI < 30) zone = "overweight";
+  else if (currentBMI >= 30) zone = "obese";
+  return {
+    minWeight,
+    maxWeight,
+    midWeight,
+    currentBMI,
+    currentWeight: Math.round(currentWeight * 10) / 10,
+    position,
+    zone,
+    toMin: Math.round((currentWeight - minWeight) * 10) / 10,
+    toMax: Math.round((maxWeight - currentWeight) * 10) / 10
+  };
+}
+function calcDataFreshness(records) {
+  if (records.length === 0) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const last = sorted[sorted.length - 1];
+  const now = /* @__PURE__ */ new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const lastDate = /* @__PURE__ */ new Date(last.dt + "T00:00:00");
+  const todayDate = /* @__PURE__ */ new Date(today + "T00:00:00");
+  const daysSince = Math.round((todayDate - lastDate) / 864e5);
+  let level = "today";
+  if (daysSince >= 7) level = "veryStale";
+  else if (daysSince >= 3) level = "stale";
+  else if (daysSince >= 1) level = "recent";
+  return {
+    daysSince,
+    lastDate: last.dt,
+    lastWeight: last.wt,
+    level
+  };
+}
+function calcMultiPeriodRate(records) {
+  if (records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1];
+  const latestDate = /* @__PURE__ */ new Date(latest.dt + "T00:00:00");
+  const windows = [7, 30, 90];
+  const periods = windows.map((days2) => {
+    const cutoff = new Date(latestDate);
+    cutoff.setDate(cutoff.getDate() - days2);
+    const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+    let closest = null;
+    let closestDist = Infinity;
+    for (const r of sorted) {
+      const dist = Math.abs(/* @__PURE__ */ new Date(r.dt + "T00:00:00") - cutoff);
+      if (dist < closestDist && r.dt <= latest.dt) {
+        closestDist = dist;
+        closest = r;
+      }
+    }
+    if (!closest || closest.dt === latest.dt) {
+      return { days: days2, change: 0, weeklyRate: 0, hasData: false };
+    }
+    const actualDays = Math.max(1, Math.round((latestDate - /* @__PURE__ */ new Date(closest.dt + "T00:00:00")) / 864e5));
+    const change = Math.round((latest.wt - closest.wt) * 10) / 10;
+    const weeklyRate = Math.round(change / actualDays * 7 * 10) / 10;
+    return { days: days2, change, weeklyRate, hasData: true };
+  });
+  return { periods, latestWeight: latest.wt };
+}
+function calcRecordMilestone(recordCount) {
+  const milestones = [10, 25, 50, 100, 200, 365, 500, 750, 1e3];
+  let reached = null;
+  let next = null;
+  for (const m of milestones) {
+    if (recordCount === m) {
+      reached = m;
+    }
+    if (m > recordCount && next === null) {
+      next = m;
+    }
+  }
+  if (next === null) {
+    const nextBig = Math.ceil((recordCount + 1) / 500) * 500;
+    next = nextBig;
+    if (recordCount === nextBig - 500 && recordCount > 1e3) {
+      reached = recordCount;
+    }
+  }
+  return {
+    reached,
+    current: recordCount,
+    next,
+    remaining: next - recordCount
+  };
+}
+function generateAICoachReport(records, profile, goalWeight) {
+  if (records.length < 2) {
+    return {
+      score: 0,
+      grade: "new",
+      advices: ["start"],
+      weeklyReport: null,
+      prediction: null,
+      highlights: [],
+      risks: []
+    };
+  }
+  const advices = [];
+  const highlights = [];
+  const risks = [];
+  let score = 50;
+  const trend = calcWeightTrend(records);
+  const weeklyRate = calcWeeklyRate(records);
+  const hasGoal = Number.isFinite(goalWeight) && goalWeight > 0;
+  const latest = records[records.length - 1].wt;
+  const wantsLoss = hasGoal && goalWeight < latest;
+  const wantsGain = hasGoal && goalWeight > latest;
+  if (trend === "down" && wantsLoss) {
+    score += 15;
+    highlights.push("trendMatchGoal");
+  } else if (trend === "up" && wantsGain) {
+    score += 15;
+    highlights.push("trendMatchGoal");
+  } else if (trend === "down" && wantsGain) {
+    score -= 10;
+    risks.push("trendAgainstGoal");
+  } else if (trend === "up" && wantsLoss) {
+    score -= 10;
+    risks.push("trendAgainstGoal");
+  }
+  if (weeklyRate) {
+    const absRate = Math.abs(weeklyRate.weeklyRate);
+    if (absRate > 1) {
+      risks.push("rapidChange");
+      advices.push("slowDown");
+      score -= 10;
+    } else if (absRate >= 0.2 && absRate <= 0.7 && wantsLoss && weeklyRate.weeklyRate < 0) {
+      highlights.push("healthyPace");
+      score += 10;
+    }
+  }
+  const streak = calcStreak(records);
+  if (streak >= 14) {
+    score += 15;
+    highlights.push("greatStreak");
+  } else if (streak >= 7) {
+    score += 8;
+    highlights.push("goodStreak");
+  } else if (streak <= 2 && records.length > 7) {
+    risks.push("inconsistent");
+    advices.push("buildHabit");
+    score -= 5;
+  }
+  const stability = calcWeightStability(records);
+  if (stability) {
+    if (stability.score >= 70) {
+      highlights.push("stableWeight");
+      score += 5;
+    } else if (stability.score < 30) {
+      risks.push("highVolatility");
+      advices.push("stabilize");
+    }
+  }
+  const plateau = calcWeightPlateau(records);
+  if (plateau && plateau.isPlateau) {
+    risks.push("plateau");
+    advices.push("breakPlateau");
+    score -= 5;
+  }
+  if (hasGoal) {
+    const progress = calcGoalProgress(records, goalWeight);
+    if (progress && progress.percent >= 90) {
+      highlights.push("nearGoal");
+      score += 10;
+    }
+    const prediction2 = calcGoalPrediction(records, goalWeight);
+    if (prediction2 && !prediction2.achieved && !prediction2.insufficient && !prediction2.noTrend) {
+      if (prediction2.days <= 30) {
+        highlights.push("goalSoon");
+      }
+    }
+  }
+  if (profile.heightCm) {
+    const bmi = calculateBMI(latest, profile.heightCm);
+    if (bmi < 18.5) {
+      advices.push("underweight");
+    } else if (bmi >= 30) {
+      advices.push("obeseRange");
+    }
+  }
+  const dowAvg = calcDayOfWeekAvg(records);
+  if (dowAvg) {
+    const avgs = dowAvg.avgs.filter((a) => a !== null);
+    if (avgs.length > 0 && Math.max(...avgs) - Math.min(...avgs) > 1) {
+      advices.push("weekendPattern");
+    }
+  }
+  score = Math.max(0, Math.min(100, score));
+  const grade = score >= 85 ? "excellent" : score >= 70 ? "good" : score >= 50 ? "fair" : score >= 30 ? "needsWork" : "critical";
+  const weeklyReport = generateWeeklyReport(records, goalWeight, profile);
+  const prediction = hasGoal ? calcGoalPrediction(records, goalWeight) : null;
+  return {
+    score,
+    grade,
+    advices,
+    weeklyReport,
+    prediction,
+    highlights,
+    risks
+  };
+}
+function generateWeeklyReport(records, goalWeight, profile) {
+  if (records.length < 3) return null;
+  const now = /* @__PURE__ */ new Date();
+  const oneWeekAgo = new Date(now.getTime() - 7 * 864e5).toISOString().slice(0, 10);
+  const twoWeeksAgo = new Date(now.getTime() - 14 * 864e5).toISOString().slice(0, 10);
+  const thisWeek = records.filter((r) => r.dt >= oneWeekAgo);
+  const lastWeek = records.filter((r) => r.dt >= twoWeeksAgo && r.dt < oneWeekAgo);
+  if (thisWeek.length === 0) return null;
+  const thisAvg = thisWeek.reduce((s, r) => s + r.wt, 0) / thisWeek.length;
+  const lastAvg = lastWeek.length ? lastWeek.reduce((s, r) => s + r.wt, 0) / lastWeek.length : null;
+  const weekChange = lastAvg !== null ? thisAvg - lastAvg : null;
+  const thisMin = Math.min(...thisWeek.map((r) => r.wt));
+  const thisMax = Math.max(...thisWeek.map((r) => r.wt));
+  return {
+    avg: Math.round(thisAvg * 10) / 10,
+    change: weekChange !== null ? Math.round(weekChange * 10) / 10 : null,
+    min: thisMin,
+    max: thisMax,
+    entries: thisWeek.length,
+    range: Math.round((thisMax - thisMin) * 10) / 10
+  };
 }
 
 // src/i18n.js
@@ -1680,6 +3058,7 @@ var translations = {
     "status.photoReady": "\u5199\u771F\u3092\u8AAD\u307F\u8FBC\u307F\u307E\u3057\u305F\u3002\u5019\u88DC\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "status.photoNoDetection": "\u5199\u771F\u304B\u3089\u6570\u5024\u3092\u691C\u51FA\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u624B\u5165\u529B\u3067\u4F53\u91CD\u3092\u8A2D\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "status.voiceError": "\u97F3\u58F0\u5165\u529B\u3092\u958B\u59CB\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u30DE\u30A4\u30AF\u6A29\u9650\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
+    "status.voiceNoSpeech": "\u97F3\u58F0\u304C\u691C\u51FA\u3055\u308C\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u3082\u3046\u4E00\u5EA6\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002",
     "status.exported": "\u7AEF\u672B\u5185\u30C7\u30FC\u30BF\u3092\u66F8\u304D\u51FA\u3057\u307E\u3057\u305F\u3002",
     "status.reset": "\u7AEF\u672B\u5185\u30C7\u30FC\u30BF\u3092\u524A\u9664\u3057\u307E\u3057\u305F\u3002",
     "status.permissionDenied": "\u5FC5\u8981\u306A\u6A29\u9650\u304C\u8A31\u53EF\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002\u8A2D\u5B9A\u30A2\u30D7\u30EA\u304B\u3089\u5199\u771F\u307E\u305F\u306F\u30DE\u30A4\u30AF\u306E\u6A29\u9650\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
@@ -1715,6 +3094,7 @@ var translations = {
     "import.csv.success": "{count}\u4EF6\u306E\u30C7\u30FC\u30BF\u3092\u30A4\u30F3\u30DD\u30FC\u30C8\u3057\u307E\u3057\u305F",
     "import.csv.errors": "{count}\u4EF6\u306E\u30A8\u30E9\u30FC\u304C\u3042\u308A\u307E\u3057\u305F",
     "import.csv.empty": "\u30A4\u30F3\u30DD\u30FC\u30C8\u3067\u304D\u308B\u30C7\u30FC\u30BF\u304C\u3042\u308A\u307E\u305B\u3093\u3067\u3057\u305F",
+    "import.error": "\u30D5\u30A1\u30A4\u30EB\u306E\u8AAD\u307F\u8FBC\u307F\u306B\u5931\u6557\u3057\u307E\u3057\u305F",
     "import.csv.confirm": "{count}\u4EF6\u306E\u30C7\u30FC\u30BF\u3092\u30A4\u30F3\u30DD\u30FC\u30C8\u3057\u307E\u3059\u304B\uFF1F\u65E2\u5B58\u306E\u540C\u3058\u65E5\u4ED8\u306E\u30C7\u30FC\u30BF\u306F\u4E0A\u66F8\u304D\u3055\u308C\u307E\u3059\u3002",
     "export.header.date": "\u65E5\u4ED8",
     "export.header.weight": "\u4F53\u91CD (kg)",
@@ -1771,6 +3151,26 @@ var translations = {
     "consistency.current": "\u73FE\u5728: {days}\u56DE\u9023\u7D9A (\xB1{tol}kg\u4EE5\u5185)",
     "consistency.best": "\u904E\u53BB\u6700\u9577: {days}\u56DE\u9023\u7D9A",
     "consistency.great": "\u5B89\u5B9A\u3092\u7DAD\u6301\u3057\u3066\u3044\u307E\u3059\uFF01",
+    "entry.duplicate.warn": "\u26A0\uFE0F \u3053\u306E\u65E5\u4ED8\u306B\u306F\u65E2\u306B\u8A18\u9332\u304C\u3042\u308A\u307E\u3059:",
+    "entry.duplicate.overwrite": "\u4FDD\u5B58\u3059\u308B\u3068\u4E0A\u66F8\u304D\u3055\u308C\u307E\u3059",
+    "health.title": "\u30C7\u30FC\u30BF\u54C1\u8CEA",
+    "health.score": "\u30B9\u30B3\u30A2: {score}/100",
+    "health.perfect": "\u30C7\u30FC\u30BF\u54C1\u8CEA\u306F\u5B8C\u74A7\u3067\u3059\uFF01",
+    "health.gap": "{from} \u301C {to} \u306B{days}\u65E5\u9593\u306E\u7A7A\u767D\u304C\u3042\u308A\u307E\u3059",
+    "health.outlier": "{date}\u306E{weight}kg\u306F\u5916\u308C\u5024\u306E\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\uFF08\u524D\u5F8C\u5E73\u5747: {expected}kg\uFF09",
+    "health.noBMI": "BMI\u304C\u8A08\u7B97\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002\u8EAB\u9577\u3092\u8A2D\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044",
+    "wdwe.title": "\u5E73\u65E5 vs \u9031\u672B",
+    "wdwe.weekday": "\u5E73\u65E5\u5E73\u5747",
+    "wdwe.weekend": "\u9031\u672B\u5E73\u5747",
+    "wdwe.diff": "\u5DEE",
+    "wdwe.vs": "vs",
+    "wdwe.heavier.weekend": "\u9031\u672B\u304C\u3084\u3084\u91CD\u3044\u50BE\u5411",
+    "wdwe.heavier.weekday": "\u5E73\u65E5\u304C\u3084\u3084\u91CD\u3044\u50BE\u5411",
+    "wdwe.heavier.similar": "\u5E73\u65E5\u30FB\u9031\u672B\u3067\u307B\u307C\u540C\u3058",
+    "error.init": "\u521D\u671F\u5316\u30A8\u30E9\u30FC",
+    "error.render": "\u63CF\u753B\u30A8\u30E9\u30FC",
+    "error.reload": "\u518D\u8AAD\u307F\u8FBC\u307F",
+    "error.resetData": "\u30C7\u30FC\u30BF\u30EA\u30BB\u30C3\u30C8",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
     "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01\uFF08-{diff}kg\uFF09",
     "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
@@ -1828,6 +3228,7 @@ var translations = {
     "google.restore": "Google Drive\u304B\u3089\u5FA9\u5143",
     "google.backupDone": "Google Drive\u306B\u30D0\u30C3\u30AF\u30A2\u30C3\u30D7\u3057\u307E\u3057\u305F",
     "google.restoreDone": "Google Drive\u304B\u3089\u5FA9\u5143\u3057\u307E\u3057\u305F",
+    "google.restoreConfirm": "Google Drive\u304B\u3089\u30C7\u30FC\u30BF\u3092\u5FA9\u5143\u3057\u307E\u3059\u304B\uFF1F\u65E2\u5B58\u306E\u30C7\u30FC\u30BF\u3068\u30DE\u30FC\u30B8\u3055\u308C\u307E\u3059\u3002",
     "google.error": "Google\u9023\u643A\u3067\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F",
     "google.noData": "\u30D0\u30C3\u30AF\u30A2\u30C3\u30D7\u30C7\u30FC\u30BF\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093",
     "google.title": "Google\u9023\u643A",
@@ -1840,7 +3241,8 @@ var translations = {
     "import.button": "JSON\u3092\u8AAD\u307F\u8FBC\u3080",
     "import.success": "\u30C7\u30FC\u30BF\u3092\u8AAD\u307F\u8FBC\u307F\u307E\u3057\u305F",
     "import.invalid": "\u7121\u52B9\u306A\u30D5\u30A1\u30A4\u30EB\u5F62\u5F0F\u3067\u3059\u3002weight-rainbow\u306E\u30A8\u30AF\u30B9\u30DD\u30FC\u30C8\u30D5\u30A1\u30A4\u30EB\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044\u3002",
-    "import.confirm": "\u73FE\u5728\u306E\u30C7\u30FC\u30BF\u306B\u8AAD\u307F\u8FBC\u3093\u3060\u30C7\u30FC\u30BF\u3092\u7D71\u5408\u3057\u307E\u3059\u3002\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F",
+    "import.confirm": "{count}\u4EF6\u306E\u30C7\u30FC\u30BF\u3092\u73FE\u5728\u306E\u30C7\u30FC\u30BF\u306B\u7D71\u5408\u3057\u307E\u3059\u3002\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F",
+    "import.new": "\u4EF6\u304C\u65B0\u898F",
     "goal.prediction": "\u9054\u6210\u4E88\u6E2C\u65E5",
     "goal.predictionDays": "\u7D04{days}\u65E5\u5F8C",
     "goal.predictionAchieved": "\u9054\u6210\u6E08\u307F\uFF01",
@@ -1885,6 +3287,7 @@ var translations = {
     "calendar.fri": "\u91D1",
     "calendar.sat": "\u571F",
     "calendar.records": "{count}\u4EF6\u306E\u8A18\u9332",
+    "calendar.dayUnit": "\u65E5",
     "calendar.decreased": "\u6E1B\u5C11",
     "calendar.increased": "\u5897\u52A0",
     "achievement.records_1": "\u521D\u8A18\u9332",
@@ -1944,6 +3347,7 @@ var translations = {
     "note.tag.stress": "\u30B9\u30C8\u30EC\u30B9",
     "note.tag.sleep": "\u7761\u7720\u4E0D\u8DB3",
     "note.tag.alcohol": "\u98F2\u9152",
+    "records.noMatch": "\u8A72\u5F53\u3059\u308B\u8A18\u9332\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093",
     "records.dateRange": "\u671F\u9593\u3067\u7D5E\u308A\u8FBC\u307F",
     "records.from": "\u958B\u59CB\u65E5",
     "records.to": "\u7D42\u4E86\u65E5",
@@ -1957,7 +3361,323 @@ var translations = {
     "stability.stddev": "\u6A19\u6E96\u504F\u5DEE",
     "stability.high": "\u5B89\u5B9A",
     "stability.medium": "\u3084\u3084\u5909\u52D5",
-    "stability.low": "\u5909\u52D5\u5927"
+    "stability.low": "\u5909\u52D5\u5927",
+    "range.title": "\u4F53\u91CD\u30EC\u30F3\u30B8",
+    "range.position": "\u73FE\u5728\u306E\u4F4D\u7F6E: \u4E0B\u304B\u3089{pct}%",
+    "range.low": "\u904E\u53BB\u6700\u8EFD\u91CF\u306B\u8FD1\u3044",
+    "range.high": "\u904E\u53BB\u6700\u91CD\u91CF\u306B\u8FD1\u3044",
+    "range.middle": "\u4E2D\u9593\u306E\u7BC4\u56F2",
+    "range.min": "\u6700\u5C0F {weight}kg",
+    "range.max": "\u6700\u5927 {weight}kg",
+    "tagImpact.title": "\u30BF\u30B0\u5225 \u4F53\u91CD\u5909\u5316",
+    "tagImpact.avg": "\u5E73\u5747\u5909\u5316",
+    "tagImpact.count": "{count}\u56DE",
+    "tagImpact.hint": "\u5404\u30BF\u30B0\u304C\u3042\u308B\u65E5\u306E\u7FCC\u65E5\u306E\u4F53\u91CD\u5909\u5316",
+    "tagImpact.positive": "\u5897\u52A0\u50BE\u5411",
+    "tagImpact.negative": "\u6E1B\u5C11\u50BE\u5411",
+    "tagImpact.neutral": "\u5909\u5316\u306A\u3057",
+    "bestPeriod.title": "\u30D9\u30B9\u30C8\u8A18\u9332\u671F\u9593",
+    "bestPeriod.week": "\u6700\u826F\u306E7\u65E5\u9593",
+    "bestPeriod.month": "\u6700\u826F\u306E30\u65E5\u9593",
+    "bestPeriod.change": "{change}kg",
+    "bestPeriod.range": "{from} \u301C {to}",
+    "bestPeriod.weight": "{start}kg \u2192 {end}kg",
+    "freq.title": "\u9031\u5225 \u8A18\u9332\u983B\u5EA6",
+    "freq.avg": "\u5E73\u5747: \u9031{avg}\u56DE",
+    "freq.perfect": "\u6BCE\u65E5\u8A18\u9332\u9054\u6210\u306E\u9031\u3042\u308A\uFF01",
+    "freq.hint": "\u904E\u53BB{weeks}\u9031\u9593\u306E\u8A18\u9332\u6570",
+    "velocity.title": "\u4F53\u91CD\u5909\u5316\u30DA\u30FC\u30B9",
+    "velocity.week": "\u76F4\u8FD17\u65E5\u9593",
+    "velocity.month": "\u76F4\u8FD130\u65E5\u9593",
+    "velocity.daily": "{rate}kg/\u65E5",
+    "velocity.projection": "\u3053\u306E\u30DA\u30FC\u30B9\u3060\u3068\u6708{amount}kg",
+    "velocity.losing": "\u6E1B\u5C11\u4E2D",
+    "velocity.gaining": "\u5897\u52A0\u4E2D",
+    "velocity.stable": "\u5B89\u5B9A",
+    "variance.title": "\u4F53\u91CD\u5909\u52D5\u5206\u6790",
+    "variance.cv": "\u5909\u52D5\u4FC2\u6570: {cv}%",
+    "variance.swing": "\u6700\u5927\u5909\u52D5\u5E45: {swing}kg",
+    "variance.daily": "\u5E73\u5747\u65E5\u6B21\u5909\u52D5: {avg}kg",
+    "variance.veryLow": "\u975E\u5E38\u306B\u5B89\u5B9A",
+    "variance.low": "\u5B89\u5B9A",
+    "variance.moderate": "\u3084\u3084\u5909\u52D5\u3042\u308A",
+    "variance.high": "\u5909\u52D5\u5927",
+    "variance.hint": "\u76F4\u8FD1{count}\u56DE\u306E\u8A18\u9332\u304B\u3089\u7B97\u51FA",
+    "plateau.title": "\u30D7\u30E9\u30C8\u30FC\u691C\u51FA",
+    "plateau.detected": "\u4F53\u91CD\u505C\u6EDE\u671F\u306B\u5165\u3063\u3066\u3044\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059",
+    "plateau.notDetected": "\u73FE\u5728\u30D7\u30E9\u30C8\u30FC\u3067\u306F\u3042\u308A\u307E\u305B\u3093",
+    "plateau.days": "\u76F4\u8FD1{days}\u65E5\u9593",
+    "plateau.range": "\u5909\u52D5\u5E45: {range}kg",
+    "plateau.avg": "\u5E73\u5747: {avg}kg",
+    "plateau.change": "\u5909\u5316\u91CF: {change}kg",
+    "plateau.prevRate": "\u524D\u671F\u9593\u306E\u30DA\u30FC\u30B9: {rate}kg/\u65E5",
+    "plateau.hint": "\u4F53\u91CD\u304C\u9577\u671F\u9593\u307B\u307C\u5909\u5316\u3057\u306A\u3044\u72B6\u614B\u3092\u691C\u51FA\u3057\u307E\u3059",
+    "gaps.title": "\u8A18\u9332\u306E\u7A7A\u767D",
+    "gaps.longest": "\u6700\u9577\u7A7A\u767D: {days}\u65E5\u9593",
+    "gaps.coverage": "\u8A18\u9332\u30AB\u30D0\u30FC\u7387: {pct}%",
+    "gaps.total": "{count}\u56DE\u306E\u7A7A\u767D\u671F\u9593",
+    "gaps.period": "{from} \u301C {to} ({days}\u65E5\u9593)",
+    "gaps.perfect": "\u7A7A\u767D\u306A\u3057\uFF01\u6BCE\u65E5\u8A18\u9332\u3057\u3066\u3044\u307E\u3059",
+    "gaps.hint": "\u8A18\u9332\u306E\u7D99\u7D9A\u6027\u3092\u78BA\u8A8D\u3067\u304D\u307E\u3059",
+    "calorie.title": "\u63A8\u5B9A\u30AB\u30ED\u30EA\u30FC\u53CE\u652F",
+    "calorie.week": "\u76F4\u8FD17\u65E5\u9593",
+    "calorie.month": "\u76F4\u8FD130\u65E5\u9593",
+    "calorie.daily": "1\u65E5\u3042\u305F\u308A\u7D04{kcal}kcal",
+    "calorie.total": "\u5408\u8A08 \u7D04{kcal}kcal",
+    "calorie.surplus": "\u4F59\u5270",
+    "calorie.deficit": "\u4E0D\u8DB3",
+    "calorie.balanced": "\u5747\u8861",
+    "calorie.hint": "\u4F53\u91CD\u5909\u5316\u304B\u3089\u63A8\u5B9A\uFF081kg \u2248 7,700kcal\uFF09",
+    "analytics.showMore": "\u25BC \u8A73\u7D30\u5206\u6790\u3092\u8868\u793A",
+    "analytics.showLess": "\u25B2 \u8A73\u7D30\u5206\u6790\u3092\u975E\u8868\u793A",
+    "momentum.title": "\u30E2\u30E1\u30F3\u30BF\u30E0\u30B9\u30B3\u30A2",
+    "momentum.score": "{score}/100",
+    "momentum.great": "\u7D76\u597D\u8ABF\uFF01",
+    "momentum.good": "\u9806\u8ABF",
+    "momentum.fair": "\u3082\u3046\u5C11\u3057",
+    "momentum.low": "\u7ACB\u3066\u76F4\u3057\u304C\u5FC5\u8981",
+    "momentum.hint": "\u30C8\u30EC\u30F3\u30C9\u30FB\u8A18\u9332\u983B\u5EA6\u30FB\u5B89\u5B9A\u6027\u304B\u3089\u7B97\u51FA",
+    "milestone.next.title": "\u6B21\u306E\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3",
+    "milestone.next.roundDown": "{target}kg \u307E\u3067\u3042\u3068 {remaining}kg",
+    "milestone.next.fiveDown": "{target}kg \u307E\u3067\u3042\u3068 {remaining}kg",
+    "milestone.next.bmiZone": "BMI {bmi}\u4EE5\u4E0B\u307E\u3067\u3042\u3068 {remaining}kg\uFF08{target}kg\uFF09",
+    "milestone.next.hint": "\u76F4\u8FD1\u306E\u76EE\u6A19\u5730\u70B9",
+    "season.title": "\u5B63\u7BC0\u30D1\u30BF\u30FC\u30F3",
+    "season.lightest": "\u6700\u3082\u8EFD\u3044\u6708: {month}\u6708\uFF08\u5E73\u5747 {avg}kg\uFF09",
+    "season.heaviest": "\u6700\u3082\u91CD\u3044\u6708: {month}\u6708\uFF08\u5E73\u5747 {avg}kg\uFF09",
+    "season.range": "\u5B63\u7BC0\u5909\u52D5\u5E45: {range}kg",
+    "season.hint": "\u6708\u5225\u306E\u5E73\u5747\u4F53\u91CD\u30D1\u30BF\u30FC\u30F3",
+    "season.month.1": "1\u6708",
+    "season.month.2": "2\u6708",
+    "season.month.3": "3\u6708",
+    "season.month.4": "4\u6708",
+    "season.month.5": "5\u6708",
+    "season.month.6": "6\u6708",
+    "season.month.7": "7\u6708",
+    "season.month.8": "8\u6708",
+    "season.month.9": "9\u6708",
+    "season.month.10": "10\u6708",
+    "season.month.11": "11\u6708",
+    "season.month.12": "12\u6708",
+    "dist.title": "\u4F53\u91CD\u5206\u5E03",
+    "dist.mode": "\u6700\u983B\u5024\u5E2F: {range}kg ({count}\u56DE)",
+    "dist.current": "\u25BC \u73FE\u5728",
+    "dist.hint": "\u4F53\u91CD\u304C\u3069\u306E\u7BC4\u56F2\u306B\u96C6\u4E2D\u3057\u3066\u3044\u308B\u304B\u3092\u8868\u793A",
+    "dowChange.title": "\u66DC\u65E5\u5225 \u4F53\u91CD\u5909\u5316",
+    "dowChange.best": "\u6700\u3082\u6E1B\u308B\u66DC\u65E5: {day}\uFF08\u5E73\u5747 {avg}kg\uFF09",
+    "dowChange.worst": "\u6700\u3082\u5897\u3048\u308B\u66DC\u65E5: {day}\uFF08\u5E73\u5747 +{avg}kg\uFF09",
+    "dowChange.hint": "\u9023\u7D9A\u3057\u305F\u65E5\u306E\u4F53\u91CD\u5909\u5316\u3092\u66DC\u65E5\u5225\u306B\u96C6\u8A08",
+    "pr.title": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u8A18\u9332",
+    "pr.allTimeLow": "\u904E\u53BB\u6700\u8EFD\u91CF: {weight}kg\uFF08{date}\uFF09",
+    "pr.biggestDrop": "\u6700\u5927\u65E5\u6B21\u6E1B\u5C11: -{drop}kg\uFF08{date}\uFF09",
+    "pr.best7": "\u6700\u826F7\u65E5\u9593: {change}kg\uFF08{from}\u301C\uFF09",
+    "pr.totalChange": "\u521D\u56DE\u304B\u3089\u306E\u5909\u5316: {change}kg",
+    "pr.totalRecords": "\u7DCF\u8A18\u9332\u6570: {count}\u4EF6",
+    "pr.hint": "\u3042\u306A\u305F\u306E\u8A18\u9332\u306E\u30CF\u30A4\u30E9\u30A4\u30C8",
+    "regression.title": "\u4F53\u91CD\u30C8\u30EC\u30F3\u30C9\u56DE\u5E30\u5206\u6790",
+    "regression.rate": "\u9031\u9593\u5909\u5316\u7387: {rate}kg/\u9031",
+    "regression.r2": "\u6C7A\u5B9A\u4FC2\u6570 R\xB2: {r2}",
+    "regression.losing": "\u6E1B\u5C11\u50BE\u5411",
+    "regression.gaining": "\u5897\u52A0\u50BE\u5411",
+    "regression.maintaining": "\u7DAD\u6301\u50BE\u5411",
+    "regression.strong": "\u4E00\u8CAB\u3057\u305F\u50BE\u5411",
+    "regression.moderate": "\u3084\u3084\u5909\u52D5\u3042\u308A",
+    "regression.weak": "\u3070\u3089\u3064\u304D\u304C\u5927\u304D\u3044",
+    "regression.hint": "\u5168\u8A18\u9332\u3092\u901A\u3058\u305F\u4F53\u91CD\u306E\u4E00\u8CAB\u6027\u3092\u5206\u6790",
+    "bmiHist.title": "BMI \u63A8\u79FB\u30B5\u30DE\u30EA\u30FC",
+    "bmiHist.first": "\u521D\u56DE: {bmi}",
+    "bmiHist.latest": "\u6700\u65B0: {bmi}",
+    "bmiHist.change": "\u5909\u5316: {change}",
+    "bmiHist.range": "\u7BC4\u56F2: {min} \u301C {max}",
+    "bmiHist.avg": "\u5E73\u5747: {avg}",
+    "bmiHist.improving": "\u6539\u5584\u50BE\u5411\u3067\u3059\uFF01",
+    "bmiHist.hint": "BMI\u306E\u5909\u9077\u3092\u8FFD\u8DE1",
+    "heatmap.title": "\u4F53\u91CD\u5909\u52D5\u30D2\u30FC\u30C8\u30DE\u30C3\u30D7",
+    "heatmap.hint": "\u904E\u53BB12\u9031\u9593\u306E\u4F53\u91CD\u5909\u52D5\u30D1\u30BF\u30FC\u30F3\uFF08{days}\u65E5\u5206\u306E\u30C7\u30FC\u30BF\uFF09",
+    "heatmap.loss": "\u6E1B\u5C11",
+    "heatmap.gain": "\u5897\u52A0",
+    "heatmap.noData": "\u30C7\u30FC\u30BF\u306A\u3057",
+    "heatmap.low": "\u5C0F",
+    "heatmap.high": "\u5927",
+    "streakReward.title": "\u8A18\u9332\u30B9\u30C8\u30EA\u30FC\u30AF",
+    "streakReward.days": "{streak}\u65E5\u9023\u7D9A\u8A18\u9332\u4E2D",
+    "streakReward.next": "\u6B21\u306E\u76EE\u6A19: {next}\u65E5\uFF08\u3042\u3068{remaining}\u65E5\uFF09",
+    "streakReward.starter": "\u30B9\u30BF\u30FC\u30C8",
+    "streakReward.beginner": "\u30D3\u30AE\u30CA\u30FC",
+    "streakReward.steady": "\u5B89\u5B9A",
+    "streakReward.committed": "\u7D99\u7D9A",
+    "streakReward.dedicated": "\u732E\u8EAB",
+    "streakReward.expert": "\u30A8\u30AD\u30B9\u30D1\u30FC\u30C8",
+    "streakReward.master": "\u30DE\u30B9\u30BF\u30FC",
+    "streakReward.legend": "\u30EC\u30B8\u30A7\u30F3\u30C9",
+    "streakReward.hint": "\u6BCE\u65E5\u8A18\u9332\u3057\u3066\u6B21\u306E\u30D0\u30C3\u30B8\u3092\u76EE\u6307\u305D\u3046\uFF01",
+    "forecast.title": "\u4F53\u91CD\u4E88\u6E2C",
+    "forecast.days": "{days}\u65E5\u5F8C",
+    "forecast.predicted": "{wt}kg",
+    "forecast.range": "{low} ~ {high}kg",
+    "forecast.confidence": "\u4FE1\u983C\u5EA6",
+    "forecast.high": "\u9AD8\u3044",
+    "forecast.medium": "\u4E2D\u7A0B\u5EA6",
+    "forecast.low": "\u4F4E\u3044",
+    "forecast.rate": "\u9031{rate}kg",
+    "forecast.hint": "\u904E\u53BB{n}\u4EF6\u306E\u30C7\u30FC\u30BF\u306B\u57FA\u3065\u304F\u4E88\u6E2C\uFF0895%\u4FE1\u983C\u533A\u9593\uFF09",
+    "progress.title": "\u9032\u6357\u30B5\u30DE\u30EA\u30FC",
+    "progress.period": "{from} \u301C {to}\uFF08{days}\u65E5\u9593\u30FB{count}\u4EF6\uFF09",
+    "progress.firstHalf": "\u524D\u534A\u5E73\u5747",
+    "progress.secondHalf": "\u5F8C\u534A\u5E73\u5747",
+    "progress.change": "\u5909\u5316",
+    "progress.totalChange": "\u5408\u8A08\u5909\u52D5: {change}kg",
+    "progress.improving": "\u6539\u5584\u50BE\u5411\u3067\u3059\uFF01",
+    "progress.gaining": "\u5897\u52A0\u50BE\u5411\u3067\u3059",
+    "progress.stable": "\u5B89\u5B9A\u3057\u3066\u3044\u307E\u3059",
+    "progress.moreStable": "\u5B89\u5B9A\u5EA6\u304C\u5411\u4E0A\u3057\u3066\u3044\u307E\u3059",
+    "progress.lessStable": "\u5909\u52D5\u304C\u5927\u304D\u304F\u306A\u3063\u3066\u3044\u307E\u3059",
+    "timeline.title": "\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3",
+    "timeline.low": "\u6700\u4F4E\u4F53\u91CD\u66F4\u65B0: {wt}kg",
+    "timeline.mark": "{mark}kg\u3092\u7A81\u7834",
+    "timeline.bmi.normal": "BMI\u6A19\u6E96\u30BE\u30FC\u30F3\u306B\u5230\u9054",
+    "timeline.bmi.change": "BMI\u30BE\u30FC\u30F3\u5909\u66F4: {from} \u2192 {to}",
+    "timeline.hint": "\u76F4\u8FD1{count}\u4EF6\u306E\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3",
+    "volatility.title": "\u4F53\u91CD\u5909\u52D5\u6307\u6570",
+    "volatility.overall": "\u5168\u4F53: \xB1{val}kg/\u65E5",
+    "volatility.recent": "\u76F4\u8FD1: \xB1{val}kg/\u65E5",
+    "volatility.max": "\u6700\u5927\u5909\u52D5: {val}kg",
+    "volatility.low": "\u5B89\u5B9A",
+    "volatility.moderate": "\u666E\u901A",
+    "volatility.high": "\u5909\u52D5\u5927",
+    "volatility.increasing": "\u5909\u52D5\u304C\u5897\u52A0\u4E2D",
+    "volatility.decreasing": "\u5909\u52D5\u304C\u6E1B\u5C11\u4E2D",
+    "volatility.stable": "\u5909\u52D5\u306F\u5B89\u5B9A",
+    "volatility.hint": "\u65E5\u3005\u306E\u4F53\u91CD\u5909\u52D5\u306F\u81EA\u7136\u306A\u3053\u3068\u3067\u3059",
+    "compare.title": "\u671F\u9593\u6BD4\u8F03",
+    "compare.weekly": "\u9031\u9593\u6BD4\u8F03",
+    "compare.monthly": "\u6708\u9593\u6BD4\u8F03",
+    "compare.thisWeek": "\u4ECA\u9031",
+    "compare.lastWeek": "\u5148\u9031",
+    "compare.thisMonth": "\u4ECA\u6708",
+    "compare.lastMonth": "\u5148\u6708",
+    "compare.avg": "\u5E73\u5747: {val}kg",
+    "compare.diff": "\u5DEE: {val}kg",
+    "compare.noData": "\u30C7\u30FC\u30BF\u4E0D\u8DB3",
+    "compare.records": "{n}\u4EF6",
+    "countdown.title": "\u76EE\u6A19\u30AB\u30A6\u30F3\u30C8\u30C0\u30A6\u30F3",
+    "countdown.remaining": "\u3042\u3068{val}kg",
+    "countdown.reached": "\u76EE\u6A19\u9054\u6210\uFF01\u304A\u3081\u3067\u3068\u3046\u3054\u3056\u3044\u307E\u3059\uFF01",
+    "countdown.eta": "\u4E88\u60F3\u5230\u9054\u65E5: \u7D04{days}\u65E5\u5F8C",
+    "countdown.noEta": "\u30C8\u30EC\u30F3\u30C9\u30C7\u30FC\u30BF\u4E0D\u8DB3",
+    "countdown.pct": "\u9054\u6210\u7387: {pct}%",
+    "countdown.current": "\u73FE\u5728: {wt}kg \u2192 \u76EE\u6A19: {goal}kg",
+    "bodyComp.title": "\u4F53\u7D44\u6210\u5206\u6790",
+    "bodyComp.bf": "\u4F53\u8102\u80AA\u7387: {first}% \u2192 {latest}% ({change}%)",
+    "bodyComp.fatMass": "\u8102\u80AA\u91CF: {change}kg",
+    "bodyComp.leanMass": "\u9664\u8102\u80AA\u91CF: {change}kg",
+    "bodyComp.fatLoss": "\u8102\u80AA\u304C\u6E1B\u5C11\u4E2D",
+    "bodyComp.muscleGain": "\u7B4B\u8089\u304C\u5897\u52A0\u4E2D",
+    "bodyComp.recomp": "\u4F53\u7D44\u6210\u6539\u5584\u4E2D\uFF08\u30EA\u30B3\u30F3\u30D7\uFF09",
+    "bodyComp.decline": "\u6CE8\u610F\u304C\u5FC5\u8981\u3067\u3059",
+    "bodyComp.mixed": "\u5909\u52D5\u4E2D",
+    "bodyComp.hint": "{n}\u4EF6\u306E\u4F53\u8102\u80AA\u30C7\u30FC\u30BF\u306B\u57FA\u3065\u304F\u5206\u6790",
+    "share.title": "\u30B5\u30DE\u30EA\u30FC\u5171\u6709",
+    "share.btn": "\u30C6\u30AD\u30B9\u30C8\u3092\u30B3\u30D4\u30FC",
+    "share.copied": "\u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F\uFF01",
+    "share.period": "\u671F\u9593: {from} \u301C {to}\uFF08{days}\u65E5\u9593\uFF09",
+    "share.weight": "\u4F53\u91CD: {first}kg \u2192 {latest}kg\uFF08{change}kg\uFF09",
+    "share.range": "\u7BC4\u56F2: {min}kg \u301C {max}kg\uFF08\u5E73\u5747 {avg}kg\uFF09",
+    "share.bmi": "BMI: {bmi}\uFF08{zone}\uFF09",
+    "share.records": "\u8A18\u9332\u6570: {n}\u4EF6",
+    "share.footer": "\u2014 Rainbow\u4F53\u91CD\u7BA1\u7406\u3067\u8A18\u9332",
+    "quickNote.label": "\u3088\u304F\u4F7F\u3046\u30E1\u30E2",
+    "quickNote.none": "\u30E1\u30E2\u5C65\u6B74\u306A\u3057",
+    "dupes.title": "\u30C7\u30FC\u30BF\u54C1\u8CEA\u30C1\u30A7\u30C3\u30AF",
+    "dupes.duplicate": "{date}: {count}\u4EF6\u306E\u91CD\u8907\u8A18\u9332",
+    "dupes.suspicious": "{weight}kg\u304C{count}\u65E5\u9593\u9023\u7D9A\uFF08{from}\u301C{to}\uFF09",
+    "dupes.clean": "\u554F\u984C\u306A\u3057",
+    "validate.largeDiff": "\u524D\u56DE\uFF08{previous}kg\u3001{date}\uFF09\u304B\u3089{diff}kg\u4EE5\u4E0A\u306E\u5909\u52D5\u3067\u3059\u3002\u5165\u529B\u5024\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
+    "validate.outsideRange": "\u5165\u529B\u5024\u304C\u904E\u53BB\u306E\u8A18\u9332\u7BC4\u56F2\uFF08{min}\u301C{max}kg\uFF09\u3092\u5927\u304D\u304F\u8D85\u3048\u3066\u3044\u307E\u3059\u3002",
+    "validate.title": "\u5165\u529B\u78BA\u8A8D",
+    "weeklyAvg.title": "\u9031\u9593\u5E73\u5747\u63A8\u79FB",
+    "weeklyAvg.week": "{start}\u301C",
+    "weeklyAvg.avg": "\u5E73\u5747 {avg}kg",
+    "weeklyAvg.noData": "\u30C7\u30FC\u30BF\u306A\u3057",
+    "weeklyAvg.count": "{count}\u4EF6",
+    "weeklyAvg.change": "\u5148\u9031\u6BD4 {change}kg",
+    "recCal.title": "\u4ECA\u6708\u306E\u8A18\u9332\u30AB\u30EC\u30F3\u30C0\u30FC",
+    "recCal.rate": "\u8A18\u9332\u7387 {rate}%\uFF08{count}/{total}\u65E5\uFF09",
+    "recCal.sun": "\u65E5",
+    "recCal.mon": "\u6708",
+    "recCal.tue": "\u706B",
+    "recCal.wed": "\u6C34",
+    "recCal.thu": "\u6728",
+    "recCal.fri": "\u91D1",
+    "recCal.sat": "\u571F",
+    "trend.stable": "\u5B89\u5B9A\u3057\u3066\u3044\u307E\u3059",
+    "trend.recent": "\u76F4\u8FD13\u56DE\u5E73\u5747 {avg}kg",
+    "tagStats.title": "\u30BF\u30B0\u4F7F\u7528\u72B6\u6CC1",
+    "tagStats.count": "{count}\u56DE\uFF08{pct}%\uFF09",
+    "tagStats.avgChange": "\u5E73\u5747\u5909\u52D5 {change}kg",
+    "tagStats.none": "\u30BF\u30B0\u4ED8\u304D\u8A18\u9332\u304C\u3042\u308A\u307E\u305B\u3093",
+    "ideal.title": "\u9069\u6B63\u4F53\u91CD\u30EC\u30F3\u30B8",
+    "ideal.range": "{min}\u301C{max}kg\uFF08BMI 18.5\u301C24.9\uFF09",
+    "ideal.current": "\u73FE\u5728 {weight}kg\uFF08BMI {bmi}\uFF09",
+    "ideal.center": "\u6A19\u6E96\u4E2D\u592E {mid}kg\uFF08BMI 22\uFF09",
+    "ideal.underweight": "\u4F4E\u4F53\u91CD\u57DF",
+    "ideal.normal": "\u6A19\u6E96\u57DF",
+    "ideal.overweight": "\u904E\u4F53\u91CD\u57DF",
+    "ideal.obese": "\u80A5\u6E80\u57DF",
+    "fresh.today": "\u4ECA\u65E5\u306E\u8A18\u9332\u6E08\u307F",
+    "fresh.recent": "{days}\u65E5\u524D\u306B\u8A18\u9332\uFF08{weight}kg\uFF09",
+    "fresh.stale": "{days}\u65E5\u9593\u672A\u8A18\u9332\u3067\u3059\u3002\u4ECA\u65E5\u306E\u4F53\u91CD\u3092\u8A18\u9332\u3057\u307E\u3057\u3087\u3046\uFF01",
+    "fresh.veryStale": "{days}\u65E5\u9593\u672A\u8A18\u9332\u3067\u3059\u3002\u8A18\u9332\u3092\u518D\u958B\u3057\u307E\u3057\u3087\u3046\uFF01",
+    "multiRate.title": "\u671F\u9593\u5225\u5909\u5316\u30DA\u30FC\u30B9",
+    "multiRate.days": "\u904E\u53BB{days}\u65E5",
+    "multiRate.change": "{change}kg",
+    "multiRate.weekly": "\u9031\u3042\u305F\u308A {rate}kg",
+    "multiRate.noData": "\u2014",
+    "milestone.reached": "{count}\u56DE\u76EE\u306E\u8A18\u9332\u9054\u6210\uFF01",
+    "milestone.next": "\u6B21\u306E\u76EE\u6A19: {next}\u56DE\uFF08\u3042\u3068{remaining}\u56DE\uFF09",
+    "ai.title": "AI\u30B3\u30FC\u30C1",
+    "ai.subtitle": "\u3042\u306A\u305F\u306E\u30C7\u30FC\u30BF\u3092\u5206\u6790\u3057\u3001\u30D1\u30FC\u30BD\u30CA\u30E9\u30A4\u30BA\u3055\u308C\u305F\u30A2\u30C9\u30D0\u30A4\u30B9\u3092\u63D0\u4F9B\u3057\u307E\u3059",
+    "ai.score": "\u7DCF\u5408\u30B9\u30B3\u30A2",
+    "ai.grade.excellent": "\u7D20\u6674\u3089\u3057\u3044\uFF01",
+    "ai.grade.good": "\u826F\u3044\u8ABF\u5B50",
+    "ai.grade.fair": "\u307E\u305A\u307E\u305A",
+    "ai.grade.needsWork": "\u6539\u5584\u306E\u4F59\u5730\u3042\u308A",
+    "ai.grade.critical": "\u8981\u6CE8\u610F",
+    "ai.grade.new": "\u30C7\u30FC\u30BF\u53CE\u96C6\u4E2D",
+    "ai.weeklyReport": "\u4ECA\u9031\u306E\u30EC\u30DD\u30FC\u30C8",
+    "ai.weeklyAvg": "\u4ECA\u9031\u306E\u5E73\u5747",
+    "ai.weeklyChange": "\u5148\u9031\u6BD4",
+    "ai.weeklyRange": "\u5909\u52D5\u5E45",
+    "ai.weeklyEntries": "\u8A18\u9332\u56DE\u6570",
+    "ai.highlights": "\u30CF\u30A4\u30E9\u30A4\u30C8",
+    "ai.risks": "\u6CE8\u610F\u30DD\u30A4\u30F3\u30C8",
+    "ai.advice": "\u30A2\u30C9\u30D0\u30A4\u30B9",
+    "ai.highlight.trendMatchGoal": "\u{1F4C8} \u30C8\u30EC\u30F3\u30C9\u304C\u76EE\u6A19\u306B\u5411\u304B\u3063\u3066\u3044\u307E\u3059\uFF01\u3053\u306E\u8ABF\u5B50\u3092\u7DAD\u6301\u3057\u307E\u3057\u3087\u3046",
+    "ai.highlight.healthyPace": "\u26A1 \u5065\u5EB7\u7684\u306A\u30DA\u30FC\u30B9\u3067\u6E1B\u91CF\u3067\u304D\u3066\u3044\u307E\u3059\uFF08\u90310.2\u301C0.7kg\uFF09",
+    "ai.highlight.greatStreak": "\u{1F525} 2\u9031\u9593\u4EE5\u4E0A\u9023\u7D9A\u8A18\u9332\u4E2D\uFF01\u7D20\u6674\u3089\u3057\u3044\u7FD2\u6163\u3067\u3059",
+    "ai.highlight.goodStreak": "\u2728 1\u9031\u9593\u4EE5\u4E0A\u9023\u7D9A\u8A18\u9332\u4E2D\uFF01\u826F\u3044\u8ABF\u5B50\u3067\u3059",
+    "ai.highlight.stableWeight": "\u2696\uFE0F \u4F53\u91CD\u304C\u5B89\u5B9A\u3057\u3066\u3044\u307E\u3059\u3002\u826F\u3044\u30B3\u30F3\u30C8\u30ED\u30FC\u30EB\u3067\u3059",
+    "ai.highlight.nearGoal": "\u{1F3AF} \u76EE\u6A19\u4F53\u91CD\u307E\u3067\u3042\u3068\u5C11\u3057\uFF01\u30B4\u30FC\u30EB\u304C\u898B\u3048\u3066\u3044\u307E\u3059",
+    "ai.highlight.goalSoon": "\u{1F3C1} \u3042\u30681\u30F6\u6708\u4EE5\u5185\u306B\u76EE\u6A19\u9054\u6210\u306E\u898B\u8FBC\u307F\u3067\u3059",
+    "ai.risk.trendAgainstGoal": "\u26A0\uFE0F \u73FE\u5728\u306E\u30C8\u30EC\u30F3\u30C9\u306F\u76EE\u6A19\u3068\u9006\u65B9\u5411\u3067\u3059",
+    "ai.risk.rapidChange": "\u26A0\uFE0F \u4F53\u91CD\u5909\u52D5\u304C\u6025\u6FC0\u3067\u3059\uFF08\u90311kg\u4EE5\u4E0A\uFF09",
+    "ai.risk.inconsistent": "\u{1F4DD} \u8A18\u9332\u306E\u983B\u5EA6\u304C\u4F4E\u4E0B\u3057\u3066\u3044\u307E\u3059",
+    "ai.risk.highVolatility": "\u{1F4CA} \u4F53\u91CD\u306E\u5909\u52D5\u304C\u5927\u304D\u3044\u3067\u3059",
+    "ai.risk.plateau": "\u{1F504} \u505C\u6EDE\u671F\u306B\u5165\u3063\u3066\u3044\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059",
+    "ai.advice.start": "\u{1F31F} \u307E\u305A\u306F\u6BCE\u65E5\u306E\u8A18\u9332\u3092\u7FD2\u6163\u306B\u3057\u307E\u3057\u3087\u3046\u30023\u65E5\u9593\u306E\u9023\u7D9A\u8A18\u9332\u3092\u76EE\u6307\u3057\u3066\u304F\u3060\u3055\u3044",
+    "ai.advice.slowDown": "\u{1F422} \u5909\u52D5\u30DA\u30FC\u30B9\u304C\u901F\u3059\u304E\u307E\u3059\u3002\u6025\u306A\u5909\u5316\u306F\u4F53\u306B\u8CA0\u62C5\u304C\u304B\u304B\u308B\u305F\u3081\u3001\u3086\u3063\u304F\u308A\u9032\u3081\u307E\u3057\u3087\u3046",
+    "ai.advice.buildHabit": "\u{1F4C5} \u6BCE\u65E5\u540C\u3058\u6642\u9593\u306B\u6E2C\u5B9A\u3059\u308B\u7FD2\u6163\u3092\u3064\u3051\u308B\u3068\u3001\u3088\u308A\u6B63\u78BA\u306A\u30C7\u30FC\u30BF\u304C\u5F97\u3089\u308C\u307E\u3059",
+    "ai.advice.stabilize": "\u{1F3AF} \u98DF\u4E8B\u3084\u904B\u52D5\u306E\u30D1\u30BF\u30FC\u30F3\u3092\u4E00\u5B9A\u306B\u4FDD\u3064\u3053\u3068\u3067\u3001\u4F53\u91CD\u306E\u5909\u52D5\u3092\u6291\u3048\u3089\u308C\u307E\u3059",
+    "ai.advice.breakPlateau": "\u{1F4AA} \u505C\u6EDE\u671F\u3092\u6253\u7834\u3059\u308B\u306B\u306F\u3001\u904B\u52D5\u5185\u5BB9\u3084\u98DF\u4E8B\u3092\u5C11\u3057\u5909\u3048\u3066\u307F\u307E\u3057\u3087\u3046",
+    "ai.advice.underweight": "\u{1F34E} BMI\u304C\u4F4E\u3081\u3067\u3059\u3002\u6804\u990A\u30D0\u30E9\u30F3\u30B9\u3092\u610F\u8B58\u3057\u3066\u3001\u5065\u5EB7\u7684\u306B\u4F53\u91CD\u3092\u5897\u3084\u3057\u307E\u3057\u3087\u3046",
+    "ai.advice.obeseRange": "\u{1F957} BMI\u304C\u9AD8\u3081\u3067\u3059\u3002\u307E\u305A\u306F\u90310.5kg\u306E\u6E1B\u91CF\u3092\u76EE\u6A19\u306B\u3001\u7121\u7406\u306E\u306A\u3044\u30DA\u30FC\u30B9\u3067\u53D6\u308A\u7D44\u307F\u307E\u3057\u3087\u3046",
+    "ai.advice.weekendPattern": "\u{1F4CA} \u66DC\u65E5\u306B\u3088\u308B\u4F53\u91CD\u5DEE\u304C\u5927\u304D\u3044\u3067\u3059\u3002\u9031\u672B\u306E\u98DF\u751F\u6D3B\u3092\u898B\u76F4\u3059\u3068\u826F\u3044\u304B\u3082\u3057\u308C\u307E\u305B\u3093",
+    "ai.prediction.title": "AI\u4E88\u6E2C",
+    "ai.prediction.goalDays": "\u76EE\u6A19\u5230\u9054\u307E\u3067\u7D04{days}\u65E5",
+    "ai.prediction.goalDate": "\u4E88\u60F3\u9054\u6210\u65E5: {date}",
+    "ai.prediction.achieved": "\u{1F389} \u76EE\u6A19\u9054\u6210\u6E08\u307F\uFF01",
+    "ai.prediction.noTrend": "\u30C8\u30EC\u30F3\u30C9\u30C7\u30FC\u30BF\u304C\u4E0D\u8DB3\u3057\u3066\u3044\u307E\u3059",
+    "ai.prediction.insufficient": "\u73FE\u5728\u306E\u30DA\u30FC\u30B9\u3067\u306F\u76EE\u6A19\u9054\u6210\u304C\u96E3\u3057\u3044\u3067\u3059\u3002\u30DA\u30FC\u30B9\u3092\u898B\u76F4\u3057\u307E\u3057\u3087\u3046"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2076,6 +3796,7 @@ var translations = {
     "status.photoReady": "Photo loaded. Review detected candidates.",
     "status.photoNoDetection": "No weight detected from photo. Please enter the value manually.",
     "status.voiceError": "Unable to start voice input. Check microphone permission.",
+    "status.voiceNoSpeech": "No speech detected. Please try again.",
     "status.exported": "On-device data exported.",
     "status.reset": "On-device data deleted.",
     "status.permissionDenied": "A required permission is missing. Check photo or microphone access in Settings.",
@@ -2111,6 +3832,7 @@ var translations = {
     "import.csv.success": "Imported {count} records",
     "import.csv.errors": "{count} errors occurred",
     "import.csv.empty": "No importable data found",
+    "import.error": "Failed to read file",
     "import.csv.confirm": "Import {count} records? Existing records on the same dates will be overwritten.",
     "export.header.date": "Date",
     "export.header.weight": "Weight (kg)",
@@ -2168,6 +3890,26 @@ var translations = {
     "consistency.current": "Current: {days} in a row (within \xB1{tol}kg)",
     "consistency.best": "Personal best: {days} in a row",
     "consistency.great": "Maintaining consistency!",
+    "entry.duplicate.warn": "\u26A0\uFE0F A record already exists for this date:",
+    "entry.duplicate.overwrite": "Saving will overwrite the existing record",
+    "health.title": "Data Quality",
+    "health.score": "Score: {score}/100",
+    "health.perfect": "Your data quality is perfect!",
+    "health.gap": "{days}-day gap between {from} and {to}",
+    "health.outlier": "{weight}kg on {date} may be an outlier (neighbor avg: {expected}kg)",
+    "health.noBMI": "BMI not calculated \u2014 please set your height",
+    "wdwe.title": "Weekday vs Weekend",
+    "wdwe.weekday": "Weekday avg",
+    "wdwe.weekend": "Weekend avg",
+    "wdwe.diff": "Diff",
+    "wdwe.vs": "vs",
+    "wdwe.heavier.weekend": "Slightly heavier on weekends",
+    "wdwe.heavier.weekday": "Slightly heavier on weekdays",
+    "wdwe.heavier.similar": "Similar on weekdays and weekends",
+    "error.init": "Initialization Error",
+    "error.render": "Render Error",
+    "error.reload": "Reload",
+    "error.resetData": "Reset Data",
     "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
@@ -2224,6 +3966,7 @@ var translations = {
     "google.restore": "Restore from Google Drive",
     "google.backupDone": "Backed up to Google Drive",
     "google.restoreDone": "Restored from Google Drive",
+    "google.restoreConfirm": "Restore data from Google Drive? It will be merged with your existing data.",
     "google.error": "Google sync error",
     "google.noData": "No backup data found",
     "google.title": "Google Sync",
@@ -2236,7 +3979,8 @@ var translations = {
     "import.button": "Import JSON",
     "import.success": "Data imported successfully",
     "import.invalid": "Invalid file format. Please select a weight-rainbow export file.",
-    "import.confirm": "Merge imported data with current data?",
+    "import.confirm": "Merge {count} records with current data?",
+    "import.new": "new",
     "goal.prediction": "Predicted date",
     "goal.predictionDays": "~{days} days",
     "goal.predictionAchieved": "Achieved!",
@@ -2281,6 +4025,7 @@ var translations = {
     "calendar.fri": "Fri",
     "calendar.sat": "Sat",
     "calendar.records": "{count} records",
+    "calendar.dayUnit": ",",
     "calendar.decreased": "Decreased",
     "calendar.increased": "Increased",
     "achievement.records_1": "First record",
@@ -2338,6 +4083,7 @@ var translations = {
     "note.tag.stress": "Stress",
     "note.tag.sleep": "Poor Sleep",
     "note.tag.alcohol": "Alcohol",
+    "records.noMatch": "No matching records found",
     "records.dateRange": "Filter by date range",
     "records.from": "From",
     "records.to": "To",
@@ -2351,7 +4097,323 @@ var translations = {
     "stability.stddev": "Std Dev",
     "stability.high": "Stable",
     "stability.medium": "Moderate",
-    "stability.low": "Fluctuating"
+    "stability.low": "Fluctuating",
+    "range.title": "Weight Range",
+    "range.position": "Current position: {pct}% from lowest",
+    "range.low": "Near your all-time lowest",
+    "range.high": "Near your all-time highest",
+    "range.middle": "Mid-range",
+    "range.min": "Min {weight}kg",
+    "range.max": "Max {weight}kg",
+    "tagImpact.title": "Tag Impact Analysis",
+    "tagImpact.avg": "Avg change",
+    "tagImpact.count": "{count} times",
+    "tagImpact.hint": "Weight change on days following each tag",
+    "tagImpact.positive": "Gain trend",
+    "tagImpact.negative": "Loss trend",
+    "tagImpact.neutral": "No change",
+    "bestPeriod.title": "Best Period",
+    "bestPeriod.week": "Best 7 days",
+    "bestPeriod.month": "Best 30 days",
+    "bestPeriod.change": "{change}kg",
+    "bestPeriod.range": "{from} to {to}",
+    "bestPeriod.weight": "{start}kg \u2192 {end}kg",
+    "freq.title": "Weekly Recording Frequency",
+    "freq.avg": "Average: {avg}/week",
+    "freq.perfect": "Perfect week achieved!",
+    "freq.hint": "Last {weeks} weeks",
+    "velocity.title": "Weight Velocity",
+    "velocity.week": "Last 7 days",
+    "velocity.month": "Last 30 days",
+    "velocity.daily": "{rate}kg/day",
+    "velocity.projection": "Projected {amount}kg/month at this pace",
+    "velocity.losing": "Losing",
+    "velocity.gaining": "Gaining",
+    "velocity.stable": "Stable",
+    "variance.title": "Weight Fluctuation",
+    "variance.cv": "Coefficient of Variation: {cv}%",
+    "variance.swing": "Max swing: {swing}kg",
+    "variance.daily": "Avg daily change: {avg}kg",
+    "variance.veryLow": "Very stable",
+    "variance.low": "Stable",
+    "variance.moderate": "Moderate fluctuation",
+    "variance.high": "High fluctuation",
+    "variance.hint": "Based on last {count} records",
+    "plateau.title": "Plateau Detection",
+    "plateau.detected": "You may be in a weight plateau",
+    "plateau.notDetected": "Not currently in a plateau",
+    "plateau.days": "Last {days} days",
+    "plateau.range": "Range: {range}kg",
+    "plateau.avg": "Average: {avg}kg",
+    "plateau.change": "Change: {change}kg",
+    "plateau.prevRate": "Previous rate: {rate}kg/day",
+    "plateau.hint": "Detects periods where weight remains relatively unchanged",
+    "gaps.title": "Record Gaps",
+    "gaps.longest": "Longest gap: {days} days",
+    "gaps.coverage": "Coverage: {pct}%",
+    "gaps.total": "{count} gap periods",
+    "gaps.period": "{from} to {to} ({days} days)",
+    "gaps.perfect": "No gaps! Recording every day",
+    "gaps.hint": "Review your recording consistency",
+    "calorie.title": "Estimated Calorie Balance",
+    "calorie.week": "Last 7 days",
+    "calorie.month": "Last 30 days",
+    "calorie.daily": "~{kcal}kcal/day",
+    "calorie.total": "Total ~{kcal}kcal",
+    "calorie.surplus": "Surplus",
+    "calorie.deficit": "Deficit",
+    "calorie.balanced": "Balanced",
+    "calorie.hint": "Estimated from weight change (1kg \u2248 7,700kcal)",
+    "analytics.showMore": "\u25BC Show detailed analytics",
+    "analytics.showLess": "\u25B2 Hide detailed analytics",
+    "momentum.title": "Momentum Score",
+    "momentum.score": "{score}/100",
+    "momentum.great": "Excellent!",
+    "momentum.good": "On track",
+    "momentum.fair": "Needs improvement",
+    "momentum.low": "Time to refocus",
+    "momentum.hint": "Based on trend, consistency, and stability",
+    "milestone.next.title": "Next Milestones",
+    "milestone.next.roundDown": "{remaining}kg to {target}kg",
+    "milestone.next.fiveDown": "{remaining}kg to {target}kg",
+    "milestone.next.bmiZone": "{remaining}kg to BMI {bmi} ({target}kg)",
+    "milestone.next.hint": "Your nearest targets",
+    "season.title": "Seasonal Pattern",
+    "season.lightest": "Lightest month: {month} (avg {avg}kg)",
+    "season.heaviest": "Heaviest month: {month} (avg {avg}kg)",
+    "season.range": "Seasonal range: {range}kg",
+    "season.hint": "Average weight pattern by month",
+    "season.month.1": "Jan",
+    "season.month.2": "Feb",
+    "season.month.3": "Mar",
+    "season.month.4": "Apr",
+    "season.month.5": "May",
+    "season.month.6": "Jun",
+    "season.month.7": "Jul",
+    "season.month.8": "Aug",
+    "season.month.9": "Sep",
+    "season.month.10": "Oct",
+    "season.month.11": "Nov",
+    "season.month.12": "Dec",
+    "dist.title": "Weight Distribution",
+    "dist.mode": "Most common: {range}kg ({count} times)",
+    "dist.current": "\u25BC Current",
+    "dist.hint": "Shows where your weights cluster",
+    "dowChange.title": "Weight Change by Day",
+    "dowChange.best": "Best day: {day} (avg {avg}kg)",
+    "dowChange.worst": "Worst day: {day} (avg +{avg}kg)",
+    "dowChange.hint": "Average daily weight change by day of week",
+    "pr.title": "Personal Records",
+    "pr.allTimeLow": "All-time low: {weight}kg ({date})",
+    "pr.biggestDrop": "Biggest daily drop: -{drop}kg ({date})",
+    "pr.best7": "Best 7 days: {change}kg (from {from})",
+    "pr.totalChange": "Total change: {change}kg",
+    "pr.totalRecords": "Total records: {count}",
+    "pr.hint": "Your record highlights",
+    "regression.title": "Weight Trend Regression",
+    "regression.rate": "Weekly rate: {rate}kg/week",
+    "regression.r2": "R\xB2 score: {r2}",
+    "regression.losing": "Losing trend",
+    "regression.gaining": "Gaining trend",
+    "regression.maintaining": "Maintaining",
+    "regression.strong": "Consistent trend",
+    "regression.moderate": "Some variation",
+    "regression.weak": "High variability",
+    "regression.hint": "Analyzes consistency of your weight trend over all records",
+    "bmiHist.title": "BMI History Summary",
+    "bmiHist.first": "First: {bmi}",
+    "bmiHist.latest": "Latest: {bmi}",
+    "bmiHist.change": "Change: {change}",
+    "bmiHist.range": "Range: {min} \u2013 {max}",
+    "bmiHist.avg": "Average: {avg}",
+    "bmiHist.improving": "BMI is improving!",
+    "bmiHist.hint": "Track your BMI journey",
+    "heatmap.title": "Weight Change Heatmap",
+    "heatmap.hint": "Weight change patterns over 12 weeks ({days} days of data)",
+    "heatmap.loss": "Loss",
+    "heatmap.gain": "Gain",
+    "heatmap.noData": "No data",
+    "heatmap.low": "Low",
+    "heatmap.high": "High",
+    "streakReward.title": "Recording Streak",
+    "streakReward.days": "{streak}-day streak",
+    "streakReward.next": "Next goal: {next} days ({remaining} to go)",
+    "streakReward.starter": "Starter",
+    "streakReward.beginner": "Beginner",
+    "streakReward.steady": "Steady",
+    "streakReward.committed": "Committed",
+    "streakReward.dedicated": "Dedicated",
+    "streakReward.expert": "Expert",
+    "streakReward.master": "Master",
+    "streakReward.legend": "Legend",
+    "streakReward.hint": "Record daily to earn the next badge!",
+    "forecast.title": "Weight Forecast",
+    "forecast.days": "In {days} days",
+    "forecast.predicted": "{wt}kg",
+    "forecast.range": "{low} \u2013 {high}kg",
+    "forecast.confidence": "Confidence",
+    "forecast.high": "High",
+    "forecast.medium": "Medium",
+    "forecast.low": "Low",
+    "forecast.rate": "{rate}kg/week",
+    "forecast.hint": "Based on {n} data points (95% confidence interval)",
+    "progress.title": "Progress Summary",
+    "progress.period": "{from} \u2013 {to} ({days} days, {count} records)",
+    "progress.firstHalf": "First half avg",
+    "progress.secondHalf": "Second half avg",
+    "progress.change": "Change",
+    "progress.totalChange": "Total change: {change}kg",
+    "progress.improving": "Improving!",
+    "progress.gaining": "Gaining",
+    "progress.stable": "Stable",
+    "progress.moreStable": "Stability improved",
+    "progress.lessStable": "More variable recently",
+    "timeline.title": "Milestones",
+    "timeline.low": "New all-time low: {wt}kg",
+    "timeline.mark": "Broke through {mark}kg",
+    "timeline.bmi.normal": "Reached normal BMI zone",
+    "timeline.bmi.change": "BMI zone: {from} \u2192 {to}",
+    "timeline.hint": "Last {count} milestones",
+    "volatility.title": "Weight Volatility Index",
+    "volatility.overall": "Overall: \xB1{val}kg/day",
+    "volatility.recent": "Recent: \xB1{val}kg/day",
+    "volatility.max": "Max swing: {val}kg",
+    "volatility.low": "Steady",
+    "volatility.moderate": "Normal",
+    "volatility.high": "Volatile",
+    "volatility.increasing": "Volatility increasing",
+    "volatility.decreasing": "Volatility decreasing",
+    "volatility.stable": "Volatility stable",
+    "volatility.hint": "Daily weight fluctuations are completely normal",
+    "compare.title": "Period Comparison",
+    "compare.weekly": "Weekly",
+    "compare.monthly": "Monthly",
+    "compare.thisWeek": "This week",
+    "compare.lastWeek": "Last week",
+    "compare.thisMonth": "This month",
+    "compare.lastMonth": "Last month",
+    "compare.avg": "Avg: {val}kg",
+    "compare.diff": "Diff: {val}kg",
+    "compare.noData": "No data",
+    "compare.records": "{n} records",
+    "countdown.title": "Goal Countdown",
+    "countdown.remaining": "{val}kg to go",
+    "countdown.reached": "Goal reached! Congratulations!",
+    "countdown.eta": "Estimated: ~{days} days",
+    "countdown.noEta": "Not enough trend data",
+    "countdown.pct": "Progress: {pct}%",
+    "countdown.current": "Now: {wt}kg \u2192 Goal: {goal}kg",
+    "bodyComp.title": "Body Composition",
+    "bodyComp.bf": "Body fat: {first}% \u2192 {latest}% ({change}%)",
+    "bodyComp.fatMass": "Fat mass: {change}kg",
+    "bodyComp.leanMass": "Lean mass: {change}kg",
+    "bodyComp.fatLoss": "Losing fat",
+    "bodyComp.muscleGain": "Gaining muscle",
+    "bodyComp.recomp": "Body recomposition",
+    "bodyComp.decline": "Needs attention",
+    "bodyComp.mixed": "Mixed changes",
+    "bodyComp.hint": "Based on {n} body fat records",
+    "share.title": "Share Summary",
+    "share.btn": "Copy text",
+    "share.copied": "Copied!",
+    "share.period": "Period: {from} \u2013 {to} ({days} days)",
+    "share.weight": "Weight: {first}kg \u2192 {latest}kg ({change}kg)",
+    "share.range": "Range: {min}kg \u2013 {max}kg (avg {avg}kg)",
+    "share.bmi": "BMI: {bmi} ({zone})",
+    "share.records": "Records: {n}",
+    "share.footer": "\u2014 Tracked with Rainbow Weight Log",
+    "quickNote.label": "Frequent notes",
+    "quickNote.none": "No note history",
+    "dupes.title": "Data Quality Check",
+    "dupes.duplicate": "{date}: {count} duplicate entries",
+    "dupes.suspicious": "{weight}kg repeated {count} days ({from} \u2013 {to})",
+    "dupes.clean": "No issues found",
+    "validate.largeDiff": "Weight changed by {diff}kg or more from last entry ({previous}kg on {date}). Please verify.",
+    "validate.outsideRange": "Weight is well outside your historical range ({min} \u2013 {max}kg).",
+    "validate.title": "Entry Validation",
+    "weeklyAvg.title": "Weekly Averages",
+    "weeklyAvg.week": "{start}\u2013",
+    "weeklyAvg.avg": "Avg {avg}kg",
+    "weeklyAvg.noData": "No data",
+    "weeklyAvg.count": "{count} entries",
+    "weeklyAvg.change": "{change}kg vs prev week",
+    "recCal.title": "This Month's Recording Calendar",
+    "recCal.rate": "Recording rate: {rate}% ({count}/{total} days)",
+    "recCal.sun": "Su",
+    "recCal.mon": "Mo",
+    "recCal.tue": "Tu",
+    "recCal.wed": "We",
+    "recCal.thu": "Th",
+    "recCal.fri": "Fr",
+    "recCal.sat": "Sa",
+    "trend.stable": "Holding steady",
+    "trend.recent": "Last 3 avg: {avg}kg",
+    "tagStats.title": "Tag Usage",
+    "tagStats.count": "{count} times ({pct}%)",
+    "tagStats.avgChange": "Avg change: {change}kg",
+    "tagStats.none": "No tagged entries",
+    "ideal.title": "Ideal Weight Range",
+    "ideal.range": "{min} \u2013 {max}kg (BMI 18.5 \u2013 24.9)",
+    "ideal.current": "Current: {weight}kg (BMI {bmi})",
+    "ideal.center": "Ideal center: {mid}kg (BMI 22)",
+    "ideal.underweight": "Underweight",
+    "ideal.normal": "Normal",
+    "ideal.overweight": "Overweight",
+    "ideal.obese": "Obese",
+    "fresh.today": "Recorded today",
+    "fresh.recent": "Last recorded {days} day(s) ago ({weight}kg)",
+    "fresh.stale": "No record for {days} days. Log today's weight!",
+    "fresh.veryStale": "No record for {days} days. Time to get back on track!",
+    "multiRate.title": "Change Rate by Period",
+    "multiRate.days": "Last {days}d",
+    "multiRate.change": "{change}kg",
+    "multiRate.weekly": "{rate}kg/week",
+    "multiRate.noData": "\u2014",
+    "milestone.reached": "{count} records reached!",
+    "milestone.next": "Next milestone: {next} (only {remaining} more)",
+    "ai.title": "AI Coach",
+    "ai.subtitle": "Personalized insights and advice based on your data",
+    "ai.score": "Overall Score",
+    "ai.grade.excellent": "Excellent!",
+    "ai.grade.good": "Good",
+    "ai.grade.fair": "Fair",
+    "ai.grade.needsWork": "Needs Work",
+    "ai.grade.critical": "Needs Attention",
+    "ai.grade.new": "Collecting Data",
+    "ai.weeklyReport": "Weekly Report",
+    "ai.weeklyAvg": "This Week Avg",
+    "ai.weeklyChange": "vs Last Week",
+    "ai.weeklyRange": "Range",
+    "ai.weeklyEntries": "Entries",
+    "ai.highlights": "Highlights",
+    "ai.risks": "Watch Out",
+    "ai.advice": "Advice",
+    "ai.highlight.trendMatchGoal": "\u{1F4C8} Your trend is heading toward your goal! Keep it up",
+    "ai.highlight.healthyPace": "\u26A1 Healthy rate of change (0.2-0.7 kg/week)",
+    "ai.highlight.greatStreak": "\u{1F525} 14+ day recording streak! Great habit",
+    "ai.highlight.goodStreak": "\u2728 7+ day recording streak! Nice consistency",
+    "ai.highlight.stableWeight": "\u2696\uFE0F Weight is stable. Good control",
+    "ai.highlight.nearGoal": "\u{1F3AF} Almost at your goal weight!",
+    "ai.highlight.goalSoon": "\u{1F3C1} On track to hit your goal within a month",
+    "ai.risk.trendAgainstGoal": "\u26A0\uFE0F Current trend is moving away from your goal",
+    "ai.risk.rapidChange": "\u26A0\uFE0F Rapid weight change detected (>1 kg/week)",
+    "ai.risk.inconsistent": "\u{1F4DD} Recording frequency has dropped",
+    "ai.risk.highVolatility": "\u{1F4CA} High weight fluctuation detected",
+    "ai.risk.plateau": "\u{1F504} You may be in a weight plateau",
+    "ai.advice.start": "\u{1F31F} Start by recording daily. Aim for 3 consecutive days first",
+    "ai.advice.slowDown": "\u{1F422} Rate of change is too fast. Slow and steady is healthier",
+    "ai.advice.buildHabit": "\u{1F4C5} Weigh in at the same time each day for more accurate data",
+    "ai.advice.stabilize": "\u{1F3AF} Keep diet and exercise patterns consistent to reduce fluctuations",
+    "ai.advice.breakPlateau": "\u{1F4AA} Mix up your exercise routine or adjust your diet to break through",
+    "ai.advice.underweight": "\u{1F34E} BMI is low. Focus on balanced nutrition to gain weight healthily",
+    "ai.advice.obeseRange": "\u{1F957} BMI is high. Aim for 0.5 kg/week loss at a sustainable pace",
+    "ai.advice.weekendPattern": "\u{1F4CA} Large weekday/weekend weight difference. Review weekend eating",
+    "ai.prediction.title": "AI Prediction",
+    "ai.prediction.goalDays": "~{days} days to goal",
+    "ai.prediction.goalDate": "Estimated: {date}",
+    "ai.prediction.achieved": "\u{1F389} Goal achieved!",
+    "ai.prediction.noTrend": "Not enough trend data yet",
+    "ai.prediction.insufficient": "Current pace is insufficient. Consider adjusting your approach"
   }
 };
 function createTranslator(language) {
@@ -22910,9 +24972,11 @@ var reminderTimer = null;
 var calendarYear = (/* @__PURE__ */ new Date()).getFullYear();
 var calendarMonth = (/* @__PURE__ */ new Date()).getMonth();
 var showMonthlyStats = false;
+var showAdvancedAnalytics = false;
 var recordSearchQuery = "";
 var recordDateFrom = "";
 var recordDateTo = "";
+var searchDebounceTimer = null;
 {
   const lastRecord = state.records[state.records.length - 1];
   if (lastRecord) quickWeight = lastRecord.wt;
@@ -22926,10 +24990,10 @@ try {
 } catch (e) {
   console.error("[WeightRainbow] Init error:", e);
   app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
-    <h2 style="color:#dc2626;">\u521D\u671F\u5316\u30A8\u30E9\u30FC / Init Error</h2>
+    <h2 style="color:#dc2626;">${t("error.init")}</h2>
     <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
-    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
-    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">\u30C7\u30FC\u30BF\u30EA\u30BB\u30C3\u30C8 / Reset Data</button>
+    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
+    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">${t("error.resetData")}</button>
   </div>`;
 }
 initReminder();
@@ -22952,8 +25016,10 @@ if (window.matchMedia) {
   applySystemTheme();
 }
 function loadState() {
+  const rawRecords = safeParse(STORAGE_KEYS.records, []);
+  const records = Array.isArray(rawRecords) ? rawRecords.filter((r) => r && r.dt && Number.isFinite(r.wt)) : [];
   return {
-    records: safeParse(STORAGE_KEYS.records, []),
+    records,
     profile: { ...createDefaultProfile(), ...safeParse(STORAGE_KEYS.profile, {}) },
     settings: { ...createDefaultSettings(), ...safeParse(STORAGE_KEYS.settings, {}) },
     form: {
@@ -22993,12 +25059,13 @@ function showFirstLaunchModal() {
         <h2 id="langModalTitle">\u3088\u3046\u3053\u305D / Welcome</h2>
         <p>\u8A00\u8A9E\u3092\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044<br>Choose your language</p>
         <div class="lang-modal-buttons">
-          <button type="button" data-lang="ja">\u{1F1EF}\u{1F1F5} \u65E5\u672C\u8A9E</button>
-          <button type="button" data-lang="en">\u{1F1EC}\u{1F1E7} English</button>
+          <button type="button" data-lang="ja" aria-label="\u65E5\u672C\u8A9E\u3092\u9078\u629E">\u{1F1EF}\u{1F1F5} \u65E5\u672C\u8A9E</button>
+          <button type="button" data-lang="en" aria-label="Select English">\u{1F1EC}\u{1F1E7} English</button>
         </div>
       </div>
     </div>
   `;
+  app.querySelector("[data-lang]")?.focus();
   app.querySelectorAll("[data-lang]").forEach((button) => {
     button.addEventListener("click", () => {
       const lang = button.dataset.lang;
@@ -23014,15 +25081,21 @@ function showFirstLaunchModal() {
   });
 }
 var statusClearTimer = null;
+var statusFadeTimer = null;
 function setStatus(message, kind = "ok") {
   statusMessage = message;
   statusKind = kind;
   clearTimeout(statusClearTimer);
+  clearTimeout(statusFadeTimer);
   if (kind === "ok" && message) {
+    statusFadeTimer = setTimeout(() => {
+      const el = app.querySelector(".status");
+      if (el) el.classList.add("status-fade-out");
+    }, 3200);
     statusClearTimer = setTimeout(() => {
       statusMessage = "";
       render();
-    }, 4e3);
+    }, 3800);
   }
   render();
 }
@@ -23063,6 +25136,7 @@ function getMotivationalMessage(streak, trend, records, goalProgress) {
 }
 function render() {
   try {
+    const scrollY = window.scrollY;
     document.documentElement.lang = state.settings.language;
     document.title = t("app.title");
     const description = document.querySelector('meta[name="description"]');
@@ -23103,6 +25177,8 @@ function render() {
     const lastRecord = state.records[state.records.length - 1];
     const previewDiff = previewWeightResult.valid && lastRecord ? Math.round((previewWeightResult.weight - lastRecord.wt) * 10) / 10 : null;
     const previewLarge = previewDiff !== null && Math.abs(previewDiff) >= 2;
+    const selectedDate = state.form.date || todayLocal();
+    const existingRecord = state.records.find((r) => r.dt === selectedDate);
     app.innerHTML = `
     <main class="app-shell">
       <section class="hero">
@@ -23183,6 +25259,8 @@ function render() {
         </div>` : ""}
       </section>
 
+      ${renderAICoach()}
+
       <div class="content-grid">
         <div class="column">
           <section class="panel">
@@ -23250,7 +25328,7 @@ function render() {
                 </div>
                 <div class="field">
                   <label for="recordDate">${t("entry.date")}</label>
-                  <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" />
+                  <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" max="${todayLocal()}" />
                   <div class="date-shortcuts">
                     <button type="button" class="date-shortcut" data-date-shortcut="today">${t("diff.today")}</button>
                     <button type="button" class="date-shortcut" data-date-shortcut="yesterday">${t("diff.yesterday")}</button>
@@ -23271,6 +25349,14 @@ function render() {
       return `<button type="button" class="note-tag${active ? " active" : ""}" data-note-tag="${tag}">${t("note.tag." + tag)}</button>`;
     }).join("")}
                 </div>
+                ${(() => {
+      const freq = getFrequentNotes(state.records, 4);
+      if (freq.length === 0) return "";
+      return `<div class="quick-notes-row">
+                    <span class="quick-notes-label">${t("quickNote.label")}:</span>
+                    ${freq.map((n) => `<button type="button" class="quick-note-chip" data-quick-note="${escapeAttr(n.text)}">${escapeAttr(n.text.length > 15 ? n.text.slice(0, 15) + "\u2026" : n.text)}</button>`).join("")}
+                  </div>`;
+    })()}
               </div>
 
               <!-- Quick Record Section -->
@@ -23287,7 +25373,7 @@ function render() {
                   <button type="button" data-quick-adj="+1.0" aria-label="+1.0 kg">+1.0</button>
                 </div>
                 <div class="quick-buttons" style="margin-top:10px;">
-                  <button type="button" class="quick-save" data-action="quick-save">${t("quick.save")}</button>
+                  <button type="button" class="quick-save" data-action="quick-save" aria-label="${t("quick.save")}">${t("quick.save")}</button>
                 </div>
               </div>
 
@@ -23315,13 +25401,17 @@ function render() {
                   <p class="helper hint-small" style="margin-top: 4px; text-align: center;">${t("photo.zoomHint")}</p>
                   ${!supportsTextDetection && !detectedWeights.length ? `<p class="helper" style="margin-top: 8px; text-align: center;">${t("photo.manualHint")}</p>` : ""}
                 ` : ""}
-                ${detectedWeights.length ? `<div style="margin-top: 12px;"><div class="helper">${t("entry.photoDetected")}</div><div class="chip-row" style="margin-top: 8px;">${detectedWeights.map((weight) => `<button type="button" class="chip" data-pick-weight="${weight}">${formatWeight(weight)}</button>`).join("")}</div></div>` : ""}
+                ${detectedWeights.length ? `<div style="margin-top: 12px;"><div class="helper">${t("entry.photoDetected")}</div><div class="chip-row" style="margin-top: 8px;">${detectedWeights.map((weight) => `<button type="button" class="chip" data-pick-weight="${weight}" aria-label="${formatWeight(weight)} kg">${formatWeight(weight)}</button>`).join("")}</div></div>` : ""}
                 ${!supportsTextDetection && !imagePreviewUrl ? `<span class="helper">${t("entry.photoFallback")}</span>` : ""}
               </div>
 
               ${previewDiff !== null ? `<div class="entry-preview">
                 <span class="entry-preview-diff ${previewDiff < 0 ? "negative" : previewDiff > 0 ? "positive" : "zero"}">${previewDiff > 0 ? "+" : ""}${previewDiff.toFixed(1)}kg ${t("entry.preview.vsLast")}</span>
                 ${previewLarge ? `<span class="entry-preview-warn">${t("entry.preview.large")}</span>` : ""}
+              </div>` : ""}
+              ${existingRecord ? `<div class="duplicate-warn">
+                <span>${t("entry.duplicate.warn")} ${existingRecord.wt.toFixed(1)}kg</span>
+                <span class="hint-small">${t("entry.duplicate.overwrite")}</span>
               </div>` : ""}
               <div class="row">
                 <button type="button" class="btn" data-action="save-record">${t("entry.save")}</button>
@@ -23331,6 +25421,7 @@ function render() {
                   <div class="helper hint-small desktop-only">\u2318+Enter</div>
                 </div>
               </div>
+              <div class="validate-warnings" style="display:none"></div>
             </div>
 
             <div class="status ${statusKind === "error" ? "warn" : ""}" role="status" aria-live="polite">
@@ -23353,8 +25444,8 @@ function render() {
               <button type="button" class="summary-tab ${chartPeriod === "90" ? "active" : ""}" data-chart-period="90" role="tab" aria-selected="${chartPeriod === "90"}">${t("chart.period.90")}</button>
               <button type="button" class="summary-tab ${chartPeriod === "all" ? "active" : ""}" data-chart-period="all" role="tab" aria-selected="${chartPeriod === "all"}">${t("chart.period.all")}</button>
             </div>
-            <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}"></canvas>
-            <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
+            <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}${stats ? ` \u2014 ${stats.latestWeight.toFixed(1)}kg, ${t("chart.change")}: ${stats.change > 0 ? "+" : ""}${stats.change.toFixed(1)}kg, ${state.records.length} ${t("chart.records")}` : ""}"></canvas>
+            <div id="chartTooltip" class="chart-tooltip" role="tooltip" aria-live="polite" style="display:none;"></div>
             ${state.records.length >= 3 ? `<div class="chart-legend">
               <span class="chart-legend-item"><span class="chart-legend-line gradient"></span>${t("chart.legend.weight")}</span>
               <span class="chart-legend-item"><span class="chart-legend-line dashed accent3"></span>${t("chart.legend.movingAvg")}</span>
@@ -23397,13 +25488,61 @@ function render() {
               <div class="helper">${t("insight.bestDay").replace("{day}", t("day." + insight.bestDay))}</div>
               ${insight.weekComparison !== null ? `<div class="helper">${insight.weekComparison > 0.05 ? t("insight.weekUp").replace("{diff}", insight.weekComparison.toFixed(1)) : insight.weekComparison < -0.05 ? t("insight.weekDown").replace("{diff}", insight.weekComparison.toFixed(1)) : t("insight.weekSame")}</div>` : ""}
             </div>` : ""}
+            ${renderDataFreshness()}
+            ${renderRecordMilestone()}
+            ${renderTrendIndicator()}
+            ${renderMomentumScore()}
+            ${renderStreakRewards()}
+            ${renderGoalCountdown()}
+            ${renderNextMilestones()}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
-            ${renderConsistencyStreak()}
             ${renderBMIDistribution()}
-            ${renderWeightPercentile()}
-            ${renderMovingAverages()}
+            ${renderIdealWeight()}
+            ${renderWeightVelocity()}
+            ${renderMultiPeriodRate()}
+            ${renderCalorieEstimate()}
+            ${renderWeightConfidence()}
             ${renderBodyFatStats()}
+            ${renderWeeklyAverages()}
+            ${renderRecordingCalendar()}
+            ${state.records.length >= 3 ? `
+            <div class="analytics-toggle-section">
+              <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
+                ${showAdvancedAnalytics ? t("analytics.showLess") : t("analytics.showMore")}
+              </button>
+              ${showAdvancedAnalytics ? `
+              <div class="advanced-analytics">
+                ${renderWeekdayWeekend()}
+                ${renderConsistencyStreak()}
+                ${renderWeightPercentile()}
+                ${renderMovingAverages()}
+                ${renderWeightRange()}
+                ${renderTagImpact()}
+                ${renderBestPeriod()}
+                ${renderWeeklyFrequency()}
+                ${renderWeightVariance()}
+                ${renderWeightPlateau()}
+                ${renderRecordGaps()}
+                ${renderSeasonality()}
+                ${renderWeightDistribution()}
+                ${renderDayOfWeekChange()}
+                ${renderPersonalRecords()}
+                ${renderWeightRegression()}
+                ${renderBMIHistory()}
+                ${renderWeightHeatmap()}
+                ${renderProgressSummary()}
+                ${renderMilestoneTimeline()}
+                ${renderVolatilityIndex()}
+                ${renderPeriodComparison()}
+                ${renderBodyComposition()}
+                ${renderShareSummary()}
+                ${renderDuplicateCheck()}
+                ${renderNoteTagStats()}
+              </div>
+              ` : ""}
+            </div>
+            ` : ""}
           </section>
 
           <!-- Monthly Stats Panel -->
@@ -23432,13 +25571,13 @@ function render() {
             ${state.records.length > 3 ? `
             <div class="record-search">
               <input id="recordSearch" type="search" placeholder="${escapeAttr(t("records.search"))}" value="${escapeAttr(recordSearchQuery)}" autocomplete="off" aria-label="${t("records.search")}" />
-              ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : ""}
+              ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : `<span class="helper hint-small desktop-only">\u2318K</span>`}
             </div>
             <div class="record-date-range">
               <div class="helper hint-small">${t("records.dateRange")}</div>
               <div class="date-range-fields">
-                <label>${t("records.from")}<input id="dateRangeFrom" type="date" value="${escapeAttr(recordDateFrom)}" /></label>
-                <label>${t("records.to")}<input id="dateRangeTo" type="date" value="${escapeAttr(recordDateTo)}" /></label>
+                <label>${t("records.from")}<input id="dateRangeFrom" type="date" value="${escapeAttr(recordDateFrom)}" max="${todayLocal()}" /></label>
+                <label>${t("records.to")}<input id="dateRangeTo" type="date" value="${escapeAttr(recordDateTo)}" max="${todayLocal()}" /></label>
                 ${recordDateFrom || recordDateTo ? `<button type="button" class="btn ghost" data-action="clear-date-range">${t("records.clearRange")}</button>` : ""}
               </div>
             </div>` : ""}
@@ -23456,6 +25595,7 @@ function render() {
             </div>
             ${renderSourceBreakdown()}
             ${renderRecordingTime()}
+            ${renderDataHealth()}
             <div class="export-grid">
               <button type="button" class="btn secondary" data-action="export-excel">\u{1F4CA} ${t("export.excel")}</button>
               <button type="button" class="btn secondary" data-action="export-csv">\u{1F4C4} ${t("export.csv")}</button>
@@ -23657,6 +25797,7 @@ function render() {
   `;
     bindEvents();
     drawChart();
+    window.scrollTo(0, scrollY);
     if (rainbowVisible) {
       spawnConfetti();
       if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
@@ -23674,10 +25815,10 @@ function render() {
   } catch (e) {
     console.error("[WeightRainbow] Render error:", e);
     app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
-      <h2 style="color:#dc2626;">\u63CF\u753B\u30A8\u30E9\u30FC / Render Error</h2>
+      <h2 style="color:#dc2626;">${t("error.render")}</h2>
       <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
       <p style="color:#999;font-size:0.8rem;">${e.stack ? e.stack.split("\n").slice(0, 3).map((l) => escHtml(l)).join("<br>") : ""}</p>
-      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
     </div>`;
   }
 }
@@ -23701,7 +25842,7 @@ function renderMonthlyStats() {
     const changeCls = m.change < 0 ? "loss" : m.change > 0 ? "gain" : "neutral";
     return `
             <div class="monthly-stats-row">
-              <div class="monthly-label">${(/* @__PURE__ */ new Date(m.month + "-01")).toLocaleDateString(state.settings.language === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "short" })}</div>
+              <div class="monthly-label">${(/* @__PURE__ */ new Date(m.month + "-01T00:00:00")).toLocaleDateString(state.settings.language === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "short" })}</div>
               <div class="monthly-values">
                 <span title="${t("summary.avg")}">${t("summary.avg")}: ${m.avg.toFixed(1)}kg</span>
                 <span title="${t("summary.min")}">\u2193${m.min.toFixed(1)}</span>
@@ -23750,10 +25891,10 @@ function renderCalendar() {
     if (hasRecord && change !== void 0) {
       if (change < 0) {
         const alpha = Math.min(50, Math.round(Math.abs(change) * 30 + 15));
-        bg = `background: color-mix(in srgb, var(--ok, #10b981) ${alpha}%, transparent)`;
+        bg = `background: color-mix(in srgb, var(--ok) ${alpha}%, transparent)`;
       } else if (change > 0) {
         const alpha = Math.min(50, Math.round(change * 30 + 15));
-        bg = `background: color-mix(in srgb, var(--warn, #f59e0b) ${alpha}%, transparent)`;
+        bg = `background: color-mix(in srgb, var(--warn) ${alpha}%, transparent)`;
       } else {
         bg = `background: color-mix(in srgb, var(--accent) 20%, transparent)`;
       }
@@ -23762,9 +25903,9 @@ function renderCalendar() {
       const intensity = d.intensity !== null ? d.intensity : 0;
       bg = `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)`;
     }
-    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${d.wt}kg${changeLabel}` : ""}">
+    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${Number(d.wt).toFixed(1)}kg${changeLabel}` : ""}"${hasRecord ? ` aria-label="${d.day}${t("calendar.dayUnit")} ${Number(d.wt).toFixed(1)}kg${changeLabel}"` : ""}>
       <span class="calendar-day">${d.day}</span>
-      ${hasRecord ? `<span class="calendar-wt">${d.wt}</span>` : ""}
+      ${hasRecord ? `<span class="calendar-wt">${Number(d.wt).toFixed(1)}</span>` : ""}
     </div>`;
   }
   html += `</div>`;
@@ -23826,6 +25967,895 @@ function renderSourceBreakdown() {
     </div>
   `;
 }
+function renderWeekdayWeekend() {
+  const wdwe = calcWeekdayVsWeekend(state.records);
+  if (!wdwe) return "";
+  const diffCls = wdwe.diff > 0 ? "positive" : wdwe.diff < 0 ? "negative" : "";
+  return `
+    <div class="wdwe-section">
+      <div class="helper">${t("wdwe.title")}</div>
+      <div class="wdwe-display">
+        <div class="wdwe-col">
+          <div class="wdwe-label">${t("wdwe.weekday")}</div>
+          <div class="wdwe-value">${wdwe.weekdayAvg.toFixed(1)}kg</div>
+          <div class="hint-small">${wdwe.weekdayCount} ${t("chart.records")}</div>
+        </div>
+        <div class="wdwe-vs">${t("wdwe.vs")}</div>
+        <div class="wdwe-col">
+          <div class="wdwe-label">${t("wdwe.weekend")}</div>
+          <div class="wdwe-value">${wdwe.weekendAvg.toFixed(1)}kg</div>
+          <div class="hint-small">${wdwe.weekendCount} ${t("chart.records")}</div>
+        </div>
+        <div class="wdwe-col">
+          <div class="wdwe-label">${t("wdwe.diff")}</div>
+          <div class="wdwe-value ${diffCls}">${wdwe.diff > 0 ? "+" : ""}${wdwe.diff.toFixed(1)}kg</div>
+        </div>
+      </div>
+      <div class="helper hint-small" style="margin-top:4px;">${t("wdwe.heavier." + wdwe.heavier)}</div>
+    </div>
+  `;
+}
+function renderDataHealth() {
+  const health = calcDataHealth(state.records);
+  if (!health) return "";
+  const level = health.score >= 80 ? "high" : health.score >= 50 ? "medium" : "low";
+  const issueHtml = health.issues.length === 0 ? `<div class="helper hint-small" style="color:var(--ok);font-weight:600;">${t("health.perfect")}</div>` : health.issues.slice(0, 3).map((issue) => {
+    if (issue.type === "gap") return `<div class="health-issue">\u{1F4C5} ${t("health.gap").replace("{days}", issue.days).replace("{from}", issue.from).replace("{to}", issue.to)}</div>`;
+    if (issue.type === "outlier") return `<div class="health-issue">\u{1F4CA} ${t("health.outlier").replace("{date}", issue.date).replace("{weight}", issue.weight).replace("{expected}", issue.expected)}</div>`;
+    if (issue.type === "noBMI") return `<div class="health-issue">\u{1F4CF} ${t("health.noBMI")}</div>`;
+    return "";
+  }).join("");
+  return `
+    <div class="health-section">
+      <div class="helper">${t("health.title")}</div>
+      <div class="health-display">
+        <div class="health-score ${level}" role="meter" aria-valuenow="${health.score}" aria-valuemin="0" aria-valuemax="100" aria-label="${t("health.title")}">${health.score}</div>
+        <div class="health-details">
+          <div class="helper hint-small">${t("health.score").replace("{score}", health.score)}</div>
+          ${issueHtml}
+        </div>
+      </div>
+    </div>
+  `;
+}
+function renderWeightRange() {
+  const range = calcWeightRangePosition(state.records);
+  if (!range) return "";
+  const zoneCls = range.zone === "low" ? "range-low" : range.zone === "high" ? "range-high" : "range-mid";
+  return `
+    <div class="range-section">
+      <div class="helper">${t("range.title")}</div>
+      <div class="range-bar-container">
+        <div class="range-bar-track" role="meter" aria-valuenow="${range.position}" aria-valuemin="0" aria-valuemax="100" aria-label="${t("range.title")}">
+          <div class="range-bar-fill" style="width:${range.position}%"></div>
+          <div class="range-bar-marker" style="left:${range.position}%"></div>
+        </div>
+        <div class="range-labels">
+          <span class="hint-small">${t("range.min").replace("{weight}", range.min.toFixed(1))}</span>
+          <span class="hint-small">${t("range.max").replace("{weight}", range.max.toFixed(1))}</span>
+        </div>
+      </div>
+      <div class="helper hint-small ${zoneCls}">${t("range.position").replace("{pct}", range.position)}</div>
+      <div class="helper hint-small" style="margin-top:2px;">${t("range." + range.zone)}</div>
+    </div>
+  `;
+}
+function renderTagImpact() {
+  const impact = calcTagImpact(state.records);
+  if (!impact) return "";
+  const rows = impact.map((item) => {
+    const sign = item.avgChange > 0 ? "+" : "";
+    const cls = item.avgChange > 0.05 ? "tag-gain" : item.avgChange < -0.05 ? "tag-loss" : "tag-neutral";
+    return `
+      <div class="tag-impact-row ${cls}">
+        <span class="tag-impact-tag">#${t("note.tag." + item.tag)}</span>
+        <span class="tag-impact-change">${sign}${item.avgChange.toFixed(2)}kg</span>
+        <span class="hint-small">${t("tagImpact.count").replace("{count}", item.count)}</span>
+      </div>`;
+  }).join("");
+  return `
+    <div class="tag-impact-section">
+      <div class="helper">${t("tagImpact.title")}</div>
+      <div class="helper hint-small" style="margin-bottom:6px;">${t("tagImpact.hint")}</div>
+      ${rows}
+    </div>
+  `;
+}
+function renderBestPeriod() {
+  const best = calcBestPeriod(state.records);
+  if (!best) return "";
+  const renderRow = (key, data) => {
+    if (!data || data.change >= 0) return "";
+    return `
+      <div class="best-period-row">
+        <div class="best-period-label">${t("bestPeriod." + key)}</div>
+        <div class="best-period-change">${t("bestPeriod.change").replace("{change}", data.change.toFixed(1))}</div>
+        <div class="hint-small">${t("bestPeriod.range").replace("{from}", data.from).replace("{to}", data.to)}</div>
+        <div class="hint-small">${t("bestPeriod.weight").replace("{start}", data.startWeight.toFixed(1)).replace("{end}", data.endWeight.toFixed(1))}</div>
+      </div>`;
+  };
+  const weekRow = renderRow("week", best[7]);
+  const monthRow = renderRow("month", best[30]);
+  if (!weekRow && !monthRow) return "";
+  return `
+    <div class="best-period-section">
+      <div class="helper">${t("bestPeriod.title")}</div>
+      ${weekRow}${monthRow}
+    </div>
+  `;
+}
+function renderWeeklyFrequency() {
+  const freq = calcWeeklyFrequency(state.records);
+  if (!freq) return "";
+  const hasPerfect = freq.buckets.some((b) => b.count >= 7);
+  const bars = freq.buckets.map((b) => {
+    const pct = Math.round(b.count / freq.maxCount * 100);
+    return `<div class="freq-bar-col"><div class="freq-bar" style="height:${Math.max(pct, 4)}%">${b.count}</div></div>`;
+  }).join("");
+  return `
+    <div class="freq-section">
+      <div class="helper">${t("freq.title")}</div>
+      <div class="freq-chart">${bars}</div>
+      <div class="helper hint-small">${t("freq.avg").replace("{avg}", freq.avgPerWeek)} \xB7 ${t("freq.hint").replace("{weeks}", freq.weeks)}</div>
+      ${hasPerfect ? `<div class="helper hint-small" style="color:var(--ok);font-weight:600;margin-top:2px;">${t("freq.perfect")}</div>` : ""}
+    </div>
+  `;
+}
+function renderWeightVelocity() {
+  const vel = calcWeightVelocity(state.records);
+  if (!vel) return "";
+  const renderPeriod = (key, data) => {
+    if (!data) return "";
+    const status = data.dailyRate < -0.01 ? "losing" : data.dailyRate > 0.01 ? "gaining" : "stable";
+    const statusCls = status === "losing" ? "vel-loss" : status === "gaining" ? "vel-gain" : "vel-stable";
+    return `
+      <div class="vel-period">
+        <div class="vel-label">${t("velocity." + key)}</div>
+        <div class="vel-rate ${statusCls}">${t("velocity.daily").replace("{rate}", (data.dailyRate > 0 ? "+" : "") + data.dailyRate.toFixed(2))}</div>
+        <div class="hint-small">${t("velocity.projection").replace("{amount}", (data.monthlyProjection > 0 ? "+" : "") + data.monthlyProjection.toFixed(1))}</div>
+        <div class="hint-small vel-status">${t("velocity." + status)}</div>
+      </div>`;
+  };
+  return `
+    <div class="vel-section">
+      <div class="helper">${t("velocity.title")}</div>
+      <div class="vel-display">
+        ${renderPeriod("week", vel.week)}
+        ${renderPeriod("month", vel.month)}
+      </div>
+    </div>
+  `;
+}
+function renderWeightVariance() {
+  const v = calcWeightVariance(state.records);
+  if (!v) return "";
+  const levelColor = v.level === "veryLow" || v.level === "low" ? "var(--ok)" : v.level === "moderate" ? "var(--warn)" : "var(--error)";
+  return `
+    <div class="variance-section">
+      <div class="helper">${t("variance.title")}</div>
+      <div class="variance-badge" style="color:${levelColor};font-weight:700;">${t("variance." + v.level)}</div>
+      <div class="variance-stats">
+        <span>${t("variance.cv").replace("{cv}", v.cv)}</span>
+        <span>${t("variance.swing").replace("{swing}", v.maxSwing)}</span>
+        <span>${t("variance.daily").replace("{avg}", v.avgDailySwing)}</span>
+      </div>
+      <div class="helper hint-small">${t("variance.hint").replace("{count}", v.count)}</div>
+    </div>
+  `;
+}
+function renderWeightPlateau() {
+  const p = calcWeightPlateau(state.records);
+  if (!p) return "";
+  const statusColor = p.isPlateau ? "var(--warn)" : "var(--ok)";
+  const statusIcon = p.isPlateau ? "\u23F8" : "\u{1F4C8}";
+  return `
+    <div class="plateau-section">
+      <div class="helper">${t("plateau.title")}</div>
+      <div class="plateau-status" style="color:${statusColor};font-weight:700;">
+        ${statusIcon} ${p.isPlateau ? t("plateau.detected") : t("plateau.notDetected")}
+      </div>
+      <div class="plateau-stats">
+        <span>${t("plateau.days").replace("{days}", p.days)}</span>
+        <span>${t("plateau.range").replace("{range}", p.range)}</span>
+        <span>${t("plateau.change").replace("{change}", p.recentChange)}</span>
+      </div>
+      ${p.previousRate !== null ? `<div class="plateau-prev">${t("plateau.prevRate").replace("{rate}", p.previousRate)}</div>` : ""}
+      <div class="helper hint-small">${t("plateau.hint")}</div>
+    </div>
+  `;
+}
+function renderRecordGaps() {
+  const g = calcRecordGaps(state.records);
+  if (!g) return "";
+  const gapsList = g.gaps.length ? g.gaps.map((gap) => `<div class="gaps-item">${t("gaps.period").replace("{from}", gap.from).replace("{to}", gap.to).replace("{days}", gap.days)}</div>`).join("") : `<div class="gaps-perfect">${t("gaps.perfect")}</div>`;
+  return `
+    <div class="gaps-section">
+      <div class="helper">${t("gaps.title")}</div>
+      <div class="gaps-summary">
+        <span>${t("gaps.coverage").replace("{pct}", g.coverage)}</span>
+        <span>${t("gaps.longest").replace("{days}", g.longestGap)}</span>
+        <span>${t("gaps.total").replace("{count}", g.totalGaps)}</span>
+      </div>
+      <div class="gaps-list">${gapsList}</div>
+      <div class="helper hint-small">${t("gaps.hint")}</div>
+    </div>
+  `;
+}
+function renderCalorieEstimate() {
+  const c = calcCalorieEstimate(state.records);
+  if (!c) return "";
+  const renderPeriod = (data, labelKey) => {
+    if (!data) return "";
+    const status = data.dailyKcal > 50 ? "surplus" : data.dailyKcal < -50 ? "deficit" : "balanced";
+    const color = status === "deficit" ? "var(--ok)" : status === "surplus" ? "var(--warn)" : "var(--text)";
+    return `
+      <div class="calorie-card">
+        <div class="calorie-label">${t("calorie." + labelKey)}</div>
+        <div class="calorie-status" style="color:${color};font-weight:600;">${t("calorie." + status)}</div>
+        <div class="calorie-value">${t("calorie.daily").replace("{kcal}", Math.abs(data.dailyKcal))}</div>
+        <div class="calorie-total">${t("calorie.total").replace("{kcal}", Math.abs(data.totalKcal))}</div>
+      </div>`;
+  };
+  return `
+    <div class="calorie-section">
+      <div class="helper">${t("calorie.title")}</div>
+      <div class="calorie-cards">
+        ${renderPeriod(c.week, "week")}
+        ${renderPeriod(c.month, "month")}
+      </div>
+      <div class="helper hint-small">${t("calorie.hint")}</div>
+    </div>
+  `;
+}
+function renderMomentumScore() {
+  const m = calcMomentumScore(state.records, state.settings.goalWeight);
+  if (!m) return "";
+  const color = m.level === "great" ? "var(--ok)" : m.level === "good" ? "var(--accent)" : m.level === "fair" ? "var(--warn)" : "var(--error)";
+  const pct = m.score;
+  return `
+    <div class="momentum-section">
+      <div class="helper">${t("momentum.title")}</div>
+      <div class="momentum-bar-track">
+        <div class="momentum-bar-fill" style="width:${pct}%;background:${color};"></div>
+      </div>
+      <div class="momentum-info">
+        <span class="momentum-score" style="color:${color};font-weight:700;">${t("momentum.score").replace("{score}", m.score)}</span>
+        <span class="momentum-label" style="color:${color};">${t("momentum." + m.level)}</span>
+      </div>
+      <div class="helper hint-small">${t("momentum.hint")}</div>
+    </div>
+  `;
+}
+function renderNextMilestones() {
+  const ms = calcNextMilestones(state.records, state.profile.heightCm);
+  if (!ms) return "";
+  const items = ms.map((m) => {
+    const key = `milestone.next.${m.type}`;
+    let text = t(key).replace("{target}", m.target).replace("{remaining}", m.remaining);
+    if (m.bmiValue) text = text.replace("{bmi}", m.bmiValue);
+    return `<div class="next-milestone-item">\u{1F3AF} ${text}</div>`;
+  }).join("");
+  return `
+    <div class="next-milestone-section">
+      <div class="helper">${t("milestone.next.title")}</div>
+      ${items}
+      <div class="helper hint-small">${t("milestone.next.hint")}</div>
+    </div>
+  `;
+}
+function renderSeasonality() {
+  const s = calcSeasonality(state.records);
+  if (!s) return "";
+  const bars = s.monthAvgs.map((avg, i) => {
+    if (avg === null) return `<div class="season-bar-wrap"><div class="season-bar-label">${t("season.month." + (i + 1))}</div><div class="season-bar" style="height:0"></div></div>`;
+    const diff = avg - s.overallAvg;
+    const pct = Math.min(100, Math.max(5, 50 + diff * 10));
+    const color = i === s.lightestMonth ? "var(--ok)" : i === s.heaviestMonth ? "var(--warn)" : "var(--accent)";
+    return `<div class="season-bar-wrap"><div class="season-bar" style="height:${pct}%;background:${color};" title="${avg}kg"></div><div class="season-bar-label">${t("season.month." + (i + 1))}</div></div>`;
+  }).join("");
+  return `
+    <div class="season-section">
+      <div class="helper">${t("season.title")}</div>
+      <div class="season-chart">${bars}</div>
+      <div class="season-info">
+        <div>${t("season.lightest").replace("{month}", s.lightestMonth + 1).replace("{avg}", s.monthAvgs[s.lightestMonth])}</div>
+        <div>${t("season.heaviest").replace("{month}", s.heaviestMonth + 1).replace("{avg}", s.monthAvgs[s.heaviestMonth])}</div>
+        <div>${t("season.range").replace("{range}", s.seasonalRange)}</div>
+      </div>
+      <div class="helper hint-small">${t("season.hint")}</div>
+    </div>
+  `;
+}
+function renderWeightDistribution() {
+  const d = calcWeightDistribution(state.records);
+  if (!d) return "";
+  const bars = d.buckets.map((b, i) => {
+    const pct = d.maxCount > 0 ? Math.round(b.count / d.maxCount * 100) : 0;
+    const isCurrent = i === d.latestBucket;
+    const isMode = i === d.modeBucket;
+    const color = isCurrent ? "var(--accent)" : isMode ? "var(--ok)" : "color-mix(in srgb, var(--accent) 40%, transparent)";
+    return `<div class="dist-bar-wrap">
+      ${isCurrent ? `<div class="dist-current-marker">${t("dist.current")}</div>` : ""}
+      <div class="dist-bar" style="height:${Math.max(2, pct)}%;background:${color};" title="${b.start}-${b.end}kg: ${b.count}"></div>
+      <div class="dist-bar-label">${b.start}</div>
+    </div>`;
+  }).join("");
+  return `
+    <div class="dist-section">
+      <div class="helper">${t("dist.title")}</div>
+      <div class="dist-chart">${bars}</div>
+      <div class="dist-info">${t("dist.mode").replace("{range}", d.modeRange).replace("{count}", d.buckets[d.modeBucket].count)}</div>
+      <div class="helper hint-small">${t("dist.hint")}</div>
+    </div>
+  `;
+}
+function renderDayOfWeekChange() {
+  const d = calcDayOfWeekChange(state.records);
+  if (!d) return "";
+  const dayKeys = [0, 1, 2, 3, 4, 5, 6];
+  const maxAbs = Math.max(...d.avgs.filter((a) => a !== null).map((a) => Math.abs(a)), 0.1);
+  const bars = dayKeys.map((i) => {
+    const avg = d.avgs[i];
+    if (avg === null) return `<div class="dow-change-col"><div class="dow-change-label">${t("day." + i)}</div></div>`;
+    const pct = Math.round(Math.abs(avg) / maxAbs * 50);
+    const isGain = avg > 0.01;
+    const isLoss = avg < -0.01;
+    const color = isLoss ? "var(--ok)" : isGain ? "var(--warn)" : "var(--text)";
+    const isBest = i === d.bestDay;
+    const isWorst = i === d.worstDay;
+    return `<div class="dow-change-col ${isBest ? "best" : ""} ${isWorst ? "worst" : ""}">
+      <div class="dow-change-val" style="color:${color};">${avg > 0 ? "+" : ""}${avg}</div>
+      <div class="dow-change-bar-track"><div class="dow-change-bar" style="height:${pct}%;background:${color};"></div></div>
+      <div class="dow-change-label">${t("day." + i)}</div>
+    </div>`;
+  }).join("");
+  return `
+    <div class="dow-change-section">
+      <div class="helper">${t("dowChange.title")}</div>
+      <div class="dow-change-chart">${bars}</div>
+      <div class="dow-change-info">
+        ${d.bestDay !== null ? `<div>${t("dowChange.best").replace("{day}", t("day." + d.bestDay)).replace("{avg}", d.avgs[d.bestDay])}</div>` : ""}
+        ${d.worstDay !== null ? `<div>${t("dowChange.worst").replace("{day}", t("day." + d.worstDay)).replace("{avg}", d.avgs[d.worstDay])}</div>` : ""}
+      </div>
+      <div class="helper hint-small">${t("dowChange.hint")}</div>
+    </div>
+  `;
+}
+function renderPersonalRecords() {
+  const pr = calcPersonalRecords(state.records);
+  if (!pr) return "";
+  const items = [];
+  items.push(`<div class="pr-item">\u{1F3C6} ${t("pr.allTimeLow").replace("{weight}", pr.allTimeLow).replace("{date}", pr.allTimeLowDate)}</div>`);
+  if (pr.biggestDrop > 0) {
+    items.push(`<div class="pr-item">\u2B07\uFE0F ${t("pr.biggestDrop").replace("{drop}", pr.biggestDrop).replace("{date}", pr.biggestDropDate)}</div>`);
+  }
+  if (pr.best7DayChange !== null) {
+    items.push(`<div class="pr-item">\u{1F4C5} ${t("pr.best7").replace("{change}", pr.best7DayChange).replace("{from}", pr.best7DayFrom)}</div>`);
+  }
+  items.push(`<div class="pr-item">\u{1F4CA} ${t("pr.totalChange").replace("{change}", pr.totalChange > 0 ? "+" + pr.totalChange : pr.totalChange)}</div>`);
+  items.push(`<div class="pr-item">\u{1F4DD} ${t("pr.totalRecords").replace("{count}", pr.totalRecords)}</div>`);
+  return `
+    <div class="pr-section">
+      <div class="helper">${t("pr.title")}</div>
+      ${items.join("")}
+      <div class="helper hint-small">${t("pr.hint")}</div>
+    </div>
+  `;
+}
+function renderWeightRegression() {
+  const reg = calcWeightRegression(state.records);
+  if (!reg) return "";
+  const dirColor = reg.direction === "losing" ? "var(--ok)" : reg.direction === "gaining" ? "var(--warn)" : "var(--text)";
+  const fitColor = reg.fit === "strong" ? "var(--ok)" : reg.fit === "moderate" ? "var(--warn)" : "var(--text)";
+  const r2Pct = Math.round(reg.r2 * 100);
+  return `
+    <div class="regression-section">
+      <div class="helper">${t("regression.title")}</div>
+      <div class="regression-main">
+        <span class="regression-dir" style="color:${dirColor};font-weight:700;">${t("regression." + reg.direction)}</span>
+        <span class="regression-rate">${t("regression.rate").replace("{rate}", reg.weeklyRate)}</span>
+      </div>
+      <div class="regression-r2">
+        <div class="regression-r2-bar-track">
+          <div class="regression-r2-bar-fill" style="width:${r2Pct}%;background:${fitColor};"></div>
+        </div>
+        <div class="regression-r2-info">
+          <span>${t("regression.r2").replace("{r2}", reg.r2)}</span>
+          <span style="color:${fitColor};">${t("regression." + reg.fit)}</span>
+        </div>
+      </div>
+      <div class="helper hint-small">${t("regression.hint")}</div>
+    </div>
+  `;
+}
+function renderBMIHistory() {
+  const bh = calcBMIHistory(state.records);
+  if (!bh) return "";
+  const zoneColors = { under: "var(--accent-3)", normal: "var(--ok)", over: "var(--warn)", obese: "var(--error)" };
+  const zoneBar = ["under", "normal", "over", "obese"].filter((z) => bh.zones[z] > 0).map((z) => `<div class="bmi-hist-seg" style="width:${bh.zones[z]}%;background:${zoneColors[z]};" title="${t("bmi." + z)} ${bh.zones[z]}%"></div>`).join("");
+  const changeStr = bh.change > 0 ? "+" + bh.change : String(bh.change);
+  return `
+    <div class="bmi-hist-section">
+      <div class="helper">${t("bmiHist.title")}</div>
+      <div class="bmi-hist-stats">
+        <span>${t("bmiHist.first").replace("{bmi}", bh.first)}</span>
+        <span>${t("bmiHist.latest").replace("{bmi}", bh.latest)}</span>
+        <span>${t("bmiHist.change").replace("{change}", changeStr)}</span>
+      </div>
+      <div class="bmi-hist-bar">${zoneBar}</div>
+      <div class="bmi-hist-detail">
+        <span>${t("bmiHist.range").replace("{min}", bh.min).replace("{max}", bh.max)}</span>
+        <span>${t("bmiHist.avg").replace("{avg}", bh.avg)}</span>
+      </div>
+      ${bh.improving ? `<div class="bmi-hist-improving">${t("bmiHist.improving")}</div>` : ""}
+      <div class="helper hint-small">${t("bmiHist.hint")}</div>
+    </div>
+  `;
+}
+function renderWeightHeatmap() {
+  const hm = calcWeightHeatmap(state.records);
+  if (!hm) return "";
+  const dayLabels = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].map((d) => t("recCal." + d));
+  const rows = dayLabels.map((label, dayIdx) => {
+    const cells = hm.weeks.map((week) => {
+      const day = week[dayIdx];
+      if (day.isFuture) return `<div class="heatmap-cell" data-level="0"></div>`;
+      const dir = day.direction || "";
+      const title = day.weight != null ? `${day.date}: ${Number(day.weight).toFixed(1)}kg${day.change != null ? ` (${day.change > 0 ? "+" : ""}${day.change.toFixed(1)}kg)` : ""}` : `${day.date}: ${t("heatmap.noData")}`;
+      return `<div class="heatmap-cell ${dir}" data-level="${day.level}" title="${title}"></div>`;
+    }).join("");
+    return `<div class="heatmap-row"><span class="heatmap-label">${label}</span>${cells}</div>`;
+  }).join("");
+  return `
+    <div class="heatmap-section">
+      <div class="helper">${t("heatmap.title")}</div>
+      <div class="heatmap-grid">${rows}</div>
+      <div class="heatmap-legend">
+        <span class="heatmap-legend-text">${t("heatmap.low")}</span>
+        <div class="heatmap-cell" data-level="1"></div>
+        <div class="heatmap-cell" data-level="2"></div>
+        <div class="heatmap-cell" data-level="3"></div>
+        <div class="heatmap-cell" data-level="4"></div>
+        <span class="heatmap-legend-text">${t("heatmap.high")}</span>
+      </div>
+      <div class="heatmap-legend" style="margin-top:2px;">
+        <span class="heatmap-legend-text loss-text">${t("heatmap.loss")}</span>
+        <span class="heatmap-legend-text gain-text">${t("heatmap.gain")}</span>
+      </div>
+      <div class="helper hint-small">${t("heatmap.hint").replace("{days}", hm.daysWithData)}</div>
+    </div>
+  `;
+}
+function renderStreakRewards() {
+  const sr = calcStreakRewards(state.records);
+  if (!sr || sr.streak < 1) return "";
+  const icons = { starter: "\u{1F331}", beginner: "\u{1F33F}", steady: "\u{1F333}", committed: "\u{1F4AA}", dedicated: "\u{1F525}", expert: "\u2B50", master: "\u{1F451}", legend: "\u{1F3C6}" };
+  const icon = icons[sr.level] || "\u{1F331}";
+  const pct = sr.next ? Math.round(sr.streak / sr.next * 100) : 100;
+  return `
+    <div class="streak-reward-section">
+      <div class="helper">${t("streakReward.title")}</div>
+      <div class="streak-reward-main">
+        <span class="streak-reward-icon">${icon}</span>
+        <div class="streak-reward-info">
+          <div class="streak-reward-badge">${t("streakReward." + sr.level)}</div>
+          <div class="streak-reward-days">${t("streakReward.days").replace("{streak}", sr.streak)}</div>
+        </div>
+      </div>
+      <div class="streak-reward-progress-track">
+        <div class="streak-reward-progress-fill" style="width:${pct}%"></div>
+      </div>
+      ${sr.next ? `<div class="streak-reward-next">${t("streakReward.next").replace("{next}", sr.next).replace("{remaining}", sr.nextRemaining)}</div>` : ""}
+      <div class="helper hint-small">${t("streakReward.hint")}</div>
+    </div>
+  `;
+}
+function renderWeightConfidence() {
+  const fc = calcWeightConfidence(state.records);
+  if (!fc) return "";
+  const confColors = { high: "var(--ok)", medium: "var(--warn)", low: "var(--error)" };
+  const confColor = confColors[fc.confidence] || confColors.low;
+  const rows = fc.forecasts.map((f) => `
+    <div class="forecast-row">
+      <span class="forecast-label">${t("forecast.days").replace("{days}", f.days)}</span>
+      <span class="forecast-value">${t("forecast.predicted").replace("{wt}", f.predicted)}</span>
+      <span class="forecast-range">${t("forecast.range").replace("{low}", f.low).replace("{high}", f.high)}</span>
+    </div>
+  `).join("");
+  return `
+    <div class="forecast-section">
+      <div class="helper">${t("forecast.title")}</div>
+      <div class="forecast-meta">
+        <span class="forecast-rate">${t("forecast.rate").replace("{rate}", fc.weeklyRate > 0 ? "+" + fc.weeklyRate : String(fc.weeklyRate))}</span>
+        <span class="forecast-conf" style="color:${confColor};">${t("forecast.confidence")}: ${t("forecast." + fc.confidence)}</span>
+      </div>
+      <div class="forecast-table">${rows}</div>
+      <div class="helper hint-small">${t("forecast.hint").replace("{n}", fc.dataPoints)}</div>
+    </div>
+  `;
+}
+function renderProgressSummary() {
+  const ps = calcProgressSummary(state.records);
+  if (!ps) return "";
+  const trendColors = { improving: "var(--ok)", gaining: "var(--error)", stable: "var(--accent-3)" };
+  const trendColor = trendColors[ps.trend] || trendColors.stable;
+  const changeStr = ps.change > 0 ? "+" + ps.change : String(ps.change);
+  const totalStr = ps.totalChange > 0 ? "+" + ps.totalChange : String(ps.totalChange);
+  return `
+    <div class="progress-section">
+      <div class="helper">${t("progress.title")}</div>
+      <div class="progress-period">${t("progress.period").replace("{from}", ps.firstDate).replace("{to}", ps.lastDate).replace("{days}", ps.totalDays).replace("{count}", ps.recordCount)}</div>
+      <div class="progress-compare">
+        <div class="progress-half">
+          <span class="progress-half-label">${t("progress.firstHalf")}</span>
+          <span class="progress-half-value">${ps.firstHalfAvg}kg</span>
+        </div>
+        <div class="progress-arrow">${ps.change < 0 ? "\u2193" : ps.change > 0 ? "\u2191" : "\u2192"}</div>
+        <div class="progress-half">
+          <span class="progress-half-label">${t("progress.secondHalf")}</span>
+          <span class="progress-half-value">${ps.secondHalfAvg}kg</span>
+        </div>
+      </div>
+      <div class="progress-stats">
+        <span>${t("progress.change")}: <strong style="color:${trendColor}">${changeStr}kg</strong></span>
+        <span>${t("progress.totalChange").replace("{change}", totalStr)}</span>
+      </div>
+      <div class="progress-trend" style="color:${trendColor}">${t("progress." + ps.trend)}</div>
+      <div class="progress-stability">${ps.moreStable ? t("progress.moreStable") : t("progress.lessStable")}</div>
+    </div>
+  `;
+}
+function renderMilestoneTimeline() {
+  const tl = calcMilestoneTimeline(state.records);
+  if (!tl || tl.events.length === 0) return "";
+  const icons = { low: "\u2B07\uFE0F", mark: "\u{1F3AF}", bmi: "\u{1F4CA}" };
+  const items = tl.events.map((e) => {
+    let label = "";
+    if (e.type === "low") label = t("timeline.low").replace("{wt}", e.weight);
+    else if (e.type === "mark") label = t("timeline.mark").replace("{mark}", e.mark);
+    else if (e.type === "bmi") {
+      label = e.to === "normal" ? t("timeline.bmi.normal") : t("timeline.bmi.change").replace("{from}", e.from).replace("{to}", e.to);
+    }
+    return `<div class="timeline-item"><span class="timeline-icon">${icons[e.type]}</span><div class="timeline-content"><span class="timeline-date">${e.date}</span><span class="timeline-label">${label}</span></div></div>`;
+  }).join("");
+  return `
+    <div class="timeline-section">
+      <div class="helper">${t("timeline.title")}</div>
+      <div class="timeline-list">${items}</div>
+      <div class="helper hint-small">${t("timeline.hint").replace("{count}", tl.events.length)}</div>
+    </div>
+  `;
+}
+function renderVolatilityIndex() {
+  const vi = calcVolatilityIndex(state.records);
+  if (!vi) return "";
+  const levelColors = { low: "var(--ok)", moderate: "var(--warn)", high: "var(--error)" };
+  const color = levelColors[vi.level] || levelColors.moderate;
+  const pct = Math.min(100, Math.round(vi.overall / 1.2 * 100));
+  return `
+    <div class="volatility-section">
+      <div class="helper">${t("volatility.title")}</div>
+      <div class="volatility-badge" style="color:${color}">${t("volatility." + vi.level)}</div>
+      <div class="volatility-bar-track">
+        <div class="volatility-bar-fill" style="width:${pct}%;background:${color}"></div>
+      </div>
+      <div class="volatility-stats">
+        <span>${t("volatility.overall").replace("{val}", vi.overall)}</span>
+        <span>${t("volatility.recent").replace("{val}", vi.recent)}</span>
+        <span>${t("volatility.max").replace("{val}", vi.maxSwing)}</span>
+      </div>
+      <div class="volatility-trend">${t("volatility." + vi.trend)}</div>
+      <div class="helper hint-small">${t("volatility.hint")}</div>
+    </div>
+  `;
+}
+function renderPeriodComparison() {
+  const pc = calcPeriodComparison(state.records);
+  if (!pc) return "";
+  function renderPair(label, period, curLabel, prevLabel) {
+    if (!period.current && !period.previous) return "";
+    const cur = period.current;
+    const prev = period.previous;
+    const diffStr = period.avgDiff != null ? period.avgDiff > 0 ? "+" + period.avgDiff : String(period.avgDiff) : "\u2014";
+    const diffColor = period.avgDiff != null ? period.avgDiff < 0 ? "var(--ok)" : period.avgDiff > 0 ? "var(--error)" : "var(--text)" : "var(--text)";
+    return `
+      <div class="compare-pair">
+        <div class="compare-pair-title">${label}</div>
+        <div class="compare-row">
+          <div class="compare-cell">
+            <span class="compare-label">${curLabel}</span>
+            <span class="compare-value">${cur ? t("compare.avg").replace("{val}", cur.avg) : t("compare.noData")}</span>
+            ${cur ? `<span class="compare-count">${t("compare.records").replace("{n}", cur.count)}</span>` : ""}
+          </div>
+          <div class="compare-cell">
+            <span class="compare-label">${prevLabel}</span>
+            <span class="compare-value">${prev ? t("compare.avg").replace("{val}", prev.avg) : t("compare.noData")}</span>
+            ${prev ? `<span class="compare-count">${t("compare.records").replace("{n}", prev.count)}</span>` : ""}
+          </div>
+        </div>
+        ${period.avgDiff != null ? `<div class="compare-diff" style="color:${diffColor}">${t("compare.diff").replace("{val}", diffStr)}</div>` : ""}
+      </div>
+    `;
+  }
+  return `
+    <div class="compare-section">
+      <div class="helper">${t("compare.title")}</div>
+      ${renderPair(t("compare.weekly"), pc.weekly, t("compare.thisWeek"), t("compare.lastWeek"))}
+      ${renderPair(t("compare.monthly"), pc.monthly, t("compare.thisMonth"), t("compare.lastMonth"))}
+    </div>
+  `;
+}
+function renderGoalCountdown() {
+  const goalWeight = Number(state.settings.goalWeight);
+  if (!goalWeight) return "";
+  const gc = calcGoalCountdown(state.records, goalWeight);
+  if (!gc) return "";
+  if (gc.reached) {
+    return `
+      <div class="countdown-section countdown-reached">
+        <div class="helper">${t("countdown.title")}</div>
+        <div class="countdown-congrats">${t("countdown.reached")}</div>
+      </div>
+    `;
+  }
+  return `
+    <div class="countdown-section">
+      <div class="helper">${t("countdown.title")}</div>
+      <div class="countdown-current">${t("countdown.current").replace("{wt}", gc.latest).replace("{goal}", gc.goal)}</div>
+      <div class="countdown-remaining">${t("countdown.remaining").replace("{val}", gc.absRemaining)}</div>
+      <div class="countdown-bar-track">
+        <div class="countdown-bar-fill" style="width:${gc.pct}%"></div>
+      </div>
+      <div class="countdown-pct">${t("countdown.pct").replace("{pct}", gc.pct)}</div>
+      <div class="countdown-eta">${gc.etaDays ? t("countdown.eta").replace("{days}", gc.etaDays) : t("countdown.noEta")}</div>
+    </div>
+  `;
+}
+function renderBodyComposition() {
+  const bc = calcBodyComposition(state.records);
+  if (!bc) return "";
+  const bfStr = bc.bfChange > 0 ? "+" + bc.bfChange : String(bc.bfChange);
+  const fatStr = bc.fatMassChange > 0 ? "+" + bc.fatMassChange : String(bc.fatMassChange);
+  const leanStr = bc.leanMassChange > 0 ? "+" + bc.leanMassChange : String(bc.leanMassChange);
+  return `
+    <div class="body-comp-section">
+      <div class="helper">${t("bodyComp.title")}</div>
+      <div class="body-comp-trend body-comp-trend-${bc.trend}">${t("bodyComp." + bc.trend)}</div>
+      <div class="body-comp-bf">${t("bodyComp.bf").replace("{first}", bc.firstBf).replace("{latest}", bc.latestBf).replace("{change}", bfStr)}</div>
+      <div class="body-comp-masses">
+        <div class="body-comp-mass fat">${t("bodyComp.fatMass").replace("{change}", fatStr)}</div>
+        <div class="body-comp-mass lean">${t("bodyComp.leanMass").replace("{change}", leanStr)}</div>
+      </div>
+      <div class="helper hint-small">${t("bodyComp.hint").replace("{n}", bc.dataPoints)}</div>
+    </div>
+  `;
+}
+function renderShareSummary() {
+  const summary = generateWeightSummary(state.records, state.profile);
+  if (!summary) return "";
+  const changeStr = summary.weight.totalChange > 0 ? "+" + summary.weight.totalChange : String(summary.weight.totalChange);
+  const lines = [
+    t("share.period").replace("{from}", summary.period.from).replace("{to}", summary.period.to).replace("{days}", summary.period.days),
+    t("share.weight").replace("{first}", summary.weight.first).replace("{latest}", summary.weight.latest).replace("{change}", changeStr),
+    t("share.range").replace("{min}", summary.weight.min).replace("{max}", summary.weight.max).replace("{avg}", summary.weight.avg),
+    t("share.records").replace("{n}", summary.records)
+  ];
+  if (summary.bmi) {
+    lines.push(t("share.bmi").replace("{bmi}", summary.bmi.bmi).replace("{zone}", summary.bmi.zone));
+  }
+  lines.push(t("share.footer"));
+  const text = lines.join("\n");
+  return `
+    <div class="share-summary-section">
+      <div class="helper">${t("share.title")}</div>
+      <pre class="share-summary-text">${text}</pre>
+      <button type="button" class="btn ghost share-summary-btn" data-action="copy-summary" data-text="${escapeAttr(text)}">${t("share.btn")}</button>
+    </div>
+  `;
+}
+function renderDuplicateCheck() {
+  const dd = detectDuplicates(state.records);
+  if (dd.duplicates.length === 0 && dd.suspicious.length === 0) return "";
+  const items = [];
+  for (const d of dd.duplicates) {
+    items.push(`<div class="dupes-item dupes-warn">${t("dupes.duplicate").replace("{date}", d.date).replace("{count}", d.count)}</div>`);
+  }
+  for (const s of dd.suspicious) {
+    items.push(`<div class="dupes-item dupes-info">${t("dupes.suspicious").replace("{weight}", s.weight).replace("{count}", s.count).replace("{from}", s.from).replace("{to}", s.to)}</div>`);
+  }
+  return `
+    <div class="dupes-section">
+      <div class="helper">${t("dupes.title")}</div>
+      ${items.join("")}
+    </div>
+  `;
+}
+function renderWeeklyAverages() {
+  const weeks = calcWeeklyAverages(state.records, 8);
+  const withData = weeks.filter((w) => w.avg !== null);
+  if (withData.length < 2) return "";
+  const allAvgs = withData.map((w) => w.avg);
+  const minAvg = Math.min(...allAvgs);
+  const maxAvg = Math.max(...allAvgs);
+  const range = maxAvg - minAvg || 1;
+  const bars = weeks.map((w, i) => {
+    if (w.avg === null) {
+      return `<div class="weekly-avg-bar-wrap"><div class="weekly-avg-bar empty"></div><div class="weekly-avg-label">${t("weeklyAvg.noData")}</div></div>`;
+    }
+    const pct = Math.max(10, (w.avg - minAvg) / range * 80 + 10);
+    const prev = i > 0 ? weeks[i - 1] : null;
+    const change = prev && prev.avg !== null ? Math.round((w.avg - prev.avg) * 10) / 10 : null;
+    const changeClass = change !== null ? change < 0 ? "down" : change > 0 ? "up" : "flat" : "";
+    const startLabel = w.weekStart.slice(5).replace("-", "/");
+    return `<div class="weekly-avg-bar-wrap">
+      <div class="weekly-avg-value">${w.avg.toFixed(1)}</div>
+      <div class="weekly-avg-bar ${changeClass}" style="height:${pct}%"></div>
+      <div class="weekly-avg-label">${startLabel}</div>
+      ${change !== null ? `<div class="weekly-avg-change ${changeClass}">${change > 0 ? "+" : ""}${change.toFixed(1)}</div>` : ""}
+    </div>`;
+  });
+  return `
+    <div class="weekly-avg-section">
+      <div class="helper">${t("weeklyAvg.title")}</div>
+      <div class="weekly-avg-chart">${bars.join("")}</div>
+    </div>
+  `;
+}
+function renderRecordingCalendar() {
+  if (state.records.length === 0) return "";
+  const cal = calcMonthlyRecordingMap(state.records);
+  const today = /* @__PURE__ */ new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const dayHeaders = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].map((d) => `<div class="rec-cal-header">${t("recCal." + d)}</div>`).join("");
+  const firstDow = cal.days[0].dayOfWeek;
+  const blanks = Array.from({ length: firstDow }, () => `<div class="rec-cal-blank"></div>`).join("");
+  const cells = cal.days.map((d) => {
+    const isToday = d.date === todayStr;
+    const isFuture = d.date > todayStr;
+    const cls = isFuture ? "future" : d.recorded ? "recorded" : "missed";
+    const title = d.recorded ? `${d.day}: ${d.weight.toFixed(1)}kg` : `${d.day}`;
+    return `<div class="rec-cal-cell ${cls}${isToday ? " today" : ""}" title="${title}"><span>${d.day}</span></div>`;
+  }).join("");
+  const elapsed = cal.days.filter((d) => d.date <= todayStr).length;
+  const adjustedRate = elapsed > 0 ? Math.round(cal.recordedCount / elapsed * 100) : 0;
+  const rateText = t("recCal.rate").replace("{rate}", adjustedRate).replace("{count}", cal.recordedCount).replace("{total}", elapsed);
+  return `
+    <div class="rec-cal-section">
+      <div class="helper">${t("recCal.title")}</div>
+      <div class="rec-cal-grid">${dayHeaders}${blanks}${cells}</div>
+      <div class="helper hint-small" style="margin-top:6px">${rateText}</div>
+    </div>
+  `;
+}
+function renderTrendIndicator() {
+  const trend = calcWeightTrendIndicator(state.records);
+  if (!trend) return "";
+  const arrow = trend.direction === "down" ? "\u2193" : trend.direction === "up" ? "\u2191" : "\u2192";
+  const cls = trend.direction === "down" ? "trend-down" : trend.direction === "up" ? "trend-up" : "trend-stable";
+  let msg;
+  if (trend.direction === "down") {
+    msg = `${Math.abs(trend.change).toFixed(1)}kg ${t("trend.down")}`;
+  } else if (trend.direction === "up") {
+    msg = `+${trend.change.toFixed(1)}kg ${t("trend.up")}`;
+  } else {
+    msg = t("trend.stable");
+  }
+  const recentText = t("trend.recent").replace("{avg}", trend.recentAvg.toFixed(1));
+  return `
+    <div class="trend-indicator ${cls}">
+      <span class="trend-arrow">${arrow}</span>
+      <div class="trend-text">
+        <div class="trend-msg">${msg}</div>
+        <div class="trend-detail">${recentText}</div>
+      </div>
+    </div>
+  `;
+}
+function renderNoteTagStats() {
+  const stats = calcNoteTagStats(state.records);
+  if (stats.tags.length === 0) return "";
+  const tagIcons = { exercise: "\u{1F3C3}", diet: "\u{1F957}", cheatday: "\u{1F355}", sick: "\u{1F912}", travel: "\u2708\uFE0F", stress: "\u{1F630}", sleep: "\u{1F634}", alcohol: "\u{1F37A}" };
+  const rows = stats.tags.slice(0, 6).map((t_) => {
+    const icon = tagIcons[t_.tag] || "\u{1F3F7}\uFE0F";
+    const changeSign = t_.avgChange > 0 ? "+" : "";
+    const changeClass = t_.avgChange < 0 ? "tag-stat-down" : t_.avgChange > 0 ? "tag-stat-up" : "";
+    return `<div class="tag-stat-row">
+      <span class="tag-stat-name">${icon} ${escapeAttr(t_.tag)}</span>
+      <span class="tag-stat-count">${t("tagStats.count").replace("{count}", t_.count).replace("{pct}", t_.pct)}</span>
+      <span class="tag-stat-change ${changeClass}">${changeSign}${t_.avgChange.toFixed(1)}kg</span>
+    </div>`;
+  }).join("");
+  return `
+    <div class="tag-stats-section">
+      <div class="helper">${t("tagStats.title")}</div>
+      ${rows}
+    </div>
+  `;
+}
+function renderIdealWeight() {
+  if (!state.profile.heightCm || state.records.length === 0) return "";
+  const latest = [...state.records].sort((a, b) => a.dt.localeCompare(b.dt)).pop();
+  const ideal = calcIdealWeightRange(Number(state.profile.heightCm), latest.wt);
+  if (!ideal) return "";
+  const zoneLabel = t("ideal." + ideal.zone);
+  const rangeText = t("ideal.range").replace("{min}", ideal.minWeight).replace("{max}", ideal.maxWeight);
+  const currentText = t("ideal.current").replace("{weight}", ideal.currentWeight).replace("{bmi}", ideal.currentBMI);
+  const centerText = t("ideal.center").replace("{mid}", ideal.midWeight);
+  const idealStart = Math.round((18.5 - 15) / 15 * 100);
+  const idealEnd = Math.round((24.9 - 15) / 15 * 100);
+  return `
+    <div class="ideal-section">
+      <div class="helper">${t("ideal.title")}</div>
+      <div class="ideal-bar-container">
+        <div class="ideal-bar">
+          <div class="ideal-zone ideal-under" style="width:${idealStart}%"></div>
+          <div class="ideal-zone ideal-normal" style="width:${idealEnd - idealStart}%"></div>
+          <div class="ideal-zone ideal-over" style="width:${100 - idealEnd}%"></div>
+          <div class="ideal-marker" style="left:${ideal.position}%"></div>
+        </div>
+        <div class="ideal-labels">
+          <span>${t("ideal.underweight")}</span>
+          <span>${t("ideal.normal")}</span>
+          <span>${t("ideal.overweight")}</span>
+        </div>
+      </div>
+      <div class="helper hint-small">${currentText} \u2014 ${zoneLabel}</div>
+      <div class="helper hint-small">${rangeText}</div>
+      <div class="helper hint-small">${centerText}</div>
+    </div>
+  `;
+}
+function renderDataFreshness() {
+  const fresh = calcDataFreshness(state.records);
+  if (!fresh) return "";
+  if (fresh.level === "today") return "";
+  let msg;
+  if (fresh.level === "recent") {
+    msg = t("fresh.recent").replace("{days}", fresh.daysSince).replace("{weight}", fresh.lastWeight.toFixed(1));
+  } else if (fresh.level === "stale") {
+    msg = t("fresh.stale").replace("{days}", fresh.daysSince);
+  } else {
+    msg = t("fresh.veryStale").replace("{days}", fresh.daysSince);
+  }
+  const cls = fresh.level === "veryStale" ? "fresh-warn" : fresh.level === "stale" ? "fresh-nudge" : "fresh-info";
+  return `<div class="freshness-banner ${cls}">${msg}</div>`;
+}
+function renderMultiPeriodRate() {
+  const data = calcMultiPeriodRate(state.records);
+  if (!data) return "";
+  const hasAny = data.periods.some((p) => p.hasData);
+  if (!hasAny) return "";
+  const cols = data.periods.map((p) => {
+    if (!p.hasData) {
+      return `<div class="mpr-col"><div class="mpr-label">${t("multiRate.days").replace("{days}", p.days)}</div><div class="mpr-value">${t("multiRate.noData")}</div></div>`;
+    }
+    const sign = p.change > 0 ? "+" : "";
+    const cls = p.change < -0.1 ? "mpr-down" : p.change > 0.1 ? "mpr-up" : "mpr-flat";
+    const wsign = p.weeklyRate > 0 ? "+" : "";
+    return `<div class="mpr-col ${cls}">
+      <div class="mpr-label">${t("multiRate.days").replace("{days}", p.days)}</div>
+      <div class="mpr-value">${sign}${p.change.toFixed(1)}kg</div>
+      <div class="mpr-weekly">${wsign}${p.weeklyRate.toFixed(1)}kg/w</div>
+    </div>`;
+  }).join("");
+  return `
+    <div class="mpr-section">
+      <div class="helper">${t("multiRate.title")}</div>
+      <div class="mpr-grid">${cols}</div>
+    </div>
+  `;
+}
+function renderRecordMilestone() {
+  const ms = calcRecordMilestone(state.records.length);
+  if (!ms) return "";
+  if (ms.reached) {
+    return `<div class="milestone-banner milestone-reached">${t("milestone.reached").replace("{count}", ms.reached)}</div>`;
+  }
+  if (ms.remaining <= 5) {
+    return `<div class="milestone-banner milestone-close">${t("milestone.next").replace("{next}", ms.next).replace("{remaining}", ms.remaining)}</div>`;
+  }
+  return "";
+}
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -23843,6 +26873,100 @@ function renderRecordingTime() {
       <div class="helper hint-small" style="margin-top:4px;">${t("timeStats.most").replace("{period}", t("timeStats." + timeStats.mostCommon))}</div>
     </div>
   `;
+}
+function renderAICoach() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const report = generateAICoachReport(state.records, state.profile, goalWeight);
+  if (report.grade === "new" && state.records.length < 2) {
+    return `
+    <section class="ai-coach-panel panel">
+      <div class="ai-coach-header">
+        <div class="ai-coach-icon">\u{1F916}</div>
+        <div>
+          <h2>${t("ai.title")}</h2>
+          <p class="helper">${t("ai.subtitle")}</p>
+        </div>
+      </div>
+      <div class="ai-coach-empty">
+        <div class="ai-empty-icon">\u{1F4CA}</div>
+        <p>${t("ai.advice.start")}</p>
+      </div>
+    </section>`;
+  }
+  const gradeColors = { excellent: "var(--ok)", good: "#22c55e", fair: "var(--warn)", needsWork: "#f97316", critical: "var(--error)" };
+  const gradeColor = gradeColors[report.grade] || "var(--muted)";
+  const scoreAngle = report.score / 100 * 360;
+  return `
+    <section class="ai-coach-panel panel">
+      <div class="ai-coach-header">
+        <div class="ai-coach-icon">\u{1F916}</div>
+        <div>
+          <h2>${t("ai.title")}</h2>
+          <p class="helper">${t("ai.subtitle")}</p>
+        </div>
+        <div class="ai-score-ring" style="--score-angle: ${scoreAngle}deg; --score-color: ${gradeColor}">
+          <span class="ai-score-value">${report.score}</span>
+          <span class="ai-score-label">${t("ai.grade." + report.grade)}</span>
+        </div>
+      </div>
+
+      ${report.weeklyReport ? `
+      <div class="ai-weekly-report">
+        <h3>${t("ai.weeklyReport")}</h3>
+        <div class="ai-weekly-grid">
+          <div class="ai-weekly-stat">
+            <span class="ai-weekly-label">${t("ai.weeklyAvg")}</span>
+            <span class="ai-weekly-value">${report.weeklyReport.avg}kg</span>
+          </div>
+          ${report.weeklyReport.change !== null ? `
+          <div class="ai-weekly-stat">
+            <span class="ai-weekly-label">${t("ai.weeklyChange")}</span>
+            <span class="ai-weekly-value ${report.weeklyReport.change > 0 ? "positive" : report.weeklyReport.change < 0 ? "negative" : ""}">${report.weeklyReport.change > 0 ? "+" : ""}${report.weeklyReport.change}kg</span>
+          </div>` : ""}
+          <div class="ai-weekly-stat">
+            <span class="ai-weekly-label">${t("ai.weeklyRange")}</span>
+            <span class="ai-weekly-value">${report.weeklyReport.range}kg</span>
+          </div>
+          <div class="ai-weekly-stat">
+            <span class="ai-weekly-label">${t("ai.weeklyEntries")}</span>
+            <span class="ai-weekly-value">${report.weeklyReport.entries}</span>
+          </div>
+        </div>
+      </div>` : ""}
+
+      ${report.highlights.length ? `
+      <div class="ai-section ai-highlights">
+        <h3>${t("ai.highlights")}</h3>
+        <div class="ai-items">
+          ${report.highlights.map((h) => `<div class="ai-item ai-highlight">${t("ai.highlight." + h)}</div>`).join("")}
+        </div>
+      </div>` : ""}
+
+      ${report.risks.length ? `
+      <div class="ai-section ai-risks">
+        <h3>${t("ai.risks")}</h3>
+        <div class="ai-items">
+          ${report.risks.map((r) => `<div class="ai-item ai-risk">${t("ai.risk." + r)}</div>`).join("")}
+        </div>
+      </div>` : ""}
+
+      ${report.advices.length ? `
+      <div class="ai-section ai-advices">
+        <h3>${t("ai.advice")}</h3>
+        <div class="ai-items">
+          ${report.advices.map((a) => `<div class="ai-item ai-advice-item">${t("ai.advice." + a)}</div>`).join("")}
+        </div>
+      </div>` : ""}
+
+      ${report.prediction ? `
+      <div class="ai-section ai-prediction">
+        <h3>${t("ai.prediction.title")}</h3>
+        <div class="ai-prediction-content">
+          ${report.prediction.achieved ? t("ai.prediction.achieved") : report.prediction.noTrend ? t("ai.prediction.noTrend") : report.prediction.insufficient ? t("ai.prediction.insufficient") : `<div class="ai-prediction-days">${t("ai.prediction.goalDays").replace("{days}", report.prediction.days)}</div>
+               <div class="ai-prediction-date">${t("ai.prediction.goalDate").replace("{date}", report.prediction.predictedDate)}</div>`}
+        </div>
+      </div>` : ""}
+    </section>`;
 }
 function renderStability() {
   const stability = calcWeightStability(state.records);
@@ -23873,7 +26997,7 @@ function renderConsistencyStreak() {
       <div class="consistency-display">
         <span class="consistency-badge${cs.streak >= 5 ? " great" : ""}">${cs.streak >= 5 ? "\u{1F3AF}" : "\u{1F4CA}"} ${t("consistency.current").replace("{days}", cs.streak).replace("{tol}", cs.tolerance)}</span>
         ${cs.best > cs.streak ? `<span class="helper hint-small">${t("consistency.best").replace("{days}", cs.best)}</span>` : ""}
-        ${cs.streak >= 5 ? `<span class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("consistency.great")}</span>` : ""}
+        ${cs.streak >= 5 ? `<span class="helper hint-small" style="color:var(--ok);font-weight:600;">${t("consistency.great")}</span>` : ""}
       </div>
     </div>
   `;
@@ -23882,17 +27006,17 @@ function renderBMIDistribution() {
   const dist = calcBMIDistribution(state.records);
   if (!dist) return "";
   const zones = [
-    { key: "under", color: "var(--info, #3b82f6)" },
-    { key: "normal", color: "var(--ok, #10b981)" },
-    { key: "over", color: "var(--warn, #f59e0b)" },
-    { key: "obese", color: "var(--danger, #ef4444)" }
+    { key: "under", color: "var(--accent-3)" },
+    { key: "normal", color: "var(--ok)" },
+    { key: "over", color: "var(--warn)" },
+    { key: "obese", color: "var(--error)" }
   ];
   const bars = zones.filter((z) => dist[z.key].pct > 0).map((z) => `<div class="bmi-dist-segment" style="width:${dist[z.key].pct}%;background:${z.color}" title="${t("bmiDist." + z.key)}: ${dist[z.key].count} (${dist[z.key].pct}%)"></div>`).join("");
   const legend = zones.map((z) => `<span class="bmi-dist-legend-item"><span class="bmi-dist-dot" style="background:${z.color}"></span>${t("bmiDist." + z.key)} ${dist[z.key].pct}%</span>`).join("");
   return `
     <div class="bmi-dist-section">
       <div class="helper">${t("bmiDist.title")}</div>
-      <div class="bmi-dist-bar">${bars}</div>
+      <div class="bmi-dist-bar" role="img" aria-label="${zones.map((z) => `${t("bmiDist." + z.key)}: ${dist[z.key].pct}%`).join(", ")}">${bars}</div>
       <div class="bmi-dist-legend">${legend}</div>
       <div class="helper hint-small" style="margin-top:4px;">${t("bmiDist.total").replace("{count}", dist.total)}</div>
     </div>
@@ -23912,7 +27036,7 @@ function renderWeightPercentile() {
         <div class="percentile-details">
           <div class="percentile-label">${t("percentile.value").replace("{pct}", pctl.percentile)}</div>
           <div class="helper hint-small">${t("percentile.rank").replace("{rank}", pctl.rank).replace("{total}", pctl.total)}</div>
-          ${pctl.percentile <= 10 ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("percentile.best")}</div>` : ""}
+          ${pctl.percentile <= 10 ? `<div class="helper hint-small" style="color:var(--ok);font-weight:600;">${t("percentile.best")}</div>` : ""}
         </div>
       </div>
     </div>
@@ -23997,6 +27121,9 @@ function renderRecordList() {
       }
     }
   }
+  if (hasFilter && displayed.length === 0) {
+    return `<div class="empty-state"><div class="helper">${t("records.noMatch")}</div></div>`;
+  }
   const dtIndex = new Map(state.records.map((r, i) => [r.dt, i]));
   return displayed.map((record) => {
     const idx = dtIndex.get(record.dt) ?? -1;
@@ -24022,15 +27149,44 @@ function renderPickerDecOptions(selected) {
   return html;
 }
 function bindEvents() {
+  app.querySelectorAll('[role="tablist"]').forEach((tablist) => {
+    tablist.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const tabs = [...tablist.querySelectorAll('[role="tab"]')];
+      const idx = tabs.indexOf(document.activeElement);
+      if (idx === -1) return;
+      e.preventDefault();
+      const next = e.key === "ArrowRight" ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
+      tabs[next].focus();
+      tabs[next].click();
+    });
+  });
   app.querySelectorAll("[data-mode]").forEach((button) => {
     button.addEventListener("click", () => {
       activeEntryMode = button.dataset.mode;
       render();
+      if (activeEntryMode === "manual") {
+        document.getElementById("pickerInt")?.focus();
+      } else if (activeEntryMode === "voice") {
+        app.querySelector("[data-action='toggle-voice']")?.focus();
+      } else if (activeEntryMode === "photo") {
+        app.querySelector("[data-action='pick-photo']")?.focus();
+      }
     });
   });
   app.querySelector('[data-action="save-profile"]')?.addEventListener("click", saveProfile);
   app.querySelector('[data-action="save-settings"]')?.addEventListener("click", saveSettings);
   app.querySelector('[data-action="save-record"]')?.addEventListener("click", saveRecordFromPicker);
+  app.addEventListener("click", (e) => {
+    if (e.target.closest('[data-action="confirm-save"]')) {
+      const container = document.querySelector(".validate-warnings");
+      if (container) {
+        container.style.display = "none";
+        container.innerHTML = "";
+      }
+      saveRecordFromPicker();
+    }
+  });
   app.querySelector('[data-action="export-data"]')?.addEventListener("click", exportData);
   app.querySelector('[data-action="reset-data"]')?.addEventListener("click", resetData);
   app.querySelector('[data-action="pick-native-photo"]')?.addEventListener("click", pickNativePhoto);
@@ -24046,21 +27202,46 @@ function bindEvents() {
     showMonthlyStats = !showMonthlyStats;
     render();
   });
+  app.querySelector('[data-action="toggle-analytics"]')?.addEventListener("click", () => {
+    showAdvancedAnalytics = !showAdvancedAnalytics;
+    render();
+  });
+  app.querySelector('[data-action="copy-summary"]')?.addEventListener("click", async (e) => {
+    const text = e.target.dataset.text;
+    try {
+      await navigator.clipboard.writeText(text);
+      e.target.textContent = t("share.copied");
+      setTimeout(() => {
+        e.target.textContent = t("share.btn");
+      }, 2e3);
+    } catch {
+    }
+  });
   app.querySelector("#recordSearch")?.addEventListener("input", (e) => {
     recordSearchQuery = e.target.value;
-    render();
-    const input = document.getElementById("recordSearch");
-    if (input) {
-      input.focus();
-      input.selectionStart = input.selectionEnd = input.value.length;
-    }
+    const pos = e.target.selectionStart;
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      render();
+      const input = document.getElementById("recordSearch");
+      if (input) {
+        input.focus();
+        input.selectionStart = input.selectionEnd = pos;
+      }
+    }, 150);
   });
   app.querySelector("#dateRangeFrom")?.addEventListener("change", (e) => {
     recordDateFrom = e.target.value;
+    if (recordDateFrom && recordDateTo && recordDateFrom > recordDateTo) {
+      recordDateTo = recordDateFrom;
+    }
     render();
   });
   app.querySelector("#dateRangeTo")?.addEventListener("change", (e) => {
     recordDateTo = e.target.value;
+    if (recordDateFrom && recordDateTo && recordDateFrom > recordDateTo) {
+      recordDateFrom = recordDateTo;
+    }
     render();
   });
   app.querySelector('[data-action="clear-date-range"]')?.addEventListener("click", () => {
@@ -24068,9 +27249,9 @@ function bindEvents() {
     recordDateTo = "";
     render();
   });
-  app.querySelector('[data-action="export-excel"]')?.addEventListener("click", exportExcel);
-  app.querySelector('[data-action="export-csv"]')?.addEventListener("click", exportCSV);
-  app.querySelector('[data-action="export-text"]')?.addEventListener("click", exportText);
+  app.querySelectorAll('[data-action="export-excel"]').forEach((b) => b.addEventListener("click", exportExcel));
+  app.querySelectorAll('[data-action="export-csv"]').forEach((b) => b.addEventListener("click", exportCSV));
+  app.querySelectorAll('[data-action="export-text"]').forEach((b) => b.addEventListener("click", exportText));
   app.querySelector('[data-action="import-csv"]')?.addEventListener("click", () => {
     document.getElementById("csvImportInput")?.click();
   });
@@ -24112,6 +27293,7 @@ function bindEvents() {
   app.querySelectorAll("[data-quick-adj]").forEach((button) => {
     button.addEventListener("click", () => {
       const adj = parseFloat(button.dataset.quickAdj);
+      if (!Number.isFinite(adj)) return;
       quickWeight = Math.round((quickWeight + adj) * 10) / 10;
       quickWeight = Math.max(20, Math.min(300, quickWeight));
       const display = document.getElementById("quickDisplay");
@@ -24121,6 +27303,7 @@ function bindEvents() {
   app.querySelectorAll("[data-pick-weight]").forEach((button) => {
     button.addEventListener("click", () => {
       const w = parseFloat(button.dataset.pickWeight);
+      if (!Number.isFinite(w)) return;
       state.form.pickerInt = Math.floor(w);
       state.form.pickerDec = Math.round((w - Math.floor(w)) * 10);
       render();
@@ -24151,7 +27334,7 @@ function bindEvents() {
       lastUndoState = { records: [...state.records], quickWeight };
       state.records = state.records.filter((r) => r.dt !== button.dataset.deleteDate);
       persist();
-      setStatus(t("records.deleted"));
+      showUndoSnackbar(t("records.deleted"));
     });
   });
   app.querySelector('[data-action="share-chart"]')?.addEventListener("click", shareChart);
@@ -24169,6 +27352,12 @@ function bindEvents() {
   app.querySelectorAll("[data-note-tag]").forEach((button) => {
     button.addEventListener("click", () => {
       state.form.note = toggleNoteTag(state.form.note, button.dataset.noteTag);
+      render();
+    });
+  });
+  app.querySelectorAll("[data-quick-note]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.form.note = button.dataset.quickNote;
       render();
     });
   });
@@ -24301,14 +27490,35 @@ function quickSaveRecord() {
 }
 var lastUndoState = null;
 var undoTimer = null;
+var validationBypass = false;
 function saveRecordWithWeight(weight, source) {
   const weightResult = validateWeight(String(weight));
   if (!weightResult.valid) {
+    validationBypass = false;
     setStatus(t(weightResult.error || "entry.noWeight"), "error");
     return;
   }
+  if (!validationBypass && state.records.length > 0) {
+    const warnings = validateWeightEntry(weightResult.weight, state.records);
+    if (warnings.length > 0) {
+      const container = document.querySelector(".validate-warnings");
+      if (container) {
+        const msgs = warnings.map((w) => {
+          if (w.type === "largeDiff") return t("validate.largeDiff").replace("{diff}", w.diff).replace("{previous}", w.previous).replace("{date}", w.date);
+          if (w.type === "outsideRange") return t("validate.outsideRange").replace("{min}", w.min).replace("{max}", w.max);
+          return "";
+        }).filter(Boolean);
+        container.innerHTML = `<div class="validate-warning-box"><p class="validate-warning-title">${t("validate.title")}</p>${msgs.map((m) => `<p class="validate-warning-msg">${m}</p>`).join("")}<button type="button" class="btn ghost validate-confirm" data-action="confirm-save">${t("entry.save")}</button></div>`;
+        container.style.display = "block";
+        validationBypass = true;
+        return;
+      }
+    }
+  }
+  validationBypass = false;
   const bfResult = validateBodyFat(state.form.bodyFat);
   if (!bfResult.valid) {
+    validationBypass = false;
     setStatus(t(bfResult.error), "error");
     return;
   }
@@ -24341,6 +27551,7 @@ function saveRecordWithWeight(weight, source) {
   state.form = {
     ...state.form,
     weight: weightResult.weight.toFixed(1),
+    date: todayLocal(),
     pickerInt: Math.floor(weightResult.weight),
     pickerDec: Math.round((weightResult.weight - Math.floor(weightResult.weight)) * 10),
     imageName: "",
@@ -24348,10 +27559,16 @@ function saveRecordWithWeight(weight, source) {
     note: ""
   };
   if (!persist()) {
+    validationBypass = false;
     setStatus(t("status.storageError"), "error");
     return;
   }
   if (navigator.vibrate) navigator.vibrate(50);
+  const vwContainer = document.querySelector(".validate-warnings");
+  if (vwContainer) {
+    vwContainer.style.display = "none";
+    vwContainer.innerHTML = "";
+  }
   showUndoSnackbar(`${t("entry.saved")} \xB7 ${record.wt.toFixed(1)}kg`);
   setTimeout(() => {
     document.getElementById("chart")?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -24383,6 +27600,7 @@ function undoLastSave() {
 async function preprocessImageForOCR(source) {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
+  if (!ctx) return source;
   let bitmap;
   if (source instanceof Blob || source instanceof File) {
     bitmap = await createImageBitmap(source);
@@ -24480,6 +27698,7 @@ async function pickNativePhoto() {
     if (photo.webPath) {
       try {
         const response = await fetch(photo.webPath);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const blob = await response.blob();
         const candidates = await detectWeightsFromImage(blob);
         detectedWeights = candidates;
@@ -24494,7 +27713,7 @@ async function pickNativePhoto() {
       }
     }
     activeEntryMode = "photo";
-    setStatus(t("status.photoReady"));
+    setStatus(detectedWeights.length ? t("status.photoReady") : t("status.photoNoDetection"));
   } catch {
     setStatus(t("status.permissionDenied"), "error");
     return;
@@ -24536,9 +27755,13 @@ async function toggleVoiceInput() {
     }
     render();
   };
-  recognition.onerror = () => {
+  recognition.onerror = (e) => {
     voiceActive = false;
-    setStatus(t("status.voiceError"), "error");
+    if (e.error === "no-speech") {
+      setStatus(t("status.voiceNoSpeech"), "warn");
+    } else {
+      setStatus(t("status.voiceError"), "error");
+    }
   };
   recognition.onend = () => {
     voiceActive = false;
@@ -24609,7 +27832,7 @@ function exportExcel() {
       [t("export.header.weight")]: r.wt,
       [t("export.header.bmi")]: r.bmi ?? "",
       [t("export.header.bodyFat")]: r.bf ?? "",
-      [t("export.header.source")]: r.source,
+      [t("export.header.source")]: r.source ?? "manual",
       [t("export.header.note")]: r.note ?? ""
     }));
     const ws = utils.json_to_sheet(rows);
@@ -24630,7 +27853,7 @@ function exportCSV() {
     const headers = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source"), t("export.header.note")];
     const header = headers.map(csvEscape).join(",");
     const lines = state.records.map(
-      (r) => [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source, r.note ?? ""].map(csvEscape).join(",")
+      (r) => [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source ?? "manual", r.note ?? ""].map(csvEscape).join(",")
     );
     const csv = "\uFEFF" + [header, ...lines].join("\r\n");
     downloadFile(csv, `weight-rainbow-${todayLocal()}.csv`, "text/csv;charset=utf-8");
@@ -24670,6 +27893,10 @@ function handleCSVImport(e) {
     e.target.value = "";
     render();
   };
+  reader.onerror = () => {
+    setStatus(t("import.error"), "error");
+    e.target.value = "";
+  };
   reader.readAsText(file);
 }
 function exportText() {
@@ -24679,8 +27906,8 @@ function exportText() {
   }
   try {
     const lines = state.records.map((r) => {
-      const bmiStr = r.bmi ? ` / BMI: ${r.bmi.toFixed(1)}` : "";
-      const bfStr = r.bf ? ` / BF: ${Number(r.bf).toFixed(1)}%` : "";
+      const bmiStr = r.bmi ? ` / ${t("bmi.title")}: ${r.bmi.toFixed(1)}` : "";
+      const bfStr = r.bf ? ` / ${t("bodyFat.label")}: ${Number(r.bf).toFixed(1)}%` : "";
       const noteStr = r.note ? `  [${r.note}]` : "";
       const dow = t("day." + (/* @__PURE__ */ new Date(r.dt + "T00:00:00")).getDay());
       return `${r.dt} (${dow})  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})${noteStr}`;
@@ -24710,8 +27937,10 @@ function downloadFile(content, filename, mimeType) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
+  document.body.appendChild(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(anchor);
+  setTimeout(() => URL.revokeObjectURL(url), 1e3);
 }
 async function shareChart() {
   const canvas = document.getElementById("chart");
@@ -24735,8 +27964,10 @@ async function shareChart() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `weight-chart-${todayLocal()}.png`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1e3);
     setStatus(t("share.done"));
   } catch {
     setStatus(t("share.error"), "error");
@@ -24799,13 +28030,18 @@ function handleImportData(event) {
         setStatus(t("import.invalid"), "error");
         return;
       }
-      if (!window.confirm(t("import.confirm"))) return;
-      for (const record of data.records) {
-        if (record.dt && Number.isFinite(record.wt)) {
-          state.records = upsertRecord(state.records, record);
-        }
+      const validImportRecords = data.records.filter((r) => r.dt && Number.isFinite(r.wt));
+      if (!validImportRecords.length) {
+        setStatus(t("import.csv.empty"), "error");
+        return;
+      }
+      if (!window.confirm(t("import.confirm").replace("{count}", validImportRecords.length))) return;
+      const beforeCount = state.records.length;
+      for (const record of validImportRecords) {
+        state.records = upsertRecord(state.records, record);
       }
       state.records = trimRecords(state.records, MAX_RECORDS);
+      const newCount = state.records.length - beforeCount;
       if (data.profile && !state.profile.name) {
         state.profile = { ...state.profile, ...data.profile };
       }
@@ -24814,7 +28050,8 @@ function handleImportData(event) {
         return;
       }
       quickWeight = state.records.length ? state.records[state.records.length - 1].wt : 65;
-      setStatus(t("import.success"));
+      const msg = t("import.success") + ` (${validImportRecords.length} ${t("chart.records")}${newCount > 0 ? `, +${newCount} ${t("import.new")}` : ""})`;
+      setStatus(msg);
     } catch {
       setStatus(t("import.invalid"), "error");
     }
@@ -24847,6 +28084,12 @@ function resetData() {
   detectedWeights = [];
   imagePreviewUrl = "";
   activeEntryMode = "manual";
+  showAllRecords = false;
+  showMonthlyStats = false;
+  showAdvancedAnalytics = false;
+  recordSearchQuery = "";
+  recordDateFrom = "";
+  recordDateTo = "";
   try {
     window.localStorage.removeItem(STORAGE_KEYS.records);
     window.localStorage.removeItem(STORAGE_KEYS.profile);
@@ -24868,6 +28111,7 @@ function drawChart() {
   canvas.width = rect.width * dpr;
   canvas.height = rect.height * dpr;
   const context = canvas.getContext("2d");
+  if (!context) return;
   context.scale(dpr, dpr);
   const width = rect.width;
   const height = rect.height;
@@ -24911,8 +28155,9 @@ function drawChart() {
     context.moveTo(padX, y);
     context.lineTo(width - padX, y);
     context.stroke();
-    const weightLabel = (max - index / 4 * range).toFixed(1);
-    context.fillStyle = cs.getPropertyValue("--muted");
+    const weightVal = max - index / 4 * range;
+    const weightLabel = weightVal % 1 === 0 ? String(Math.round(weightVal)) : weightVal.toFixed(1);
+    context.fillStyle = cs.getPropertyValue("--muted").trim() || "#6b7280";
     context.font = "11px sans-serif";
     context.textAlign = "right";
     context.fillText(weightLabel, padX - 6, y + 4);
@@ -25013,14 +28258,14 @@ function drawChart() {
     const goalY = toY(goalWeight);
     context.save();
     context.setLineDash([8, 6]);
-    context.strokeStyle = cs.getPropertyValue("--ok") || "#10b981";
+    context.strokeStyle = cs.getPropertyValue("--ok").trim() || "#10b981";
     context.lineWidth = 2;
     context.beginPath();
     context.moveTo(padX, goalY);
     context.lineTo(width - padX, goalY);
     context.stroke();
     context.setLineDash([]);
-    context.fillStyle = cs.getPropertyValue("--ok") || "#10b981";
+    context.fillStyle = cs.getPropertyValue("--ok").trim() || "#10b981";
     context.font = "bold 11px sans-serif";
     context.textAlign = "left";
     context.fillText(`${t("goal.title")} ${goalWeight.toFixed(1)}`, padX + 4, goalY - 6);
@@ -25066,7 +28311,7 @@ function drawChart() {
     const tx = toX(todayIdx);
     context.save();
     context.setLineDash([2, 3]);
-    context.strokeStyle = cs.getPropertyValue("--accent") || "#ff5f6d";
+    context.strokeStyle = cs.getPropertyValue("--accent").trim() || "#ff5f6d";
     context.lineWidth = 1;
     context.globalAlpha = 0.4;
     context.beginPath();
@@ -25075,7 +28320,7 @@ function drawChart() {
     context.stroke();
     context.restore();
   }
-  context.fillStyle = cs.getPropertyValue("--muted");
+  context.fillStyle = cs.getPropertyValue("--muted").trim() || "#6b7280";
   context.font = "12px sans-serif";
   context.textAlign = "center";
   [0, Math.floor((chartRecords.length - 1) / 2), chartRecords.length - 1].filter((value, index, array) => array.indexOf(value) === index).forEach((index) => {
@@ -25121,7 +28366,7 @@ function drawChart() {
     canvas._tooltipTimer = setTimeout(() => {
       const tip = document.getElementById("chartTooltip");
       if (tip) tip.style.display = "none";
-    }, 3e3);
+    }, 3500);
   };
   canvas._chartMoveHandler = (e) => {
     showTooltipForEvent(e);
@@ -25148,7 +28393,7 @@ function drawChart() {
     canvas._tooltipTimer = setTimeout(() => {
       const tip = document.getElementById("chartTooltip");
       if (tip) tip.style.display = "none";
-    }, 2e3);
+    }, 3500);
   };
   canvas.addEventListener("touchmove", canvas._chartTouchHandler, { passive: false });
   canvas.addEventListener("touchend", canvas._chartTouchEndHandler);
@@ -25164,7 +28409,7 @@ function saveGoal() {
   if (!raw.trim()) {
     state.settings.goalWeight = null;
   } else {
-    const val = parseFloat(raw);
+    const val = parseFloat(normalizeNumericInput(raw));
     if (!Number.isFinite(val) || val < 20 || val > 300) {
       setStatus(t("weight.range"), "error");
       return;
@@ -25296,6 +28541,12 @@ async function googleBackup() {
         note: r.note ?? "",
         createdAt: r.createdAt
       })),
+      profile: {
+        name: state.profile.name,
+        heightCm: state.profile.heightCm,
+        age: state.profile.age,
+        gender: state.profile.gender
+      },
       settings: {
         goalWeight: state.settings.goalWeight,
         theme: state.settings.theme,
@@ -25365,22 +28616,34 @@ async function googleRestore() {
       { headers: { Authorization: `Bearer ${tk}` } }
     );
     if (!cr.ok) throw new Error("drive_error");
-    const bd = await cr.json();
+    let bd;
+    try {
+      bd = await cr.json();
+    } catch {
+      throw new Error("drive_error");
+    }
     if (!bd.records?.length) {
       setStatus(t("google.noData"), "error");
       return;
     }
+    const validBackupRecords = bd.records.filter((r) => r.dt && Number.isFinite(r.wt));
+    if (!window.confirm(t("google.restoreConfirm") + ` (${validBackupRecords.length} ${t("chart.records")})`)) return;
+    const beforeCount = state.records.length;
     let m = [...state.records];
-    for (const r of bd.records) {
+    for (const r of validBackupRecords) {
       m = upsertRecord(m, { ...r, bmi: r.bmi ?? null, bf: r.bf ?? null, note: r.note ?? "", source: r.source || "manual", imageName: "" });
     }
     state.records = trimRecords(m, MAX_RECORDS);
+    const newCount = state.records.length - beforeCount;
     if (bd.settings?.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;
+    if (bd.profile && !state.profile.name && !state.profile.heightCm) {
+      state.profile = { ...createDefaultProfile(), ...bd.profile };
+    }
     if (!persist()) {
       setStatus(t("status.storageError"), "error");
       return;
     }
-    setStatus(t("google.restoreDone"));
+    setStatus(t("google.restoreDone") + ` (${validBackupRecords.length} ${t("chart.records")}${newCount > 0 ? `, +${newCount} ${t("import.new")}` : ""})`);
     render();
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
@@ -25400,11 +28663,15 @@ if (GOOGLE_CLIENT_ID) {
 function handlePhotoZoom() {
   if (!imagePreviewUrl) return;
   const ov = document.createElement("div");
-  ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
+  ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
+  ov.setAttribute("role", "dialog");
+  ov.setAttribute("aria-label", t("photo.zoomHint"));
   const im = document.createElement("img");
   im.src = imagePreviewUrl;
+  im.alt = t("entry.photoPreview");
   im.style.cssText = "max-width:95vw;max-height:95vh;object-fit:contain;border-radius:12px";
   ov.appendChild(im);
+  ov.tabIndex = -1;
   const dismiss = () => {
     ov.remove();
     document.removeEventListener("keydown", onKey);
@@ -25415,6 +28682,7 @@ function handlePhotoZoom() {
   ov.addEventListener("click", dismiss);
   document.addEventListener("keydown", onKey);
   document.body.appendChild(ov);
+  ov.focus();
 }
 var resizeTimer;
 window.addEventListener("resize", () => {
@@ -25423,6 +28691,7 @@ window.addEventListener("resize", () => {
 });
 window.addEventListener("beforeunload", () => {
   if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+  if (reminderTimer) clearInterval(reminderTimer);
 });
 window.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -25432,10 +28701,17 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && voiceActive) {
     event.preventDefault();
     void toggleVoiceInput();
-  }
-  if (event.key === "Escape" && rainbowVisible) {
+  } else if (event.key === "Escape" && rainbowVisible) {
     rainbowVisible = false;
     document.getElementById("rainbowOverlay")?.remove();
+  }
+  if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+    event.preventDefault();
+    const searchInput = document.getElementById("recordSearch");
+    if (searchInput) {
+      searchInput.focus();
+      searchInput.select();
+    }
   }
 });
 /*! Bundled license information:

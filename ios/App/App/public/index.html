@@ -256,6 +256,28 @@
         filter: blur(40px);
         opacity: 0.48;
         pointer-events: none;
+        animation: hero-orb-float 8s ease-in-out infinite alternate;
+      }
+      @keyframes hero-orb-float {
+        0% { transform: translate(0, 0) scale(1); }
+        50% { transform: translate(-20px, -15px) scale(1.08); }
+        100% { transform: translate(10px, -30px) scale(0.95); }
+      }
+      .hero::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 200%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+        animation: hero-shimmer 8s ease-in-out infinite;
+        pointer-events: none;
+        z-index: 0;
+      }
+      @keyframes hero-shimmer {
+        0%, 100% { transform: translateX(-50%); }
+        50% { transform: translateX(50%); }
       }
 
       .hero-top,
@@ -2447,6 +2469,192 @@
         font-weight: 400;
         opacity: 0.8;
       }
+      /* AI Coach Panel */
+      .ai-coach-panel {
+        margin-top: 18px;
+        position: relative;
+        overflow: hidden;
+        background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 6%, var(--surface)), color-mix(in srgb, var(--accent-2) 4%, var(--surface)));
+        border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+      }
+      .ai-coach-panel::before {
+        content: "";
+        position: absolute;
+        top: -50%;
+        right: -20%;
+        width: 300px;
+        height: 300px;
+        background: conic-gradient(from 120deg, color-mix(in srgb, var(--accent) 15%, transparent), color-mix(in srgb, var(--accent-2) 10%, transparent), color-mix(in srgb, var(--accent-3) 12%, transparent), transparent);
+        border-radius: 50%;
+        filter: blur(60px);
+        pointer-events: none;
+        animation: ai-glow 6s ease-in-out infinite alternate;
+      }
+      @keyframes ai-glow {
+        from { opacity: 0.4; transform: scale(1) rotate(0deg); }
+        to { opacity: 0.7; transform: scale(1.1) rotate(30deg); }
+      }
+      .ai-coach-header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        position: relative;
+        z-index: 1;
+      }
+      .ai-coach-icon {
+        font-size: 2rem;
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, var(--surface-strong)), color-mix(in srgb, var(--accent-2) 12%, var(--surface-strong)));
+        border-radius: 14px;
+        border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+        flex-shrink: 0;
+      }
+      .ai-coach-header h2 {
+        font-size: 1.2rem;
+        margin: 0;
+      }
+      .ai-score-ring {
+        margin-left: auto;
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: conic-gradient(var(--score-color) var(--score-angle), color-mix(in srgb, var(--border) 50%, transparent) var(--score-angle));
+        position: relative;
+        flex-shrink: 0;
+      }
+      .ai-score-ring::before {
+        content: "";
+        position: absolute;
+        inset: 5px;
+        border-radius: 50%;
+        background: var(--surface-strong);
+      }
+      .ai-score-value {
+        position: relative;
+        z-index: 1;
+        font-size: 1.4rem;
+        font-weight: 800;
+        line-height: 1;
+      }
+      .ai-score-label {
+        position: relative;
+        z-index: 1;
+        font-size: 0.6rem;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .ai-coach-empty {
+        text-align: center;
+        padding: 24px 16px;
+        position: relative;
+        z-index: 1;
+      }
+      .ai-empty-icon {
+        font-size: 2.4rem;
+        margin-bottom: 8px;
+        opacity: 0.6;
+      }
+      .ai-weekly-report {
+        margin-top: 18px;
+        position: relative;
+        z-index: 1;
+      }
+      .ai-weekly-report h3 {
+        font-size: 0.85rem;
+        color: var(--muted);
+        margin-bottom: 10px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+      }
+      .ai-weekly-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+        gap: 10px;
+      }
+      .ai-weekly-stat {
+        padding: 12px;
+        border-radius: 14px;
+        background: color-mix(in srgb, var(--surface-strong) 80%, transparent);
+        backdrop-filter: blur(8px);
+        border: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .ai-weekly-label {
+        font-size: 0.72rem;
+        color: var(--muted);
+      }
+      .ai-weekly-value {
+        font-size: 1.1rem;
+        font-weight: 700;
+      }
+      .ai-weekly-value.positive { color: var(--error); }
+      .ai-weekly-value.negative { color: var(--ok); }
+      .ai-section {
+        margin-top: 16px;
+        position: relative;
+        z-index: 1;
+      }
+      .ai-section h3 {
+        font-size: 0.85rem;
+        color: var(--muted);
+        margin-bottom: 8px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+      }
+      .ai-items {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .ai-item {
+        padding: 10px 14px;
+        border-radius: 12px;
+        font-size: 0.88rem;
+        line-height: 1.5;
+        animation: fadeSlideIn 0.3s ease;
+      }
+      .ai-highlight {
+        background: color-mix(in srgb, var(--ok) 8%, var(--surface-strong));
+        border: 1px solid color-mix(in srgb, var(--ok) 16%, transparent);
+      }
+      .ai-risk {
+        background: color-mix(in srgb, var(--warn) 8%, var(--surface-strong));
+        border: 1px solid color-mix(in srgb, var(--warn) 16%, transparent);
+      }
+      .ai-advice-item {
+        background: color-mix(in srgb, var(--accent) 6%, var(--surface-strong));
+        border: 1px solid color-mix(in srgb, var(--accent) 12%, transparent);
+      }
+      .ai-prediction {
+        padding: 14px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, var(--surface-strong)), color-mix(in srgb, var(--accent-3) 8%, var(--surface-strong)));
+        border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+      }
+      .ai-prediction-content {
+        margin-top: 8px;
+      }
+      .ai-prediction-days {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: var(--accent);
+      }
+      .ai-prediction-date {
+        font-size: 0.82rem;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+
       .stability-section {
         margin-top: 14px;
         padding-top: 12px;
@@ -4371,6 +4579,6 @@
     <div id="app"><div style="display:flex;align-items:center;justify-content:center;min-height:60vh;font-family:system-ui;color:#5b6187;"><div style="text-align:center;"><div style="font-size:2.4rem;margin-bottom:12px;">🌈</div><div style="font-size:1.1rem;font-weight:700;">読み込み中… / Loading…</div></div></div></div>
     <noscript><div style="padding:40px 20px;text-align:center;font-family:system-ui;"><h2>JavaScript Required</h2><p>このアプリを使用するにはJavaScriptを有効にしてください。<br>Please enable JavaScript to use this app.</p></div></noscript>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script type="module" src="./app.js"></script>
+    <script type="module" src="./app.bundle.js"></script>
   </body>
 </html>
