@@ -149,6 +149,7 @@ export const translations = {
     "import.csv.success": "{count}件のデータをインポートしました",
     "import.csv.errors": "{count}件のエラーがありました",
     "import.csv.empty": "インポートできるデータがありませんでした",
+    "import.error": "ファイルの読み込みに失敗しました",
     "import.csv.confirm": "{count}件のデータをインポートしますか？既存の同じ日付のデータは上書きされます。",
     "export.header.date": "日付",
     "export.header.weight": "体重 (kg)",
@@ -629,6 +630,10 @@ export const translations = {
     "share.footer": "— Rainbow体重管理で記録",
     "quickNote.label": "よく使うメモ",
     "quickNote.none": "メモ履歴なし",
+    "dupes.title": "データ品質チェック",
+    "dupes.duplicate": "{date}: {count}件の重複記録",
+    "dupes.suspicious": "{weight}kgが{count}日間連続（{from}〜{to}）",
+    "dupes.clean": "問題なし",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -782,6 +787,7 @@ export const translations = {
     "import.csv.success": "Imported {count} records",
     "import.csv.errors": "{count} errors occurred",
     "import.csv.empty": "No importable data found",
+    "import.error": "Failed to read file",
     "import.csv.confirm": "Import {count} records? Existing records on the same dates will be overwritten.",
     "export.header.date": "Date",
     "export.header.weight": "Weight (kg)",
@@ -1260,6 +1266,10 @@ export const translations = {
     "share.footer": "— Tracked with Rainbow Weight Log",
     "quickNote.label": "Frequent notes",
     "quickNote.none": "No note history",
+    "dupes.title": "Data Quality Check",
+    "dupes.duplicate": "{date}: {count} duplicate entries",
+    "dupes.suspicious": "{weight}kg repeated {count} days ({from} – {to})",
+    "dupes.clean": "No issues found",
   },
 };
 
