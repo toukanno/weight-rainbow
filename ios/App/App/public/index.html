@@ -657,6 +657,7 @@
         border: 1px solid var(--border);
         background: var(--surface);
         cursor: zoom-in;
+        animation: fadeIn 0.3s ease-out;
       }
 
       .record-note {
@@ -3222,6 +3223,7 @@
         font-size: 13px;
         color: var(--ok);
         animation: fadeIn 0.3s ease-out;
+        transition: color 0.2s ease;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -3405,11 +3407,16 @@
         color: var(--error);
         font-size: 12px;
         cursor: pointer;
-        transition: background 0.15s;
+        transition: background 0.15s, transform 0.1s ease;
       }
 
       .record-delete:hover {
         background: color-mix(in srgb, var(--error) 16%, transparent);
+      }
+
+      .record-delete:focus-visible {
+        outline: 2px solid var(--error);
+        outline-offset: 2px;
       }
 
       /* Export Buttons */

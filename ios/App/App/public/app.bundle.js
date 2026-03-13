@@ -28841,6 +28841,12 @@ function initReminder() {
 }
 var GOOGLE_CLIENT_ID = window.__GOOGLE_CLIENT_ID__ || "";
 var BACKUP_FILENAME = "weight-rainbow-backup.json";
+var DRIVE_TIMEOUT = 3e4;
+function fetchWithTimeout(url, opts = {}) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), DRIVE_TIMEOUT);
+  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(id));
+}
 var gTokenClient = null;
 var gToken = null;
 var gTokenExpiresAt = 0;
@@ -28897,19 +28903,13 @@ async function googleBackup() {
         note: r.note ?? "",
         createdAt: r.createdAt
       })),
-      profile: {
-        name: state.profile.name,
-        heightCm: state.profile.heightCm,
-        age: state.profile.age,
-        gender: state.profile.gender
-      },
       settings: {
         goalWeight: state.settings.goalWeight,
         theme: state.settings.theme,
         language: state.settings.language
       }
     };
-    const sr = await fetch(
+    const sr = await fetchWithTimeout(
       `https://www.googleapis.com/drive/v3/files?q=name='${BACKUP_FILENAME}'+and+trashed=false&spaces=appDataFolder&fields=files(id)`,
       { headers: { Authorization: `Bearer ${tk}` } }
     );
@@ -28919,7 +28919,7 @@ async function googleBackup() {
     const bd = JSON.stringify(data, null, 2);
     let ur;
     if (ex) {
-      ur = await fetch(
+      ur = await fetchWithTimeout(
         `https://www.googleapis.com/upload/drive/v3/files/${ex.id}?uploadType=media`,
         { method: "PATCH", headers: { Authorization: `Bearer ${tk}`, "Content-Type": "application/json" }, body: bd }
       );
@@ -28934,7 +28934,7 @@ Content-Type: application/json\r
 \r
 ${bd}\r
 --${boundary}--`;
-      ur = await fetch(
+      ur = await fetchWithTimeout(
         "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
         { method: "POST", headers: { Authorization: `Bearer ${tk}`, "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipartBody }
       );
