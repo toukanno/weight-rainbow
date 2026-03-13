@@ -25059,12 +25059,23 @@ if (window.matchMedia) {
   });
   applySystemTheme();
 }
+function sanitizeProfile(p) {
+  const defaults = createDefaultProfile();
+  const hc = String(p.heightCm ?? "");
+  const ag = String(p.age ?? "");
+  return {
+    name: typeof p.name === "string" ? p.name.slice(0, 50) : defaults.name,
+    heightCm: hc === "" || Number.isFinite(Number(hc)) && Number(hc) >= 50 && Number(hc) <= 300 ? hc : defaults.heightCm,
+    age: ag === "" || Number.isFinite(Number(ag)) && Number(ag) >= 1 && Number(ag) <= 150 ? ag : defaults.age,
+    gender: ["male", "female", "other", "unspecified", ""].includes(p.gender) ? p.gender : defaults.gender
+  };
+}
 function loadState() {
   const rawRecords = safeParse(STORAGE_KEYS.records, []);
   const records = Array.isArray(rawRecords) ? rawRecords.filter((r) => r && r.dt && Number.isFinite(r.wt)) : [];
   return {
     records,
-    profile: { ...createDefaultProfile(), ...safeParse(STORAGE_KEYS.profile, {}) },
+    profile: sanitizeProfile({ ...createDefaultProfile(), ...safeParse(STORAGE_KEYS.profile, {}) }),
     settings: { ...createDefaultSettings(), ...safeParse(STORAGE_KEYS.settings, {}) },
     form: {
       weight: "",
@@ -28118,7 +28129,13 @@ function handleImportData(event) {
       state.records = trimRecords(state.records, MAX_RECORDS);
       const newCount = state.records.length - beforeCount;
       if (data.profile && !state.profile.name) {
-        state.profile = { ...state.profile, ...data.profile };
+        const p = data.profile;
+        const safe = {};
+        if (typeof p.name === "string") safe.name = p.name.slice(0, 50);
+        if (Number.isFinite(Number(p.heightCm)) && Number(p.heightCm) >= 50 && Number(p.heightCm) <= 300) safe.heightCm = String(p.heightCm);
+        if (Number.isFinite(Number(p.age)) && Number(p.age) >= 1 && Number(p.age) <= 150) safe.age = String(p.age);
+        if (["male", "female", "other", ""].includes(p.gender)) safe.gender = p.gender;
+        state.profile = { ...state.profile, ...safe };
       }
       if (!persist()) {
         setStatus(t("status.storageError"), "error");
