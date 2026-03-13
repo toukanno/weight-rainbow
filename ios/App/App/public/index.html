@@ -97,7 +97,7 @@
         --surface-strong: rgba(255, 255, 255, 0.92);
         --text: #0f2b4a;
         --muted: #3b6b96;
-        --border: rgba(59, 130, 246, 0.14);
+        --border: rgba(59, 130, 246, 0.18);
         --accent: #3b82f6;
         --accent-2: #2563eb;
         --accent-3: #06b6d4;
@@ -126,8 +126,8 @@
         --surface: rgba(30, 35, 55, 0.82);
         --surface-strong: rgba(30, 35, 55, 0.94);
         --text: #e4e7f0;
-        --muted: #8b92b0;
-        --border: rgba(139, 146, 176, 0.18);
+        --muted: #9ba2be;
+        --border: rgba(139, 146, 176, 0.25);
         --accent: #818cf8;
         --accent-2: #6366f1;
         --accent-3: #a78bfa;
@@ -144,7 +144,7 @@
         --surface: rgba(255, 255, 255, 0.72);
         --surface-strong: rgba(255, 255, 255, 0.93);
         --text: #3d2e0f;
-        --muted: #7d6830;
+        --muted: #6b5520;
         --border: rgba(245, 158, 11, 0.16);
         --accent: #f59e0b;
         --accent-2: #d97706;
@@ -159,7 +159,7 @@
         --surface: rgba(255, 255, 255, 0.72);
         --surface-strong: rgba(255, 255, 255, 0.93);
         --text: #3d1f1f;
-        --muted: #8a5050;
+        --muted: #7a3e3e;
         --border: rgba(244, 63, 94, 0.14);
         --accent: #f43f5e;
         --accent-2: #e11d48;
@@ -564,7 +564,7 @@
         background: var(--surface);
         color: var(--muted);
         border: 1px solid var(--border);
-        transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+        transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
       }
 
       .tab.active {
@@ -5258,6 +5258,19 @@
 
         .hero-bottom {
           gap: 8px;
+        }
+
+        .content-grid {
+          gap: 12px;
+        }
+
+        .scroll-top-btn {
+          bottom: 16px;
+          right: 16px;
+        }
+
+        .lang-modal {
+          padding: 24px 16px;
         }
 
         .tab-row {
