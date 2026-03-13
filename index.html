@@ -186,6 +186,7 @@
       html {
         touch-action: manipulation;
         -webkit-touch-callout: none;
+        scroll-behavior: smooth;
       }
 
       body {
@@ -199,6 +200,10 @@
           env(safe-area-inset-right, 0)
           env(safe-area-inset-bottom, 0)
           env(safe-area-inset-left, 0);
+      }
+
+      ::selection {
+        background: color-mix(in srgb, var(--accent) 25%, transparent);
       }
 
       button,
@@ -330,6 +335,10 @@
         font-size: clamp(2.2rem, 6vw, 3.6rem);
         font-weight: 800;
         letter-spacing: -0.05em;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
       }
 
       .hero-card .bmi-label {

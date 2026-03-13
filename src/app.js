@@ -11,6 +11,7 @@ import {
   calcPeriodSummary,
   calcStreak,
   calcWeightTrend,
+  calcAchievements,
   createDefaultProfile,
   createDefaultSettings,
   extractWeightCandidates,
@@ -211,6 +212,7 @@ function render() {
   const trend = calcWeightTrend(state.records);
   const bmiStatus = stats?.latestBMI ? t(getBMIStatus(stats.latestBMI)) : t("bmi.unknown");
   const motivation = getMotivationalMessage(streak, trend, state.records, goalProgress);
+  const achievements = calcAchievements(state.records, streak, goalWeight);
   const previewWeightResult = validateWeight(state.form.weight);
   const currentBMI = previewWeightResult.valid && state.profile.heightCm
     ? buildRecord({
@@ -239,6 +241,7 @@ function render() {
               ${trend ? `<span class="trend-indicator ${trend}">${trend === "down" ? "📉" : trend === "up" ? "📈" : "➡️"} ${t("trend." + trend)}</span>` : ""}
             </div>
             ${motivation ? `<p class="motivation-msg">${motivation}</p>` : ""}
+            ${achievements.length ? `<div class="achievement-row">${achievements.map((a) => `<span class="achievement-badge ${a.tier}" title="${t("achievement." + a.id)}">${a.icon}</span>`).join("")}</div>` : ""}
           </div>
           <div class="hero-card">
             <div class="eyebrow">${t("bmi.title")}</div>

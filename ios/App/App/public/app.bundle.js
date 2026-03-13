@@ -1353,8 +1353,6 @@
       "entry.voiceStop": "Stop voice input",
       "entry.voiceHint": "Uses microphone permission only to capture your spoken weight and fill the input locally.",
       "entry.voiceUnsupported": "Voice input is not supported in this browser.",
-      "entry.note": "Note",
-      "entry.noteHint": "Optional note (max 100 chars)",
       "entry.saved": "Weight saved",
       "entry.noWeight": "Enter a weight value",
       "entry.bmiReady": "BMI for this entry",

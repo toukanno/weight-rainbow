@@ -353,3 +353,44 @@ export function buildCalendarMonth(records, year, month) {
     label: `${year}-${String(month + 1).padStart(2, "0")}`,
   };
 }
+
+export function calcAchievements(records, streak, goalWeight) {
+  const achievements = [];
+  if (!records.length) return achievements;
+
+  // Record count milestones
+  const countMilestones = [1, 10, 30, 50, 100, 180];
+  for (const m of countMilestones) {
+    if (records.length >= m) {
+      achievements.push({ id: `records_${m}`, icon: "📊", tier: m >= 100 ? "gold" : m >= 30 ? "silver" : "bronze" });
+    }
+  }
+
+  // Streak milestones
+  const streakMilestones = [3, 7, 14, 30, 60, 100];
+  for (const m of streakMilestones) {
+    if (streak >= m) {
+      achievements.push({ id: `streak_${m}`, icon: "🔥", tier: m >= 30 ? "gold" : m >= 7 ? "silver" : "bronze" });
+    }
+  }
+
+  // Weight loss milestones
+  if (records.length >= 2) {
+    const firstWt = records[0].wt;
+    const latestWt = records[records.length - 1].wt;
+    const lost = firstWt - latestWt;
+    const lossMilestones = [1, 3, 5, 10, 20];
+    for (const m of lossMilestones) {
+      if (lost >= m) {
+        achievements.push({ id: `loss_${m}`, icon: "⬇️", tier: m >= 10 ? "gold" : m >= 5 ? "silver" : "bronze" });
+      }
+    }
+  }
+
+  // Goal achieved
+  if (Number.isFinite(goalWeight) && records[records.length - 1].wt <= goalWeight) {
+    achievements.push({ id: "goal_achieved", icon: "🎯", tier: "gold" });
+  }
+
+  return achievements;
+}
