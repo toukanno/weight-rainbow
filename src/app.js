@@ -2092,6 +2092,20 @@ function renderPickerDecOptions(selected) {
 }
 
 function bindEvents() {
+  // Arrow key navigation for tablists (WCAG requirement)
+  app.querySelectorAll('[role="tablist"]').forEach((tablist) => {
+    tablist.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const tabs = [...tablist.querySelectorAll('[role="tab"]')];
+      const idx = tabs.indexOf(document.activeElement);
+      if (idx === -1) return;
+      e.preventDefault();
+      const next = e.key === "ArrowRight" ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
+      tabs[next].focus();
+      tabs[next].click();
+    });
+  });
+
   app.querySelectorAll("[data-mode]").forEach((button) => {
     button.addEventListener("click", () => {
       activeEntryMode = button.dataset.mode;
