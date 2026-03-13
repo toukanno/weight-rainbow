@@ -85,6 +85,7 @@ import {
   validateWeightEntry,
   calcWeeklyAverages,
   calcMonthlyRecordingMap,
+  calcWeightTrendIndicator,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -6586,5 +6587,73 @@ describe("calcMonthlyRecordingMap", () => {
     const result = calcMonthlyRecordingMap([], 2025, 2); // March 2025
     // March 1, 2025 is Saturday (dow=6)
     expect(result.days[0].dayOfWeek).toBe(6);
+  });
+});
+
+describe("calcWeightTrendIndicator", () => {
+  it("returns null for fewer than 4 records", () => {
+    expect(calcWeightTrendIndicator([])).toBeNull();
+    expect(calcWeightTrendIndicator([
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 71 },
+      { dt: "2025-01-03", wt: 72 },
+    ])).toBeNull();
+  });
+
+  it("detects downward trend", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72 },
+      { dt: "2025-01-02", wt: 71.5 },
+      { dt: "2025-01-03", wt: 71 },
+      { dt: "2025-01-04", wt: 70 },
+      { dt: "2025-01-05", wt: 69.5 },
+      { dt: "2025-01-06", wt: 69 },
+    ];
+    const result = calcWeightTrendIndicator(records);
+    expect(result.direction).toBe("down");
+    expect(result.change).toBeLessThan(0);
+  });
+
+  it("detects upward trend", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 68 },
+      { dt: "2025-01-02", wt: 68.5 },
+      { dt: "2025-01-03", wt: 69 },
+      { dt: "2025-01-04", wt: 70 },
+      { dt: "2025-01-05", wt: 70.5 },
+      { dt: "2025-01-06", wt: 71 },
+    ];
+    const result = calcWeightTrendIndicator(records);
+    expect(result.direction).toBe("up");
+    expect(result.change).toBeGreaterThan(0);
+  });
+
+  it("detects stable trend", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70.1 },
+      { dt: "2025-01-03", wt: 70 },
+      { dt: "2025-01-04", wt: 70.1 },
+      { dt: "2025-01-05", wt: 70 },
+      { dt: "2025-01-06", wt: 70.1 },
+    ];
+    const result = calcWeightTrendIndicator(records);
+    expect(result.direction).toBe("stable");
+  });
+
+  it("returns correct structure", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72 },
+      { dt: "2025-01-02", wt: 71 },
+      { dt: "2025-01-03", wt: 70 },
+      { dt: "2025-01-04", wt: 69 },
+    ];
+    const result = calcWeightTrendIndicator(records);
+    expect(result).toHaveProperty("direction");
+    expect(result).toHaveProperty("change");
+    expect(result).toHaveProperty("recentAvg");
+    expect(result).toHaveProperty("previousAvg");
+    expect(result).toHaveProperty("dataPoints");
+    expect(result.dataPoints).toBe(4);
   });
 });

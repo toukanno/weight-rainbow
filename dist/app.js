@@ -2648,6 +2648,26 @@ function calcMonthlyRecordingMap(records, year, month) {
     rate: daysInMonth > 0 ? Math.round(recordedCount / daysInMonth * 100) : 0
   };
 }
+function calcWeightTrendIndicator(records) {
+  if (records.length < 4) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent3 = sorted.slice(-3);
+  const prev3 = sorted.slice(-6, -3);
+  if (prev3.length === 0) return null;
+  const recentAvg = recent3.reduce((s, r) => s + r.wt, 0) / recent3.length;
+  const prevAvg = prev3.reduce((s, r) => s + r.wt, 0) / prev3.length;
+  const change = Math.round((recentAvg - prevAvg) * 10) / 10;
+  let direction = "stable";
+  if (change <= -0.2) direction = "down";
+  else if (change >= 0.2) direction = "up";
+  return {
+    direction,
+    change,
+    recentAvg: Math.round(recentAvg * 10) / 10,
+    previousAvg: Math.round(prevAvg * 10) / 10,
+    dataPoints: sorted.length
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -3316,7 +3336,9 @@ var translations = {
     "recCal.wed": "\u6C34",
     "recCal.thu": "\u6728",
     "recCal.fri": "\u91D1",
-    "recCal.sat": "\u571F"
+    "recCal.sat": "\u571F",
+    "trend.stable": "\u5B89\u5B9A\u3057\u3066\u3044\u307E\u3059",
+    "trend.recent": "\u76F4\u8FD13\u56DE\u5E73\u5747 {avg}kg"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3983,7 +4005,9 @@ var translations = {
     "recCal.wed": "We",
     "recCal.thu": "Th",
     "recCal.fri": "Fr",
-    "recCal.sat": "Sa"
+    "recCal.sat": "Sa",
+    "trend.stable": "Holding steady",
+    "trend.recent": "Last 3 avg: {avg}kg"
   }
 };
 function createTranslator(language) {
@@ -25056,6 +25080,7 @@ function render() {
               <div class="helper">${t("insight.bestDay").replace("{day}", t("day." + insight.bestDay))}</div>
               ${insight.weekComparison !== null ? `<div class="helper">${insight.weekComparison > 0.05 ? t("insight.weekUp").replace("{diff}", insight.weekComparison.toFixed(1)) : insight.weekComparison < -0.05 ? t("insight.weekDown").replace("{diff}", insight.weekComparison.toFixed(1)) : t("insight.weekSame")}</div>` : ""}
             </div>` : ""}
+            ${renderTrendIndicator()}
             ${renderMomentumScore()}
             ${renderStreakRewards()}
             ${renderGoalCountdown()}
@@ -25933,7 +25958,7 @@ function renderWeightRegression() {
 function renderBMIHistory() {
   const bh = calcBMIHistory(state.records);
   if (!bh) return "";
-  const zoneColors = { under: "#3b82f6", normal: "#10b981", over: "#f59e0b", obese: "#ef4444" };
+  const zoneColors = { under: "var(--accent-3)", normal: "var(--ok)", over: "var(--warn)", obese: "var(--error)" };
   const zoneBar = ["under", "normal", "over", "obese"].filter((z) => bh.zones[z] > 0).map((z) => `<div class="bmi-hist-seg" style="width:${bh.zones[z]}%;background:${zoneColors[z]};" title="${t("bmi." + z)} ${bh.zones[z]}%"></div>`).join("");
   const changeStr = bh.change > 0 ? "+" + bh.change : String(bh.change);
   return `
@@ -26015,7 +26040,7 @@ function renderStreakRewards() {
 function renderWeightConfidence() {
   const fc = calcWeightConfidence(state.records);
   if (!fc) return "";
-  const confColors = { high: "#10b981", medium: "#f59e0b", low: "#ef4444" };
+  const confColors = { high: "var(--ok)", medium: "var(--warn)", low: "var(--error)" };
   const confColor = confColors[fc.confidence] || confColors.low;
   const rows = fc.forecasts.map((f) => `
     <div class="forecast-row">
@@ -26039,7 +26064,7 @@ function renderWeightConfidence() {
 function renderProgressSummary() {
   const ps = calcProgressSummary(state.records);
   if (!ps) return "";
-  const trendColors = { improving: "#10b981", gaining: "#ef4444", stable: "#3b82f6" };
+  const trendColors = { improving: "var(--ok)", gaining: "var(--error)", stable: "var(--accent-3)" };
   const trendColor = trendColors[ps.trend] || trendColors.stable;
   const changeStr = ps.change > 0 ? "+" + ps.change : String(ps.change);
   const totalStr = ps.totalChange > 0 ? "+" + ps.totalChange : String(ps.totalChange);
@@ -26091,7 +26116,7 @@ function renderMilestoneTimeline() {
 function renderVolatilityIndex() {
   const vi = calcVolatilityIndex(state.records);
   if (!vi) return "";
-  const levelColors = { low: "#10b981", moderate: "#f59e0b", high: "#ef4444" };
+  const levelColors = { low: "var(--ok)", moderate: "var(--warn)", high: "var(--error)" };
   const color = levelColors[vi.level] || levelColors.moderate;
   const pct = Math.min(100, Math.round(vi.overall / 1.2 * 100));
   return `
@@ -26119,7 +26144,7 @@ function renderPeriodComparison() {
     const cur = period.current;
     const prev = period.previous;
     const diffStr = period.avgDiff != null ? period.avgDiff > 0 ? "+" + period.avgDiff : String(period.avgDiff) : "\u2014";
-    const diffColor = period.avgDiff != null ? period.avgDiff < 0 ? "#10b981" : period.avgDiff > 0 ? "#ef4444" : "var(--text)" : "var(--text)";
+    const diffColor = period.avgDiff != null ? period.avgDiff < 0 ? "var(--ok)" : period.avgDiff > 0 ? "var(--error)" : "var(--text)" : "var(--text)";
     return `
       <div class="compare-pair">
         <div class="compare-pair-title">${label}</div>
@@ -26176,15 +26201,13 @@ function renderGoalCountdown() {
 function renderBodyComposition() {
   const bc = calcBodyComposition(state.records);
   if (!bc) return "";
-  const trendColors = { fatLoss: "#10b981", muscleGain: "#3b82f6", recomp: "#8b5cf6", decline: "#ef4444", mixed: "#f59e0b" };
-  const trendColor = trendColors[bc.trend] || trendColors.mixed;
   const bfStr = bc.bfChange > 0 ? "+" + bc.bfChange : String(bc.bfChange);
   const fatStr = bc.fatMassChange > 0 ? "+" + bc.fatMassChange : String(bc.fatMassChange);
   const leanStr = bc.leanMassChange > 0 ? "+" + bc.leanMassChange : String(bc.leanMassChange);
   return `
     <div class="body-comp-section">
       <div class="helper">${t("bodyComp.title")}</div>
-      <div class="body-comp-trend" style="color:${trendColor}">${t("bodyComp." + bc.trend)}</div>
+      <div class="body-comp-trend body-comp-trend-${bc.trend}">${t("bodyComp." + bc.trend)}</div>
       <div class="body-comp-bf">${t("bodyComp.bf").replace("{first}", bc.firstBf).replace("{latest}", bc.latestBf).replace("{change}", bfStr)}</div>
       <div class="body-comp-masses">
         <div class="body-comp-mass fat">${t("bodyComp.fatMass").replace("{change}", fatStr)}</div>
@@ -26255,7 +26278,7 @@ function renderWeeklyAverages() {
       <div class="weekly-avg-value">${w.avg.toFixed(1)}</div>
       <div class="weekly-avg-bar ${changeClass}" style="height:${pct}%"></div>
       <div class="weekly-avg-label">${startLabel}</div>
-      ${change !== null ? `<div class="weekly-avg-change ${changeClass}">${change > 0 ? "+" : ""}${change}</div>` : ""}
+      ${change !== null ? `<div class="weekly-avg-change ${changeClass}">${change > 0 ? "+" : ""}${change.toFixed(1)}</div>` : ""}
     </div>`;
   });
   return `
@@ -26285,6 +26308,30 @@ function renderRecordingCalendar() {
       <div class="helper">${t("recCal.title")}</div>
       <div class="rec-cal-grid">${dayHeaders}${blanks}${cells}</div>
       <div class="helper hint-small" style="margin-top:6px">${rateText}</div>
+    </div>
+  `;
+}
+function renderTrendIndicator() {
+  const trend = calcWeightTrendIndicator(state.records);
+  if (!trend) return "";
+  const arrow = trend.direction === "down" ? "\u2193" : trend.direction === "up" ? "\u2191" : "\u2192";
+  const cls = trend.direction === "down" ? "trend-down" : trend.direction === "up" ? "trend-up" : "trend-stable";
+  let msg;
+  if (trend.direction === "down") {
+    msg = `${Math.abs(trend.change)}kg ${t("trend.down")}`;
+  } else if (trend.direction === "up") {
+    msg = `+${trend.change}kg ${t("trend.up")}`;
+  } else {
+    msg = t("trend.stable");
+  }
+  const recentText = t("trend.recent").replace("{avg}", trend.recentAvg.toFixed(1));
+  return `
+    <div class="trend-indicator ${cls}">
+      <span class="trend-arrow">${arrow}</span>
+      <div class="trend-text">
+        <div class="trend-msg">${msg}</div>
+        <div class="trend-detail">${recentText}</div>
+      </div>
     </div>
   `;
 }

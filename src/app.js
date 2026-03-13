@@ -88,6 +88,7 @@ import {
   validateWeightEntry,
   calcWeeklyAverages,
   calcMonthlyRecordingMap,
+  calcWeightTrendIndicator,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -703,6 +704,7 @@ function render() {
                 : t("insight.weekSame")
               }</div>` : ""}
             </div>` : ""}
+            ${renderTrendIndicator()}
             ${renderMomentumScore()}
             ${renderStreakRewards()}
             ${renderGoalCountdown()}
@@ -1614,7 +1616,7 @@ function renderWeightRegression() {
 function renderBMIHistory() {
   const bh = calcBMIHistory(state.records);
   if (!bh) return "";
-  const zoneColors = { under: "#3b82f6", normal: "#10b981", over: "#f59e0b", obese: "#ef4444" };
+  const zoneColors = { under: "var(--accent-3)", normal: "var(--ok)", over: "var(--warn)", obese: "var(--error)" };
   const zoneBar = ["under", "normal", "over", "obese"]
     .filter((z) => bh.zones[z] > 0)
     .map((z) => `<div class="bmi-hist-seg" style="width:${bh.zones[z]}%;background:${zoneColors[z]};" title="${t("bmi." + z)} ${bh.zones[z]}%"></div>`)
@@ -1704,7 +1706,7 @@ function renderStreakRewards() {
 function renderWeightConfidence() {
   const fc = calcWeightConfidence(state.records);
   if (!fc) return "";
-  const confColors = { high: "#10b981", medium: "#f59e0b", low: "#ef4444" };
+  const confColors = { high: "var(--ok)", medium: "var(--warn)", low: "var(--error)" };
   const confColor = confColors[fc.confidence] || confColors.low;
   const rows = fc.forecasts.map((f) => `
     <div class="forecast-row">
@@ -1729,7 +1731,7 @@ function renderWeightConfidence() {
 function renderProgressSummary() {
   const ps = calcProgressSummary(state.records);
   if (!ps) return "";
-  const trendColors = { improving: "#10b981", gaining: "#ef4444", stable: "#3b82f6" };
+  const trendColors = { improving: "var(--ok)", gaining: "var(--error)", stable: "var(--accent-3)" };
   const trendColor = trendColors[ps.trend] || trendColors.stable;
   const changeStr = ps.change > 0 ? "+" + ps.change : String(ps.change);
   const totalStr = ps.totalChange > 0 ? "+" + ps.totalChange : String(ps.totalChange);
@@ -1785,7 +1787,7 @@ function renderMilestoneTimeline() {
 function renderVolatilityIndex() {
   const vi = calcVolatilityIndex(state.records);
   if (!vi) return "";
-  const levelColors = { low: "#10b981", moderate: "#f59e0b", high: "#ef4444" };
+  const levelColors = { low: "var(--ok)", moderate: "var(--warn)", high: "var(--error)" };
   const color = levelColors[vi.level] || levelColors.moderate;
   // Scale bar: map overall avg to 0-100 (0.3=low threshold, 0.8=high threshold)
   const pct = Math.min(100, Math.round((vi.overall / 1.2) * 100));
@@ -1819,7 +1821,7 @@ function renderPeriodComparison() {
       ? (period.avgDiff > 0 ? "+" + period.avgDiff : String(period.avgDiff))
       : "—";
     const diffColor = period.avgDiff != null
-      ? (period.avgDiff < 0 ? "#10b981" : period.avgDiff > 0 ? "#ef4444" : "var(--text)")
+      ? (period.avgDiff < 0 ? "var(--ok)" : period.avgDiff > 0 ? "var(--error)" : "var(--text)")
       : "var(--text)";
     return `
       <div class="compare-pair">
@@ -1880,15 +1882,13 @@ function renderGoalCountdown() {
 function renderBodyComposition() {
   const bc = calcBodyComposition(state.records);
   if (!bc) return "";
-  const trendColors = { fatLoss: "#10b981", muscleGain: "#3b82f6", recomp: "#8b5cf6", decline: "#ef4444", mixed: "#f59e0b" };
-  const trendColor = trendColors[bc.trend] || trendColors.mixed;
   const bfStr = bc.bfChange > 0 ? "+" + bc.bfChange : String(bc.bfChange);
   const fatStr = bc.fatMassChange > 0 ? "+" + bc.fatMassChange : String(bc.fatMassChange);
   const leanStr = bc.leanMassChange > 0 ? "+" + bc.leanMassChange : String(bc.leanMassChange);
   return `
     <div class="body-comp-section">
       <div class="helper">${t("bodyComp.title")}</div>
-      <div class="body-comp-trend" style="color:${trendColor}">${t("bodyComp." + bc.trend)}</div>
+      <div class="body-comp-trend body-comp-trend-${bc.trend}">${t("bodyComp." + bc.trend)}</div>
       <div class="body-comp-bf">${t("bodyComp.bf").replace("{first}", bc.firstBf).replace("{latest}", bc.latestBf).replace("{change}", bfStr)}</div>
       <div class="body-comp-masses">
         <div class="body-comp-mass fat">${t("bodyComp.fatMass").replace("{change}", fatStr)}</div>
@@ -1962,7 +1962,7 @@ function renderWeeklyAverages() {
       <div class="weekly-avg-value">${w.avg.toFixed(1)}</div>
       <div class="weekly-avg-bar ${changeClass}" style="height:${pct}%"></div>
       <div class="weekly-avg-label">${startLabel}</div>
-      ${change !== null ? `<div class="weekly-avg-change ${changeClass}">${change > 0 ? "+" : ""}${change}</div>` : ""}
+      ${change !== null ? `<div class="weekly-avg-change ${changeClass}">${change > 0 ? "+" : ""}${change.toFixed(1)}</div>` : ""}
     </div>`;
   });
   return `
@@ -1994,6 +1994,31 @@ function renderRecordingCalendar() {
       <div class="helper">${t("recCal.title")}</div>
       <div class="rec-cal-grid">${dayHeaders}${blanks}${cells}</div>
       <div class="helper hint-small" style="margin-top:6px">${rateText}</div>
+    </div>
+  `;
+}
+
+function renderTrendIndicator() {
+  const trend = calcWeightTrendIndicator(state.records);
+  if (!trend) return "";
+  const arrow = trend.direction === "down" ? "↓" : trend.direction === "up" ? "↑" : "→";
+  const cls = trend.direction === "down" ? "trend-down" : trend.direction === "up" ? "trend-up" : "trend-stable";
+  let msg;
+  if (trend.direction === "down") {
+    msg = `${Math.abs(trend.change)}kg ${t("trend.down")}`;
+  } else if (trend.direction === "up") {
+    msg = `+${trend.change}kg ${t("trend.up")}`;
+  } else {
+    msg = t("trend.stable");
+  }
+  const recentText = t("trend.recent").replace("{avg}", trend.recentAvg.toFixed(1));
+  return `
+    <div class="trend-indicator ${cls}">
+      <span class="trend-arrow">${arrow}</span>
+      <div class="trend-text">
+        <div class="trend-msg">${msg}</div>
+        <div class="trend-detail">${recentText}</div>
+      </div>
     </div>
   `;
 }

@@ -2011,6 +2011,11 @@
         font-size: 0.9rem;
         margin-top: 4px;
       }
+      .body-comp-trend-fatLoss { color: var(--ok); }
+      .body-comp-trend-muscleGain { color: var(--accent-3); }
+      .body-comp-trend-recomp { color: var(--accent); }
+      .body-comp-trend-decline { color: var(--error); }
+      .body-comp-trend-mixed { color: var(--warn); }
       .body-comp-bf {
         font-size: 0.82rem;
         color: var(--text);
@@ -2196,6 +2201,41 @@
       .rec-cal-cell.future {
         opacity: 0.3;
         color: var(--muted);
+      }
+
+      .trend-indicator {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        margin-bottom: 10px;
+      }
+      .trend-indicator.trend-down {
+        background: color-mix(in srgb, var(--accent-3) 12%, transparent);
+      }
+      .trend-indicator.trend-up {
+        background: color-mix(in srgb, var(--accent-2) 12%, transparent);
+      }
+      .trend-indicator.trend-stable {
+        background: color-mix(in srgb, var(--accent) 10%, transparent);
+      }
+      .trend-arrow {
+        font-size: 1.4rem;
+        font-weight: 700;
+        line-height: 1;
+      }
+      .trend-down .trend-arrow { color: var(--accent-3); }
+      .trend-up .trend-arrow { color: var(--accent-2); }
+      .trend-stable .trend-arrow { color: var(--accent); }
+      .trend-msg {
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+      .trend-detail {
+        font-size: 0.75rem;
+        color: var(--text-sub);
+        margin-top: 2px;
       }
 
       .analytics-toggle-section {

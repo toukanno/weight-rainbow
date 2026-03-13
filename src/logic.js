@@ -2263,3 +2263,32 @@ export function calcMonthlyRecordingMap(records, year, month) {
     rate: daysInMonth > 0 ? Math.round((recordedCount / daysInMonth) * 100) : 0,
   };
 }
+
+/**
+ * Calculate a short-term weight trend indicator.
+ * Compares the last 3-day average to the previous 3-day average.
+ * Returns { direction: "down"|"up"|"stable", change, recentAvg, previousAvg, dataPoints }
+ */
+export function calcWeightTrendIndicator(records) {
+  if (records.length < 4) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent3 = sorted.slice(-3);
+  const prev3 = sorted.slice(-6, -3);
+  if (prev3.length === 0) return null;
+
+  const recentAvg = recent3.reduce((s, r) => s + r.wt, 0) / recent3.length;
+  const prevAvg = prev3.reduce((s, r) => s + r.wt, 0) / prev3.length;
+  const change = Math.round((recentAvg - prevAvg) * 10) / 10;
+
+  let direction = "stable";
+  if (change <= -0.2) direction = "down";
+  else if (change >= 0.2) direction = "up";
+
+  return {
+    direction,
+    change,
+    recentAvg: Math.round(recentAvg * 10) / 10,
+    previousAvg: Math.round(prevAvg * 10) / 10,
+    dataPoints: sorted.length,
+  };
+}

@@ -652,6 +652,8 @@ export const translations = {
     "recCal.thu": "木",
     "recCal.fri": "金",
     "recCal.sat": "土",
+    "trend.stable": "安定しています",
+    "trend.recent": "直近3回平均 {avg}kg",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1306,6 +1308,8 @@ export const translations = {
     "recCal.thu": "Th",
     "recCal.fri": "Fr",
     "recCal.sat": "Sa",
+    "trend.stable": "Holding steady",
+    "trend.recent": "Last 3 avg: {avg}kg",
   },
 };
 
