@@ -601,6 +601,8 @@
         color: var(--text);
         text-align: center;
         margin-top: 8px;
+        animation: fadeIn 0.2s ease-out;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.08);
       }
 
       .stat-grid {
@@ -666,13 +668,13 @@
       }
 
       .record-diff.negative {
-        color: #10b981;
+        color: var(--ok, #10b981);
         background: rgba(16, 185, 129, 0.1);
       }
 
       .record-diff.positive {
         color: #dc2626;
-        background: rgba(220, 38, 38, 0.1);
+        background: rgba(220, 38, 38, 0.08);
       }
 
       .tag {
@@ -733,6 +735,11 @@
         margin-top: 14px;
         font-size: 13px;
         color: var(--ok);
+        animation: fadeIn 0.3s ease-out;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: translateY(0); }
       }
 
       .warn {
@@ -1264,6 +1271,114 @@
         border-color: transparent;
       }
 
+      /* Calendar */
+      .calendar-nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .calendar-nav button {
+        padding: 6px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(120, 130, 180, 0.16);
+        background: rgba(255, 255, 255, 0.7);
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform 0.15s;
+      }
+      .calendar-nav button:hover {
+        transform: translateY(-1px);
+      }
+      .calendar-label {
+        font-weight: 700;
+        font-size: 1.05rem;
+      }
+      .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+      }
+      .calendar-header {
+        text-align: center;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--muted);
+        padding: 4px 0;
+      }
+      .calendar-cell {
+        aspect-ratio: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        color: var(--text);
+        background: var(--surface);
+        cursor: default;
+        transition: transform 0.15s;
+        gap: 1px;
+      }
+      .calendar-cell.empty {
+        background: transparent;
+      }
+      .calendar-cell.has-record {
+        color: white;
+        font-weight: 600;
+      }
+      .calendar-day {
+        font-size: 0.8rem;
+        line-height: 1;
+      }
+      .calendar-wt {
+        font-size: 0.6rem;
+        opacity: 0.85;
+      }
+      body[data-theme="midnight"] .calendar-nav button {
+        background: rgba(30, 35, 55, 0.6);
+        border-color: rgba(139, 146, 176, 0.18);
+        color: #e4e7f0;
+      }
+      body[data-theme="midnight"] .diff-box,
+      body[data-theme="midnight"] .goal-box {
+        background: rgba(30, 35, 55, 0.65);
+        border-color: rgba(139, 146, 176, 0.14);
+      }
+      body[data-theme="midnight"] .summary-tab {
+        background: rgba(30, 35, 55, 0.5);
+        color: #b0b8d0;
+      }
+      body[data-theme="midnight"] .summary-tab.active {
+        background: var(--accent);
+        color: white;
+      }
+      body[data-theme="midnight"] .progress-bar-track {
+        background: rgba(139, 146, 176, 0.2);
+      }
+      body[data-theme="midnight"] .lang-modal {
+        background: #1e2337;
+        color: #e4e7f0;
+      }
+      body[data-theme="midnight"] .rainbow-card {
+        background: rgba(30, 35, 55, 0.92);
+        color: #e4e7f0;
+      }
+
+      /* Hover/active enhancements */
+      .summary-tab:hover {
+        transform: translateY(-1px);
+        opacity: 0.85;
+      }
+      .record-delete:active {
+        transform: scale(0.95);
+      }
+      .quick-buttons button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      }
+
       /* Reminder */
       .reminder-grid {
         display: grid;
@@ -1369,6 +1484,14 @@
         .record-row,
         .row,
         .ad-slot {
+          grid-template-columns: 1fr;
+        }
+
+        .theme-grid {
+          grid-template-columns: repeat(3, 1fr);
+        }
+
+        .reminder-grid {
           grid-template-columns: 1fr;
         }
       }

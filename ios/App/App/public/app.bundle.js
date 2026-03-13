@@ -784,6 +784,7 @@
   var WEIGHT_RANGE = { min: 20, max: 300 };
   var HEIGHT_RANGE = { min: 80, max: 250 };
   var AGE_RANGE = { min: 1, max: 120 };
+  var BODY_FAT_RANGE = { min: 1, max: 70 };
   function normalizeNumericInput(value) {
     return String(value ?? "").trim().replace(/[０-９]/g, (char) => String(char.charCodeAt(0) - 65296)).replace(/[．，]/g, ".").replace(/,/g, ".").replace(/\s+/g, "");
   }
@@ -797,6 +798,19 @@
       return { valid: false, error: "weight.range" };
     }
     return { valid: true, weight };
+  }
+  function validateBodyFat(value) {
+    if (!value && value !== 0) return { valid: true, bodyFat: null };
+    const normalized = normalizeNumericInput(value);
+    if (!normalized) return { valid: true, bodyFat: null };
+    if (!/^\d{1,2}(\.\d{1,2})?$/.test(normalized)) {
+      return { valid: false, error: "bodyFat.invalid" };
+    }
+    const bodyFat = Number(normalized);
+    if (!Number.isFinite(bodyFat) || bodyFat < BODY_FAT_RANGE.min || bodyFat > BODY_FAT_RANGE.max) {
+      return { valid: false, error: "bodyFat.range" };
+    }
+    return { valid: true, bodyFat };
   }
   function validateProfile(profile) {
     const result = {
@@ -861,12 +875,13 @@
     const candidates = extractWeightCandidates(transcript);
     return pickWeightCandidate(candidates, fallbackWeight);
   }
-  function buildRecord({ date, weight, profile, source, imageName = "" }) {
+  function buildRecord({ date, weight, profile, source, imageName = "", bodyFat = null }) {
     const bmi = calculateBMI(weight, profile.heightCm);
     return {
       dt: date,
       wt: weight,
       bmi,
+      bf: bodyFat,
       source,
       imageName,
       createdAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -1259,6 +1274,13 @@
       "settings.autoTheme.hint": "\u30C0\u30FC\u30AF\u30E2\u30FC\u30C9\u6642\u306F\u81EA\u52D5\u3067Midnight\u30C6\u30FC\u30DE\u306B\u5207\u308A\u66FF\u308F\u308A\u307E\u3059",
       "undo.button": "\u5143\u306B\u623B\u3059",
       "undo.done": "\u8A18\u9332\u3092\u5143\u306B\u623B\u3057\u307E\u3057\u305F",
+      "chart.period.7": "7\u65E5",
+      "chart.period.30": "30\u65E5",
+      "chart.period.90": "90\u65E5",
+      "chart.period.all": "\u5168\u3066",
+      "share.chart": "\u5171\u6709",
+      "share.done": "\u30C1\u30E3\u30FC\u30C8\u3092\u5171\u6709\u3057\u307E\u3057\u305F",
+      "share.error": "\u5171\u6709\u306B\u5931\u6557\u3057\u307E\u3057\u305F",
       "calendar.title": "\u8A18\u9332\u30AB\u30EC\u30F3\u30C0\u30FC",
       "calendar.hint": "\u8272\u306E\u6FC3\u3055\u306F\u6708\u5185\u306E\u4F53\u91CD\u306E\u76F8\u5BFE\u4F4D\u7F6E\u3092\u793A\u3057\u307E\u3059",
       "calendar.prev": "\u25C0",
@@ -1270,7 +1292,17 @@
       "calendar.thu": "\u6728",
       "calendar.fri": "\u91D1",
       "calendar.sat": "\u571F",
-      "calendar.records": "{count}\u4EF6\u306E\u8A18\u9332"
+      "calendar.records": "{count}\u4EF6\u306E\u8A18\u9332",
+      "bodyFat.label": "\u4F53\u8102\u80AA\u7387 (%)",
+      "bodyFat.hint": "\u4F53\u8102\u80AA\u7387\uFF08\u4EFB\u610F\uFF09",
+      "bodyFat.invalid": "\u4F53\u8102\u80AA\u7387\u306F\u6570\u5024\u3067\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044",
+      "bodyFat.range": "\u4F53\u8102\u80AA\u7387\u306F1%\u301C70%\u3067\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044",
+      "goal.saved": "\u76EE\u6A19\u4F53\u91CD\u3092\u4FDD\u5B58\u3057\u307E\u3057\u305F",
+      "camera.cancel": "\u30AD\u30E3\u30F3\u30BB\u30EB",
+      "camera.photo": "\u30D5\u30A9\u30C8\u30E9\u30A4\u30D6\u30E9\u30EA",
+      "camera.picture": "\u30AB\u30E1\u30E9",
+      "record.dailyLimit": "1\u65E510\u56DE\u307E\u3067\u4F53\u91CD\u3092\u8A18\u9332\u3067\u304D\u307E\u3059",
+      "record.dailyLimitReached": "\u672C\u65E5\u306E\u8A18\u9332\u4E0A\u9650\uFF0810\u56DE\uFF09\u306B\u9054\u3057\u307E\u3057\u305F"
     },
     en: {
       "app.title": "Rainbow Weight Log",
@@ -1490,6 +1522,13 @@
       "settings.autoTheme.hint": "Auto-switches to Midnight theme when dark mode is enabled",
       "undo.button": "Undo",
       "undo.done": "Record undone",
+      "chart.period.7": "7 days",
+      "chart.period.30": "30 days",
+      "chart.period.90": "90 days",
+      "chart.period.all": "All",
+      "share.chart": "Share",
+      "share.done": "Chart shared",
+      "share.error": "Sharing failed",
       "calendar.title": "Record Calendar",
       "calendar.hint": "Color intensity shows relative weight within the month",
       "calendar.prev": "\u25C0",
@@ -1501,7 +1540,17 @@
       "calendar.thu": "Thu",
       "calendar.fri": "Fri",
       "calendar.sat": "Sat",
-      "calendar.records": "{count} records"
+      "calendar.records": "{count} records",
+      "bodyFat.label": "Body Fat (%)",
+      "bodyFat.hint": "Body fat percentage (optional)",
+      "bodyFat.invalid": "Enter body fat as a valid number",
+      "bodyFat.range": "Body fat must be between 1% and 70%",
+      "goal.saved": "Goal weight saved",
+      "camera.cancel": "Cancel",
+      "camera.photo": "Photo Library",
+      "camera.picture": "Camera",
+      "record.dailyLimit": "Up to 10 records per day",
+      "record.dailyLimitReached": "Daily record limit (10) reached"
     }
   };
   function createTranslator(language) {
@@ -22038,6 +22087,7 @@
   var rainbowVisible = false;
   var rainbowDetail = "";
   var summaryPeriod = "week";
+  var chartPeriod = "all";
   var reminderTimer = null;
   var calendarYear = (/* @__PURE__ */ new Date()).getFullYear();
   var calendarMonth = (/* @__PURE__ */ new Date()).getMonth();
@@ -22079,7 +22129,8 @@
         date: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
         imageName: "",
         pickerInt: 65,
-        pickerDec: 0
+        pickerDec: 0,
+        bodyFat: ""
       }
     };
   }
@@ -22316,6 +22367,10 @@
                   <label for="recordDate">${t("entry.date")}</label>
                   <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" />
                 </div>
+                <div class="field">
+                  <label for="bodyFat">${t("bodyFat.label")}</label>
+                  <input id="bodyFat" name="bodyFat" inputmode="decimal" placeholder="${t("bodyFat.hint")}" value="${escapeAttr(state.form.bodyFat)}" />
+                </div>
               </div>
 
               <!-- Quick Record Section -->
@@ -22366,6 +22421,7 @@
               <div class="row">
                 <button type="button" class="btn" data-action="save-record">${t("entry.save")}</button>
                 <div class="helper">${state.profile.heightCm ? `${t("entry.bmiReady")}: ${formatBMI(currentBMI)}` : t("bmi.unknown")}</div>
+                <div class="helper" style="font-size:0.75rem;opacity:0.7;">${t("record.dailyLimit")}</div>
               </div>
             </div>
 
@@ -22381,6 +22437,13 @@
                 <h2>${t("section.chart")}</h2>
                 <p>${stats?.latestDate ?? t("chart.empty")}</p>
               </div>
+              ${state.records.length ? `<button type="button" class="btn secondary" data-action="share-chart">${t("share.chart")}</button>` : ""}
+            </div>
+            <div class="summary-tabs" style="margin-bottom:10px;">
+              <button type="button" class="summary-tab ${chartPeriod === "7" ? "active" : ""}" data-chart-period="7">${t("chart.period.7")}</button>
+              <button type="button" class="summary-tab ${chartPeriod === "30" ? "active" : ""}" data-chart-period="30">${t("chart.period.30")}</button>
+              <button type="button" class="summary-tab ${chartPeriod === "90" ? "active" : ""}" data-chart-period="90">${t("chart.period.90")}</button>
+              <button type="button" class="summary-tab ${chartPeriod === "all" ? "active" : ""}" data-chart-period="all">${t("chart.period.all")}</button>
             </div>
             <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}"></canvas>
             <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
@@ -22654,35 +22717,32 @@
     return `<div class="metric"><div class="label">${label}</div><div class="value">${value}</div></div>`;
   }
   function renderCalendar() {
-    const cal = buildCalendarMonth(state.records, calendarYear, calendarMonth);
-    const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-    const dowHeaders = ["calendar.sun", "calendar.mon", "calendar.tue", "calendar.wed", "calendar.thu", "calendar.fri", "calendar.sat"].map((k) => `<div class="cal-dow">${t(k)}</div>`).join("");
-    let cells = "";
-    for (let i = 0; i < cal.startDow; i++) cells += `<div class="cal-cell empty"></div>`;
-    for (const d of cal.days) {
-      const isToday = d.dt === today;
-      let bg = "";
-      if (d.wt !== null) {
-        const hue = Math.round(120 - d.intensity * 120);
-        bg = `background:hsla(${hue},70%,55%,0.6);`;
-      }
-      const todayCls = isToday ? " today" : "";
-      const recordCls = d.wt !== null ? " has-record" : "";
-      const tooltip = d.wt !== null ? ` title="${d.wt.toFixed(1)}kg"` : "";
-      cells += `<div class="cal-cell${todayCls}${recordCls}" style="${bg}"${tooltip}>${d.day}</div>`;
+    const data = buildCalendarMonth(state.records, calendarYear, calendarMonth);
+    const dayNames = ["calendar.sun", "calendar.mon", "calendar.tue", "calendar.wed", "calendar.thu", "calendar.fri", "calendar.sat"];
+    let html = `<div class="calendar-nav">
+    <button type="button" data-action="cal-prev">${t("calendar.prev")}</button>
+    <span class="calendar-label">${data.label}</span>
+    <button type="button" data-action="cal-next">${t("calendar.next")}</button>
+  </div>`;
+    html += `<div class="calendar-grid">`;
+    for (const key of dayNames) {
+      html += `<div class="calendar-header">${t(key)}</div>`;
     }
-    return `
-    <div class="calendar-nav">
-      <button type="button" class="btn secondary" data-action="cal-prev">${t("calendar.prev")}</button>
-      <span class="cal-label">${cal.label}</span>
-      <button type="button" class="btn secondary" data-action="cal-next">${t("calendar.next")}</button>
-    </div>
-    <div class="cal-grid">
-      ${dowHeaders}
-      ${cells}
-    </div>
-    <div class="helper" style="margin-top:8px;text-align:center;">${t("calendar.records").replace("{count}", cal.recordCount)}</div>
-  `;
+    for (let i = 0; i < data.startDow; i++) {
+      html += `<div class="calendar-cell empty"></div>`;
+    }
+    for (const d of data.days) {
+      const hasRecord = d.wt !== null;
+      const intensity = d.intensity !== null ? d.intensity : 0;
+      const bg = hasRecord ? `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)` : "";
+      html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}" style="${bg}" title="${hasRecord ? `${d.wt} kg` : ""}">
+      <span class="calendar-day">${d.day}</span>
+      ${hasRecord ? `<span class="calendar-wt">${d.wt}</span>` : ""}
+    </div>`;
+    }
+    html += `</div>`;
+    html += `<div class="helper" style="margin-top:8px">${t("calendar.records").replace("{count}", data.recordCount)}</div>`;
+    return html;
   }
   function renderStat(label, value) {
     return `<div class="stat-card"><div class="label">${label}</div><div class="value">${value}</div></div>`;
@@ -22711,7 +22771,7 @@
           <div class="record-weight">${formatWeight(record.wt)} ${diffHtml}</div>
           <div class="helper">${escapeAttr(record.dt)}${record.imageName ? ` / ${escapeAttr(record.imageName)}` : ""}</div>
         </div>
-        <div class="helper">${t("bmi.title")}: ${bmiText}</div>
+        <div class="helper">${t("bmi.title")}: ${bmiText}${record.bf ? ` / ${t("bodyFat.label")}: ${record.bf}%` : ""}</div>
       </div>
       <button type="button" class="record-delete" data-delete-date="${escapeAttr(record.dt)}">${t("records.delete")}</button>
     </div>
@@ -22809,6 +22869,12 @@
         render();
       });
     });
+    app.querySelectorAll("[data-chart-period]").forEach((button) => {
+      button.addEventListener("click", () => {
+        chartPeriod = button.dataset.chartPeriod;
+        render();
+      });
+    });
     app.querySelectorAll("[data-delete-date]").forEach((button) => {
       button.addEventListener("click", () => {
         if (!window.confirm(t("confirm.deleteRecord"))) return;
@@ -22817,6 +22883,7 @@
         render();
       });
     });
+    app.querySelector('[data-action="share-chart"]')?.addEventListener("click", shareChart);
     document.getElementById("rainbowOverlay")?.addEventListener("click", () => {
       rainbowVisible = false;
       document.getElementById("rainbowOverlay")?.remove();
@@ -22851,7 +22918,7 @@
       render();
       return;
     }
-    if (["weight", "date"].includes(name)) {
+    if (["weight", "date", "bodyFat"].includes(name)) {
       state.form = { ...state.form, [name]: value };
       return;
     }
@@ -22947,6 +23014,11 @@
       setStatus(t(weightResult.error || "entry.noWeight"), "error");
       return;
     }
+    const bfResult = validateBodyFat(state.form.bodyFat);
+    if (!bfResult.valid) {
+      setStatus(t(bfResult.error), "error");
+      return;
+    }
     state.profile = {
       ...profileResult.profile,
       heightCm: profileResult.profile.heightCm ?? "",
@@ -22959,7 +23031,8 @@
       weight: weightResult.weight,
       profile: state.profile,
       source,
-      imageName: state.form.imageName
+      imageName: state.form.imageName,
+      bodyFat: bfResult.bodyFat
     });
     const updated = upsertRecord(state.records, record);
     state.records = trimRecords(updated, MAX_RECORDS);
@@ -22969,7 +23042,8 @@
       weight: weightResult.weight.toFixed(1),
       pickerInt: Math.floor(weightResult.weight),
       pickerDec: Math.round((weightResult.weight - Math.floor(weightResult.weight)) * 10),
-      imageName: source === "photo" ? state.form.imageName : ""
+      imageName: source === "photo" ? state.form.imageName : "",
+      bodyFat: ""
     };
     if (!persist()) {
       setStatus(t("status.storageError"), "error");
@@ -23090,9 +23164,9 @@
         quality: 92,
         correctOrientation: true,
         promptLabelHeader: t("entry.photo"),
-        promptLabelCancel: state.settings.language === "ja" ? "\u30AD\u30E3\u30F3\u30BB\u30EB" : "Cancel",
-        promptLabelPhoto: state.settings.language === "ja" ? "\u30D5\u30A9\u30C8\u30E9\u30A4\u30D6\u30E9\u30EA" : "Photo Library",
-        promptLabelPicture: state.settings.language === "ja" ? "\u30AB\u30E1\u30E9" : "Camera"
+        promptLabelCancel: t("camera.cancel"),
+        promptLabelPhoto: t("camera.photo"),
+        promptLabelPicture: t("camera.picture")
       });
       imagePreviewUrl = photo.webPath || "";
       state.form.imageName = photo.path?.split("/").pop() || "camera-photo.jpeg";
@@ -23224,6 +23298,7 @@
       Date: r.dt,
       "Weight (kg)": r.wt,
       BMI: r.bmi ?? "",
+      "Body Fat (%)": r.bf ?? "",
       Source: r.source
     }));
     const ws = utils.json_to_sheet(rows);
@@ -23237,9 +23312,9 @@
       setStatus(t("records.empty"), "error");
       return;
     }
-    const header = "Date,Weight (kg),BMI,Source";
+    const header = "Date,Weight (kg),BMI,Body Fat (%),Source";
     const lines = state.records.map(
-      (r) => `${r.dt},${r.wt},${r.bmi ?? ""},${r.source}`
+      (r) => `${r.dt},${r.wt},${r.bmi ?? ""},${r.bf ?? ""},${r.source}`
     );
     const csv = [header, ...lines].join("\n");
     downloadFile(csv, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.csv`, "text/csv");
@@ -23252,7 +23327,8 @@
     }
     const lines = state.records.map((r) => {
       const bmiStr = r.bmi ? ` / BMI: ${r.bmi.toFixed(1)}` : "";
-      return `${r.dt}  ${r.wt.toFixed(1)}kg${bmiStr}  (${r.source})`;
+      const bfStr = r.bf ? ` / BF: ${r.bf.toFixed(1)}%` : "";
+      return `${r.dt}  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})`;
     });
     const text = `Rainbow Weight Log - ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}
 ${"=".repeat(48)}
@@ -23268,6 +23344,31 @@ ${lines.join("\n")}`;
     anchor.download = filename;
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+  async function shareChart() {
+    const canvas = document.getElementById("chart");
+    if (!canvas) return;
+    try {
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (navigator.share && navigator.canShare) {
+        const file = new File([blob], "weight-chart.png", { type: "image/png" });
+        const shareData = { files: [file] };
+        if (navigator.canShare(shareData)) {
+          await navigator.share(shareData);
+          setStatus(t("share.done"));
+          return;
+        }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `weight-chart-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setStatus(t("share.done"));
+    } catch {
+      setStatus(t("share.error"), "error");
+    }
   }
   function spawnConfetti() {
     const container = document.getElementById("confettiContainer");
@@ -23385,19 +23486,25 @@ ${lines.join("\n")}`;
     context.scale(dpr, dpr);
     const width = rect.width;
     const height = rect.height;
-    if (!state.records.length) {
+    let chartRecords = state.records;
+    if (chartPeriod !== "all") {
+      const days2 = parseInt(chartPeriod, 10);
+      const cutoff = new Date(Date.now() - days2 * 864e5).toISOString().slice(0, 10);
+      chartRecords = state.records.filter((r) => r.dt >= cutoff);
+    }
+    if (!chartRecords.length) {
       context.fillStyle = "#7c7f9b";
       context.font = "16px sans-serif";
       context.fillText(t("chart.empty"), 24, 48);
       return;
     }
-    const weights = state.records.map((record) => record.wt);
+    const weights = chartRecords.map((record) => record.wt);
     const min = Math.min(...weights) - 1;
     const max = Math.max(...weights) + 1;
     const range = max - min || 2;
     const padX = 40;
     const padY = 28;
-    const toX = (index) => padX + index / Math.max(state.records.length - 1, 1) * (width - padX * 2);
+    const toX = (index) => padX + index / Math.max(chartRecords.length - 1, 1) * (width - padX * 2);
     const toY = (weight) => height - padY - (weight - min) / range * (height - padY * 2);
     const gradient = context.createLinearGradient(0, 0, width, height);
     gradient.addColorStop(0, getComputedStyle(document.body).getPropertyValue("--accent"));
@@ -23422,7 +23529,7 @@ ${lines.join("\n")}`;
     context.lineJoin = "round";
     context.lineCap = "round";
     context.beginPath();
-    state.records.forEach((record, index) => {
+    chartRecords.forEach((record, index) => {
       const x = toX(index);
       const y = toY(record.wt);
       if (index === 0) context.moveTo(x, y);
@@ -23434,18 +23541,18 @@ ${lines.join("\n")}`;
     fillGradient.addColorStop(1, "transparent");
     context.fillStyle = fillGradient;
     context.beginPath();
-    state.records.forEach((record, index) => {
+    chartRecords.forEach((record, index) => {
       const x = toX(index);
       const y = toY(record.wt);
       if (index === 0) context.moveTo(x, y);
       else context.lineTo(x, y);
     });
-    context.lineTo(toX(state.records.length - 1), height - padY);
+    context.lineTo(toX(chartRecords.length - 1), height - padY);
     context.lineTo(toX(0), height - padY);
     context.closePath();
     context.fill();
     context.fillStyle = gradient;
-    state.records.forEach((record, index) => {
+    chartRecords.forEach((record, index) => {
       const x = toX(index);
       const y = toY(record.wt);
       context.beginPath();
@@ -23457,6 +23564,29 @@ ${lines.join("\n")}`;
       context.fillStyle = gradient;
       context.fill();
     });
+    if (chartRecords.length >= 3) {
+      const movingAvg = [];
+      for (let i = 0; i < chartRecords.length; i++) {
+        const windowSize = Math.min(7, i + 1);
+        let sum = 0;
+        for (let j = i - windowSize + 1; j <= i; j++) sum += chartRecords[j].wt;
+        movingAvg.push(sum / windowSize);
+      }
+      context.save();
+      context.setLineDash([4, 4]);
+      context.strokeStyle = getComputedStyle(document.body).getPropertyValue("--accent-3").trim() || "#0ea5e9";
+      context.lineWidth = 1.5;
+      context.globalAlpha = 0.6;
+      context.beginPath();
+      movingAvg.forEach((avg, i) => {
+        const x = toX(i);
+        const y = toY(avg);
+        if (i === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+      });
+      context.stroke();
+      context.restore();
+    }
     const goalWeight = Number(state.settings.goalWeight);
     if (Number.isFinite(goalWeight) && goalWeight >= min && goalWeight <= max) {
       const goalY = toY(goalWeight);
@@ -23478,14 +23608,14 @@ ${lines.join("\n")}`;
     context.fillStyle = getComputedStyle(document.body).getPropertyValue("--muted");
     context.font = "12px sans-serif";
     context.textAlign = "center";
-    [0, Math.floor((state.records.length - 1) / 2), state.records.length - 1].filter((value, index, array) => array.indexOf(value) === index).forEach((index) => {
-      const record = state.records[index];
+    [0, Math.floor((chartRecords.length - 1) / 2), chartRecords.length - 1].filter((value, index, array) => array.indexOf(value) === index).forEach((index) => {
+      const record = chartRecords[index];
       context.fillText(record.dt.slice(5), toX(index), height - 8);
     });
     if (canvas._chartClickHandler) {
       canvas.removeEventListener("click", canvas._chartClickHandler);
     }
-    const snapRecords = [...state.records];
+    const snapRecords = [...chartRecords];
     canvas._chartClickHandler = (e) => {
       const cr = canvas.getBoundingClientRect();
       const cx = (e.touches ? e.touches[0].clientX : e.clientX) - cr.left;
@@ -23501,7 +23631,7 @@ ${lines.join("\n")}`;
       const tip = document.getElementById("chartTooltip");
       if (cd < 30 && tip) {
         const r = snapRecords[ci];
-        tip.textContent = `${r.dt}: ${r.wt.toFixed(1)}kg${r.bmi ? ` (BMI ${r.bmi.toFixed(1)})` : ""}`;
+        tip.textContent = `${r.dt}: ${r.wt.toFixed(1)}kg${r.bmi ? ` (BMI ${r.bmi.toFixed(1)})` : ""}${r.bf ? ` BF ${r.bf}%` : ""}`;
         tip.style.display = "block";
         clearTimeout(canvas._tooltipTimer);
         canvas._tooltipTimer = setTimeout(() => {
@@ -23535,7 +23665,7 @@ ${lines.join("\n")}`;
       setStatus(t("status.storageError"), "error");
       return;
     }
-    setStatus(t("goal.save"));
+    setStatus(t("goal.saved"));
     render();
   }
   function saveReminder() {

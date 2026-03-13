@@ -23,6 +23,7 @@ export const MAX_RECORDS = 180;
 export const WEIGHT_RANGE = { min: 20, max: 300 };
 export const HEIGHT_RANGE = { min: 80, max: 250 };
 export const AGE_RANGE = { min: 1, max: 120 };
+export const BODY_FAT_RANGE = { min: 1, max: 70 };
 
 export function normalizeNumericInput(value) {
   return String(value ?? "")
@@ -45,6 +46,20 @@ export function validateWeight(value) {
   }
 
   return { valid: true, weight };
+}
+
+export function validateBodyFat(value) {
+  if (!value && value !== 0) return { valid: true, bodyFat: null };
+  const normalized = normalizeNumericInput(value);
+  if (!normalized) return { valid: true, bodyFat: null };
+  if (!/^\d{1,2}(\.\d{1,2})?$/.test(normalized)) {
+    return { valid: false, error: "bodyFat.invalid" };
+  }
+  const bodyFat = Number(normalized);
+  if (!Number.isFinite(bodyFat) || bodyFat < BODY_FAT_RANGE.min || bodyFat > BODY_FAT_RANGE.max) {
+    return { valid: false, error: "bodyFat.range" };
+  }
+  return { valid: true, bodyFat };
 }
 
 export function validateProfile(profile) {
@@ -130,12 +145,13 @@ export function parseVoiceWeight(transcript, fallbackWeight = null) {
   return pickWeightCandidate(candidates, fallbackWeight);
 }
 
-export function buildRecord({ date, weight, profile, source, imageName = "" }) {
+export function buildRecord({ date, weight, profile, source, imageName = "", bodyFat = null }) {
   const bmi = calculateBMI(weight, profile.heightCm);
   return {
     dt: date,
     wt: weight,
     bmi,
+    bf: bodyFat,
     source,
     imageName,
     createdAt: new Date().toISOString(),

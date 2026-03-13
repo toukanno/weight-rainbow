@@ -20,6 +20,7 @@ import {
   trimRecords,
   upsertRecord,
   validateProfile,
+  validateBodyFat,
   validateWeight,
   THEME_LIST,
   buildCalendarMonth,
@@ -52,6 +53,7 @@ let quickWeight = 65.0;
 let rainbowVisible = false;
 let rainbowDetail = "";
 let summaryPeriod = "week";
+let chartPeriod = "all"; // "7", "30", "90", "all"
 let reminderTimer = null;
 let calendarYear = new Date().getFullYear();
 let calendarMonth = new Date().getMonth();
@@ -100,6 +102,7 @@ function loadState() {
       imageName: "",
       pickerInt: 65,
       pickerDec: 0,
+      bodyFat: "",
     },
   };
 }
@@ -357,6 +360,10 @@ function render() {
                   <label for="recordDate">${t("entry.date")}</label>
                   <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" />
                 </div>
+                <div class="field">
+                  <label for="bodyFat">${t("bodyFat.label")}</label>
+                  <input id="bodyFat" name="bodyFat" inputmode="decimal" placeholder="${t("bodyFat.hint")}" value="${escapeAttr(state.form.bodyFat)}" />
+                </div>
               </div>
 
               <!-- Quick Record Section -->
@@ -409,6 +416,7 @@ function render() {
               <div class="row">
                 <button type="button" class="btn" data-action="save-record">${t("entry.save")}</button>
                 <div class="helper">${state.profile.heightCm ? `${t("entry.bmiReady")}: ${formatBMI(currentBMI)}` : t("bmi.unknown")}</div>
+                <div class="helper" style="font-size:0.75rem;opacity:0.7;">${t("record.dailyLimit")}</div>
               </div>
             </div>
 
@@ -424,6 +432,13 @@ function render() {
                 <h2>${t("section.chart")}</h2>
                 <p>${stats?.latestDate ?? t("chart.empty")}</p>
               </div>
+              ${state.records.length ? `<button type="button" class="btn secondary" data-action="share-chart">${t("share.chart")}</button>` : ""}
+            </div>
+            <div class="summary-tabs" style="margin-bottom:10px;">
+              <button type="button" class="summary-tab ${chartPeriod === "7" ? "active" : ""}" data-chart-period="7">${t("chart.period.7")}</button>
+              <button type="button" class="summary-tab ${chartPeriod === "30" ? "active" : ""}" data-chart-period="30">${t("chart.period.30")}</button>
+              <button type="button" class="summary-tab ${chartPeriod === "90" ? "active" : ""}" data-chart-period="90">${t("chart.period.90")}</button>
+              <button type="button" class="summary-tab ${chartPeriod === "all" ? "active" : ""}" data-chart-period="all">${t("chart.period.all")}</button>
             </div>
             <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}"></canvas>
             <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
@@ -704,38 +719,32 @@ function renderMetric(label, value) {
 }
 
 function renderCalendar() {
-  const cal = buildCalendarMonth(state.records, calendarYear, calendarMonth);
-  const today = new Date().toISOString().slice(0, 10);
-  const dowHeaders = ["calendar.sun", "calendar.mon", "calendar.tue", "calendar.wed", "calendar.thu", "calendar.fri", "calendar.sat"]
-    .map((k) => `<div class="cal-dow">${t(k)}</div>`).join("");
-
-  let cells = "";
-  for (let i = 0; i < cal.startDow; i++) cells += `<div class="cal-cell empty"></div>`;
-  for (const d of cal.days) {
-    const isToday = d.dt === today;
-    let bg = "";
-    if (d.wt !== null) {
-      const hue = Math.round(120 - d.intensity * 120);
-      bg = `background:hsla(${hue},70%,55%,0.6);`;
-    }
-    const todayCls = isToday ? " today" : "";
-    const recordCls = d.wt !== null ? " has-record" : "";
-    const tooltip = d.wt !== null ? ` title="${d.wt.toFixed(1)}kg"` : "";
-    cells += `<div class="cal-cell${todayCls}${recordCls}" style="${bg}"${tooltip}>${d.day}</div>`;
+  const data = buildCalendarMonth(state.records, calendarYear, calendarMonth);
+  const dayNames = ["calendar.sun", "calendar.mon", "calendar.tue", "calendar.wed", "calendar.thu", "calendar.fri", "calendar.sat"];
+  let html = `<div class="calendar-nav">
+    <button type="button" data-action="cal-prev">${t("calendar.prev")}</button>
+    <span class="calendar-label">${data.label}</span>
+    <button type="button" data-action="cal-next">${t("calendar.next")}</button>
+  </div>`;
+  html += `<div class="calendar-grid">`;
+  for (const key of dayNames) {
+    html += `<div class="calendar-header">${t(key)}</div>`;
   }
-
-  return `
-    <div class="calendar-nav">
-      <button type="button" class="btn secondary" data-action="cal-prev">${t("calendar.prev")}</button>
-      <span class="cal-label">${cal.label}</span>
-      <button type="button" class="btn secondary" data-action="cal-next">${t("calendar.next")}</button>
-    </div>
-    <div class="cal-grid">
-      ${dowHeaders}
-      ${cells}
-    </div>
-    <div class="helper" style="margin-top:8px;text-align:center;">${t("calendar.records").replace("{count}", cal.recordCount)}</div>
-  `;
+  for (let i = 0; i < data.startDow; i++) {
+    html += `<div class="calendar-cell empty"></div>`;
+  }
+  for (const d of data.days) {
+    const hasRecord = d.wt !== null;
+    const intensity = d.intensity !== null ? d.intensity : 0;
+    const bg = hasRecord ? `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)` : "";
+    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}" style="${bg}" title="${hasRecord ? `${d.wt} kg` : ""}">
+      <span class="calendar-day">${d.day}</span>
+      ${hasRecord ? `<span class="calendar-wt">${d.wt}</span>` : ""}
+    </div>`;
+  }
+  html += `</div>`;
+  html += `<div class="helper" style="margin-top:8px">${t("calendar.records").replace("{count}", data.recordCount)}</div>`;
+  return html;
 }
 
 function renderStat(label, value) {
@@ -768,7 +777,7 @@ function renderRecord(record, prevRecord) {
           <div class="record-weight">${formatWeight(record.wt)} ${diffHtml}</div>
           <div class="helper">${escapeAttr(record.dt)}${record.imageName ? ` / ${escapeAttr(record.imageName)}` : ""}</div>
         </div>
-        <div class="helper">${t("bmi.title")}: ${bmiText}</div>
+        <div class="helper">${t("bmi.title")}: ${bmiText}${record.bf ? ` / ${t("bodyFat.label")}: ${record.bf}%` : ""}</div>
       </div>
       <button type="button" class="record-delete" data-delete-date="${escapeAttr(record.dt)}">${t("records.delete")}</button>
     </div>
@@ -784,35 +793,6 @@ function renderRecordList() {
     const prevRecord = prevIndex >= 0 ? state.records[prevIndex] : null;
     return renderRecord(record, prevRecord);
   }).join("");
-}
-
-function renderCalendar() {
-  const data = buildCalendarMonth(state.records, calendarYear, calendarMonth);
-  const dayNames = ["calendar.sun", "calendar.mon", "calendar.tue", "calendar.wed", "calendar.thu", "calendar.fri", "calendar.sat"];
-  let html = `<div class="calendar-nav">
-    <button type="button" data-action="calendar-prev">${t("calendar.prev")}</button>
-    <span class="calendar-label">${data.label}</span>
-    <button type="button" data-action="calendar-next">${t("calendar.next")}</button>
-  </div>`;
-  html += `<div class="calendar-grid">`;
-  for (const key of dayNames) {
-    html += `<div class="calendar-header">${t(key)}</div>`;
-  }
-  for (let i = 0; i < data.startDow; i++) {
-    html += `<div class="calendar-cell empty"></div>`;
-  }
-  for (const d of data.days) {
-    const hasRecord = d.wt !== null;
-    const intensity = d.intensity !== null ? d.intensity : 0;
-    const bg = hasRecord ? `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)` : "";
-    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}" style="${bg}" title="${hasRecord ? `${d.wt} kg` : ""}">
-      <span class="calendar-day">${d.day}</span>
-      ${hasRecord ? `<span class="calendar-wt">${d.wt}</span>` : ""}
-    </div>`;
-  }
-  html += `</div>`;
-  html += `<div class="helper" style="margin-top:8px">${t("calendar.records").replace("{count}", data.recordCount)}</div>`;
-  return html;
 }
 
 function renderPickerIntOptions(selected) {
@@ -899,6 +879,13 @@ function bindEvents() {
     });
   });
 
+  app.querySelectorAll("[data-chart-period]").forEach((button) => {
+    button.addEventListener("click", () => {
+      chartPeriod = button.dataset.chartPeriod;
+      render();
+    });
+  });
+
   app.querySelectorAll("[data-delete-date]").forEach((button) => {
     button.addEventListener("click", () => {
       if (!window.confirm(t("confirm.deleteRecord"))) return;
@@ -907,6 +894,8 @@ function bindEvents() {
       render();
     });
   });
+
+  app.querySelector('[data-action="share-chart"]')?.addEventListener("click", shareChart);
 
   // Rainbow overlay click to dismiss
   document.getElementById("rainbowOverlay")?.addEventListener("click", () => {
@@ -950,7 +939,7 @@ function handleFieldInput(event) {
     return;
   }
 
-  if (["weight", "date"].includes(name)) {
+  if (["weight", "date", "bodyFat"].includes(name)) {
     state.form = { ...state.form, [name]: value };
     return;
   }
@@ -1063,6 +1052,12 @@ function saveRecordWithWeight(weight, source) {
     return;
   }
 
+  const bfResult = validateBodyFat(state.form.bodyFat);
+  if (!bfResult.valid) {
+    setStatus(t(bfResult.error), "error");
+    return;
+  }
+
   state.profile = {
     ...profileResult.profile,
     heightCm: profileResult.profile.heightCm ?? "",
@@ -1080,6 +1075,7 @@ function saveRecordWithWeight(weight, source) {
     profile: state.profile,
     source,
     imageName: state.form.imageName,
+    bodyFat: bfResult.bodyFat,
   });
 
   const updated = upsertRecord(state.records, record);
@@ -1091,12 +1087,17 @@ function saveRecordWithWeight(weight, source) {
     pickerInt: Math.floor(weightResult.weight),
     pickerDec: Math.round((weightResult.weight - Math.floor(weightResult.weight)) * 10),
     imageName: source === "photo" ? state.form.imageName : "",
+    bodyFat: "",
   };
   if (!persist()) {
     setStatus(t("status.storageError"), "error");
     return;
   }
   showUndoSnackbar(`${t("entry.saved")} · ${record.wt.toFixed(1)}kg`);
+  // Scroll to chart after save
+  setTimeout(() => {
+    document.getElementById("chart")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, 100);
 }
 
 function showUndoSnackbar(message) {
@@ -1230,9 +1231,9 @@ async function pickNativePhoto() {
       quality: 92,
       correctOrientation: true,
       promptLabelHeader: t("entry.photo"),
-      promptLabelCancel: state.settings.language === "ja" ? "キャンセル" : "Cancel",
-      promptLabelPhoto: state.settings.language === "ja" ? "フォトライブラリ" : "Photo Library",
-      promptLabelPicture: state.settings.language === "ja" ? "カメラ" : "Camera",
+      promptLabelCancel: t("camera.cancel"),
+      promptLabelPhoto: t("camera.photo"),
+      promptLabelPicture: t("camera.picture"),
     });
 
     imagePreviewUrl = photo.webPath || "";
@@ -1389,6 +1390,7 @@ function exportExcel() {
     Date: r.dt,
     "Weight (kg)": r.wt,
     BMI: r.bmi ?? "",
+    "Body Fat (%)": r.bf ?? "",
     Source: r.source,
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -1403,9 +1405,9 @@ function exportCSV() {
     setStatus(t("records.empty"), "error");
     return;
   }
-  const header = "Date,Weight (kg),BMI,Source";
+  const header = "Date,Weight (kg),BMI,Body Fat (%),Source";
   const lines = state.records.map((r) =>
-    `${r.dt},${r.wt},${r.bmi ?? ""},${r.source}`
+    `${r.dt},${r.wt},${r.bmi ?? ""},${r.bf ?? ""},${r.source}`
   );
   const csv = [header, ...lines].join("\n");
   downloadFile(csv, `weight-rainbow-${new Date().toISOString().slice(0, 10)}.csv`, "text/csv");
@@ -1419,7 +1421,8 @@ function exportText() {
   }
   const lines = state.records.map((r) => {
     const bmiStr = r.bmi ? ` / BMI: ${r.bmi.toFixed(1)}` : "";
-    return `${r.dt}  ${r.wt.toFixed(1)}kg${bmiStr}  (${r.source})`;
+    const bfStr = r.bf ? ` / BF: ${r.bf.toFixed(1)}%` : "";
+    return `${r.dt}  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})`;
   });
   const text = `Rainbow Weight Log - ${new Date().toISOString().slice(0, 10)}\n${"=".repeat(48)}\n${lines.join("\n")}`;
   downloadFile(text, `weight-rainbow-${new Date().toISOString().slice(0, 10)}.txt`, "text/plain");
@@ -1434,6 +1437,33 @@ function downloadFile(content, filename, mimeType) {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+async function shareChart() {
+  const canvas = document.getElementById("chart");
+  if (!canvas) return;
+  try {
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (navigator.share && navigator.canShare) {
+      const file = new File([blob], "weight-chart.png", { type: "image/png" });
+      const shareData = { files: [file] };
+      if (navigator.canShare(shareData)) {
+        await navigator.share(shareData);
+        setStatus(t("share.done"));
+        return;
+      }
+    }
+    // Fallback: download
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `weight-chart-${new Date().toISOString().slice(0, 10)}.png`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setStatus(t("share.done"));
+  } catch {
+    setStatus(t("share.error"), "error");
+  }
 }
 
 function spawnConfetti() {
@@ -1571,21 +1601,29 @@ function drawChart() {
   const width = rect.width;
   const height = rect.height;
 
-  if (!state.records.length) {
+  // Filter records by chart period
+  let chartRecords = state.records;
+  if (chartPeriod !== "all") {
+    const days = parseInt(chartPeriod, 10);
+    const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    chartRecords = state.records.filter((r) => r.dt >= cutoff);
+  }
+
+  if (!chartRecords.length) {
     context.fillStyle = "#7c7f9b";
     context.font = "16px sans-serif";
     context.fillText(t("chart.empty"), 24, 48);
     return;
   }
 
-  const weights = state.records.map((record) => record.wt);
+  const weights = chartRecords.map((record) => record.wt);
   const min = Math.min(...weights) - 1;
   const max = Math.max(...weights) + 1;
   const range = max - min || 2;
   const padX = 40;
   const padY = 28;
 
-  const toX = (index) => padX + (index / Math.max(state.records.length - 1, 1)) * (width - padX * 2);
+  const toX = (index) => padX + (index / Math.max(chartRecords.length - 1, 1)) * (width - padX * 2);
   const toY = (weight) => height - padY - ((weight - min) / range) * (height - padY * 2);
 
   const gradient = context.createLinearGradient(0, 0, width, height);
@@ -1617,7 +1655,7 @@ function drawChart() {
   context.lineJoin = "round";
   context.lineCap = "round";
   context.beginPath();
-  state.records.forEach((record, index) => {
+  chartRecords.forEach((record, index) => {
     const x = toX(index);
     const y = toY(record.wt);
     if (index === 0) context.moveTo(x, y);
@@ -1631,20 +1669,20 @@ function drawChart() {
   fillGradient.addColorStop(1, "transparent");
   context.fillStyle = fillGradient;
   context.beginPath();
-  state.records.forEach((record, index) => {
+  chartRecords.forEach((record, index) => {
     const x = toX(index);
     const y = toY(record.wt);
     if (index === 0) context.moveTo(x, y);
     else context.lineTo(x, y);
   });
-  context.lineTo(toX(state.records.length - 1), height - padY);
+  context.lineTo(toX(chartRecords.length - 1), height - padY);
   context.lineTo(toX(0), height - padY);
   context.closePath();
   context.fill();
 
   // Data points
   context.fillStyle = gradient;
-  state.records.forEach((record, index) => {
+  chartRecords.forEach((record, index) => {
     const x = toX(index);
     const y = toY(record.wt);
     // White outline
@@ -1658,6 +1696,31 @@ function drawChart() {
     context.fillStyle = gradient;
     context.fill();
   });
+
+  // 7-day moving average line
+  if (chartRecords.length >= 3) {
+    const movingAvg = [];
+    for (let i = 0; i < chartRecords.length; i++) {
+      const windowSize = Math.min(7, i + 1);
+      let sum = 0;
+      for (let j = i - windowSize + 1; j <= i; j++) sum += chartRecords[j].wt;
+      movingAvg.push(sum / windowSize);
+    }
+    context.save();
+    context.setLineDash([4, 4]);
+    context.strokeStyle = getComputedStyle(document.body).getPropertyValue("--accent-3").trim() || "#0ea5e9";
+    context.lineWidth = 1.5;
+    context.globalAlpha = 0.6;
+    context.beginPath();
+    movingAvg.forEach((avg, i) => {
+      const x = toX(i);
+      const y = toY(avg);
+      if (i === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    context.stroke();
+    context.restore();
+  }
 
   // Goal weight line
   const goalWeight = Number(state.settings.goalWeight);
@@ -1683,10 +1746,10 @@ function drawChart() {
   context.fillStyle = getComputedStyle(document.body).getPropertyValue("--muted");
   context.font = "12px sans-serif";
   context.textAlign = "center";
-  [0, Math.floor((state.records.length - 1) / 2), state.records.length - 1]
+  [0, Math.floor((chartRecords.length - 1) / 2), chartRecords.length - 1]
     .filter((value, index, array) => array.indexOf(value) === index)
     .forEach((index) => {
-      const record = state.records[index];
+      const record = chartRecords[index];
       context.fillText(record.dt.slice(5), toX(index), height - 8);
     });
 
@@ -1694,7 +1757,7 @@ function drawChart() {
   if (canvas._chartClickHandler) {
     canvas.removeEventListener("click", canvas._chartClickHandler);
   }
-  const snapRecords = [...state.records];
+  const snapRecords = [...chartRecords];
   canvas._chartClickHandler = (e) => {
     const cr = canvas.getBoundingClientRect();
     const cx = (e.touches ? e.touches[0].clientX : e.clientX) - cr.left;
@@ -1707,7 +1770,7 @@ function drawChart() {
     const tip = document.getElementById("chartTooltip");
     if (cd < 30 && tip) {
       const r = snapRecords[ci];
-      tip.textContent = `${r.dt}: ${r.wt.toFixed(1)}kg${r.bmi ? ` (BMI ${r.bmi.toFixed(1)})` : ""}`;
+      tip.textContent = `${r.dt}: ${r.wt.toFixed(1)}kg${r.bmi ? ` (BMI ${r.bmi.toFixed(1)})` : ""}${r.bf ? ` BF ${r.bf}%` : ""}`;
       tip.style.display = "block";
       // Auto-hide after 3 seconds
       clearTimeout(canvas._tooltipTimer);
@@ -1748,7 +1811,7 @@ function saveGoal() {
     setStatus(t("status.storageError"), "error");
     return;
   }
-  setStatus(t("goal.save"));
+  setStatus(t("goal.saved"));
   render();
 }
 

@@ -17,6 +17,7 @@ import {
   trimRecords,
   upsertRecord,
   validateProfile,
+  validateBodyFat,
   validateWeight,
   buildCalendarMonth,
 } from "../src/logic.js";
@@ -351,5 +352,85 @@ describe("calcWeightTrend", () => {
       { dt: today, wt: 70.05 },
     ];
     expect(calcWeightTrend(records)).toBe("flat");
+  });
+});
+
+describe("buildCalendarMonth", () => {
+  it("builds correct structure for a month", () => {
+    const records = [
+      { dt: "2026-03-01", wt: 70 },
+      { dt: "2026-03-15", wt: 68 },
+    ];
+    const cal = buildCalendarMonth(records, 2026, 2); // March = month index 2
+    expect(cal.year).toBe(2026);
+    expect(cal.month).toBe(2);
+    expect(cal.daysInMonth).toBe(31);
+    expect(cal.recordCount).toBe(2);
+    expect(cal.label).toBe("2026-03");
+    expect(cal.days).toHaveLength(31);
+    expect(cal.days[0].wt).toBe(70);
+    expect(cal.days[14].wt).toBe(68);
+    expect(cal.days[1].wt).toBeNull();
+  });
+
+  it("calculates intensity relative to month range", () => {
+    const records = [
+      { dt: "2026-03-01", wt: 60 },
+      { dt: "2026-03-10", wt: 70 },
+    ];
+    const cal = buildCalendarMonth(records, 2026, 2);
+    expect(cal.days[0].intensity).toBe(0); // min weight
+    expect(cal.days[9].intensity).toBe(1); // max weight
+  });
+
+  it("returns empty for months with no records", () => {
+    const cal = buildCalendarMonth([], 2026, 2);
+    expect(cal.recordCount).toBe(0);
+    expect(cal.days.every((d) => d.wt === null)).toBe(true);
+  });
+});
+
+describe("validateBodyFat", () => {
+  it("accepts empty input as null", () => {
+    expect(validateBodyFat("")).toEqual({ valid: true, bodyFat: null });
+    expect(validateBodyFat(null)).toEqual({ valid: true, bodyFat: null });
+    expect(validateBodyFat(undefined)).toEqual({ valid: true, bodyFat: null });
+  });
+
+  it("accepts valid body fat percentage", () => {
+    expect(validateBodyFat("22.5")).toEqual({ valid: true, bodyFat: 22.5 });
+    expect(validateBodyFat("15")).toEqual({ valid: true, bodyFat: 15 });
+  });
+
+  it("rejects non-numeric input", () => {
+    expect(validateBodyFat("abc")).toEqual({ valid: false, error: "bodyFat.invalid" });
+  });
+
+  it("rejects out-of-range values", () => {
+    expect(validateBodyFat("0")).toEqual({ valid: false, error: "bodyFat.range" });
+    expect(validateBodyFat("71")).toEqual({ valid: false, error: "bodyFat.range" });
+  });
+});
+
+describe("buildRecord with bodyFat", () => {
+  it("includes body fat when provided", () => {
+    const record = buildRecord({
+      date: "2026-03-13",
+      weight: 65,
+      profile: { heightCm: 170 },
+      source: "manual",
+      bodyFat: 22.5,
+    });
+    expect(record.bf).toBe(22.5);
+  });
+
+  it("defaults body fat to null", () => {
+    const record = buildRecord({
+      date: "2026-03-13",
+      weight: 65,
+      profile: { heightCm: 170 },
+      source: "manual",
+    });
+    expect(record.bf).toBeNull();
   });
 });
