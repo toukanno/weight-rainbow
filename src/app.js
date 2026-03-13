@@ -26,6 +26,7 @@ import {
   validateWeight,
   THEME_LIST,
   buildCalendarMonth,
+  calcWeeklyRate,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -204,6 +205,7 @@ function render() {
 
   const stats = calcStats(state.records, state.profile);
   const dailyDiff = calcDailyDiff(state.records);
+  const weightComp = calcWeightComparison(state.records);
   const goalWeight = Number(state.settings.goalWeight);
   const goalProgress = calcGoalProgress(state.records, goalWeight);
   const goalPrediction = calcGoalPrediction(state.records, goalWeight);
@@ -211,6 +213,7 @@ function render() {
   const periodSummary = calcPeriodSummary(state.records, periodDays);
   const streak = calcStreak(state.records);
   const trend = calcWeightTrend(state.records);
+  const weeklyRate = calcWeeklyRate(state.records);
   const bmiStatus = stats?.latestBMI ? t(getBMIStatus(stats.latestBMI)) : t("bmi.unknown");
   const motivation = getMotivationalMessage(streak, trend, state.records, goalProgress);
   const achievements = calcAchievements(state.records, streak, goalWeight);
@@ -294,6 +297,15 @@ function render() {
                 <div class="diff-detail">${t("goal.notSet")}</div>`}
           </div>
         </div>
+        ${weightComp ? `
+        <div class="hero-bottom" style="grid-template-columns: repeat(3, 1fr); margin-top: 12px;">
+          ${["week", "month", "quarter"].map((key) => {
+            const c = weightComp[key];
+            if (!c) return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value zero" style="font-size:1.2rem">--</div></div>`;
+            const cls = c.diff > 0 ? "positive" : c.diff < 0 ? "negative" : "zero";
+            return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value ${cls}" style="font-size:1.2rem">${c.diff > 0 ? "+" : ""}${c.diff.toFixed(1)}kg</div></div>`;
+          }).join("")}
+        </div>` : ""}
       </section>
 
       <div class="content-grid">
@@ -480,6 +492,13 @@ function render() {
                 </div>
                 <div class="helper" style="margin-top: 10px;">${t("summary.count")}: ${periodSummary.count}</div>`
               : `<div class="helper">${t("summary.noData")}</div>`}
+            <div class="rate-box" style="margin-top:14px;padding:10px 14px;border-radius:12px;background:var(--surface);">
+              <div class="label">${t("rate.title")}</div>
+              ${weeklyRate
+                ? `<div class="value" style="font-size:1.1rem;font-weight:700;color:${weeklyRate.weeklyRate < 0 ? "var(--ok, #10b981)" : weeklyRate.weeklyRate > 0 ? "var(--warn, #f59e0b)" : "var(--muted)"}">${weeklyRate.weeklyRate > 0 ? "+" : ""}${t("rate.value").replace("{rate}", weeklyRate.weeklyRate.toFixed(2))}</div>
+                  <div class="helper">${t("rate.period").replace("{days}", weeklyRate.totalDays).replace("{change}", (weeklyRate.totalChange > 0 ? "+" : "") + weeklyRate.totalChange.toFixed(1))}</div>`
+                : `<div class="helper">${t("rate.insufficient")}</div>`}
+            </div>
           </section>
 
           <!-- Calendar Panel -->
@@ -1641,7 +1660,7 @@ function drawChart() {
   }
 
   if (!chartRecords.length) {
-    context.fillStyle = "#7c7f9b";
+    context.fillStyle = getComputedStyle(document.body).getPropertyValue("--muted").trim() || "#7c7f9b";
     context.font = "16px sans-serif";
     context.fillText(t("chart.empty"), 24, 48);
     return;
