@@ -383,12 +383,12 @@ function render() {
                 </div>
                 <div class="field">
                   <label for="bodyFat">${t("bodyFat.label")}</label>
-                  <input id="bodyFat" name="bodyFat" inputmode="decimal" autocomplete="off" placeholder="${t("bodyFat.hint")}" value="${escapeAttr(state.form.bodyFat)}" />
+                  <input id="bodyFat" name="bodyFat" inputmode="decimal" autocomplete="off" placeholder="${escapeAttr(t("bodyFat.hint"))}" value="${escapeAttr(state.form.bodyFat)}" />
                 </div>
               </div>
               <div class="field">
                 <label for="entryNote">${t("entry.note")}</label>
-                <input id="entryNote" name="note" type="text" maxlength="100" placeholder="${t("entry.noteHint")}" value="${escapeAttr(state.form.note)}" />
+                <input id="entryNote" name="note" type="text" maxlength="100" placeholder="${escapeAttr(t("entry.noteHint"))}" value="${escapeAttr(state.form.note)}" />
               </div>
 
               <!-- Quick Record Section -->
@@ -1011,6 +1011,7 @@ function handleFieldInput(event) {
 
   if (["name", "heightCm", "age", "gender"].includes(name)) {
     state.profile = { ...state.profile, [name]: value };
+    if (name === "heightCm") render();
     return;
   }
 
