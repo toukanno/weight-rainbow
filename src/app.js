@@ -81,6 +81,7 @@ import {
   calcVolatilityIndex,
   calcPeriodComparison,
   calcGoalCountdown,
+  calcBodyComposition,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -726,6 +727,7 @@ function render() {
                 ${renderMilestoneTimeline()}
                 ${renderVolatilityIndex()}
                 ${renderPeriodComparison()}
+                ${renderBodyComposition()}
               </div>
               ` : ""}
             </div>
@@ -1854,6 +1856,28 @@ function renderGoalCountdown() {
   `;
 }
 
+function renderBodyComposition() {
+  const bc = calcBodyComposition(state.records);
+  if (!bc) return "";
+  const trendColors = { fatLoss: "#10b981", muscleGain: "#3b82f6", recomp: "#8b5cf6", decline: "#ef4444", mixed: "#f59e0b" };
+  const trendColor = trendColors[bc.trend] || trendColors.mixed;
+  const bfStr = bc.bfChange > 0 ? "+" + bc.bfChange : String(bc.bfChange);
+  const fatStr = bc.fatMassChange > 0 ? "+" + bc.fatMassChange : String(bc.fatMassChange);
+  const leanStr = bc.leanMassChange > 0 ? "+" + bc.leanMassChange : String(bc.leanMassChange);
+  return `
+    <div class="body-comp-section">
+      <div class="helper">${t("bodyComp.title")}</div>
+      <div class="body-comp-trend" style="color:${trendColor}">${t("bodyComp." + bc.trend)}</div>
+      <div class="body-comp-bf">${t("bodyComp.bf").replace("{first}", bc.firstBf).replace("{latest}", bc.latestBf).replace("{change}", bfStr)}</div>
+      <div class="body-comp-masses">
+        <div class="body-comp-mass fat">${t("bodyComp.fatMass").replace("{change}", fatStr)}</div>
+        <div class="body-comp-mass lean">${t("bodyComp.leanMass").replace("{change}", leanStr)}</div>
+      </div>
+      <div class="helper hint-small">${t("bodyComp.hint").replace("{n}", bc.dataPoints)}</div>
+    </div>
+  `;
+}
+
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -2865,8 +2889,10 @@ function downloadFile(content, filename, mimeType) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
+  document.body.appendChild(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(anchor);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 async function shareChart() {
