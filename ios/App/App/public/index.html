@@ -465,6 +465,11 @@
         transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
       }
 
+      input::placeholder {
+        color: var(--muted);
+        opacity: 0.6;
+      }
+
       input:focus,
       select:focus {
         outline: none;
@@ -1951,6 +1956,21 @@
         border-radius: 2px;
         animation: confetti-fall var(--confetti-duration, 2s) ease-out forwards;
         animation-delay: var(--confetti-delay, 0s);
+      }
+
+      /* Midnight scrollbar */
+      body[data-theme="midnight"] {
+        scrollbar-color: rgba(139, 146, 176, 0.3) transparent;
+      }
+      body[data-theme="midnight"]::-webkit-scrollbar {
+        width: 8px;
+      }
+      body[data-theme="midnight"]::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      body[data-theme="midnight"]::-webkit-scrollbar-thumb {
+        background: rgba(139, 146, 176, 0.3);
+        border-radius: 4px;
       }
 
       /* Midnight theme overrides for inputs */
