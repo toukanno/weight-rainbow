@@ -5860,6 +5860,16 @@ describe("calcWeightDistribution expanded", () => {
     expect(result.latestBucket).toBeGreaterThanOrEqual(0);
     expect(result.modeBucket).toBeGreaterThanOrEqual(0);
   });
+  it("handles latest weight at max boundary (findIndex fallback)", () => {
+    // Latest record is the max weight - findIndex returns -1, should fallback to last bucket
+    const records = [
+      { wt: 60.0 }, { wt: 61.0 }, { wt: 62.0 }, { wt: 63.0 }, { wt: 65.0 },
+    ];
+    const result = calcWeightDistribution(records);
+    expect(result).not.toBeNull();
+    expect(result.latestBucket).toBeGreaterThanOrEqual(0);
+    expect(result.latestBucket).toBeLessThan(result.buckets.length);
+  });
 });
 
 // ── csvEscape ──

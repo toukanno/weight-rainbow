@@ -2694,3 +2694,21 @@ export function calcDashboardSummary(records, heightCm) {
 
   return { weight: latest.wt, change, bmi, streak, date: latest.dt };
 }
+
+/**
+ * Get the most recent N entries with day-over-day changes.
+ * Returns [{ dt, wt, change, source }] newest first.
+ */
+export function getRecentEntries(records, count = 5) {
+  if (records.length === 0) return [];
+  const sorted = [...records].sort((a, b) => b.dt.localeCompare(a.dt));
+  return sorted.slice(0, count).map((r, i) => {
+    const prev = sorted[i + 1];
+    return {
+      dt: r.dt,
+      wt: r.wt,
+      change: prev ? Math.round((r.wt - prev.wt) * 10) / 10 : null,
+      source: r.source || "manual",
+    };
+  });
+}

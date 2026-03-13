@@ -96,6 +96,7 @@ import {
   calcRecordMilestone,
   generateAICoachReport,
   calcDashboardSummary,
+  getRecentEntries,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -658,6 +659,8 @@ function render() {
               ${lastUndoState ? `<button type="button" class="undo-btn" data-action="undo">${t("undo.button")}</button>` : ""}
             </div>
           </section>
+
+          ${renderRecentEntries()}
 
           <section class="panel">
             <div class="section-header">
@@ -2106,6 +2109,25 @@ function renderIdealWeight() {
       <div class="helper hint-small">${currentText} — ${zoneLabel}</div>
       <div class="helper hint-small">${rangeText}</div>
       <div class="helper hint-small">${centerText}</div>
+    </div>
+  `;
+}
+
+function renderRecentEntries() {
+  const entries = getRecentEntries(state.records, 5);
+  if (entries.length === 0) return "";
+  const sourceIcons = { manual: "✏️", voice: "🎤", photo: "📷", quick: "⚡", import: "📥" };
+  const rows = entries.map((e) => {
+    const icon = sourceIcons[e.source] || "✏️";
+    const changeStr = e.change !== null
+      ? `<span class="recent-change ${e.change < 0 ? "down" : e.change > 0 ? "up" : ""}">${e.change > 0 ? "+" : ""}${e.change.toFixed(1)}</span>`
+      : "";
+    return `<div class="recent-row">${icon} <span class="recent-date">${e.dt.slice(5).replace("-", "/")}</span><span class="recent-wt">${e.wt.toFixed(1)}kg</span>${changeStr}</div>`;
+  }).join("");
+  return `
+    <div class="recent-entries">
+      <div class="helper">${t("recent.title")}</div>
+      ${rows}
     </div>
   `;
 }
