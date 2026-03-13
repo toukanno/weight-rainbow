@@ -2331,3 +2331,55 @@ describe("calcTagImpact", () => {
     }
   });
 });
+
+describe("calcWeekdayVsWeekend edge cases", () => {
+  it("returns null when no weekday records exist", () => {
+    // Only Sat/Sun records
+    const records = [
+      { dt: "2025-01-04", wt: 70 },  // Sat
+      { dt: "2025-01-05", wt: 71 },  // Sun
+      { dt: "2025-01-11", wt: 70.5 }, // Sat
+      { dt: "2025-01-12", wt: 71.5 }, // Sun
+      { dt: "2025-01-18", wt: 70.2 }, // Sat
+    ];
+    expect(calcWeekdayVsWeekend(records)).toBeNull();
+  });
+
+  it("handles exactly 5 records at threshold", () => {
+    const records = [
+      { dt: "2025-01-06", wt: 70 },   // Mon
+      { dt: "2025-01-07", wt: 71 },   // Tue
+      { dt: "2025-01-08", wt: 72 },   // Wed
+      { dt: "2025-01-11", wt: 73 },   // Sat
+      { dt: "2025-01-12", wt: 74 },   // Sun
+    ];
+    const result = calcWeekdayVsWeekend(records);
+    expect(result).not.toBeNull();
+    expect(result.weekdayCount).toBe(3);
+    expect(result.weekendCount).toBe(2);
+  });
+
+  it("rounds averages to 1 decimal place", () => {
+    const records = [
+      { dt: "2025-01-06", wt: 70.33 },
+      { dt: "2025-01-07", wt: 70.66 },
+      { dt: "2025-01-08", wt: 70.11 },
+      { dt: "2025-01-11", wt: 71.55 },
+      { dt: "2025-01-12", wt: 71.44 },
+    ];
+    const result = calcWeekdayVsWeekend(records);
+    expect(String(result.weekdayAvg).split(".")[1]?.length || 0).toBeLessThanOrEqual(1);
+    expect(String(result.weekendAvg).split(".")[1]?.length || 0).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("calcWeightRangePosition edge cases", () => {
+  it("handles all same weights", () => {
+    const records = [
+      { wt: 70 }, { wt: 70 }, { wt: 70 },
+    ];
+    const result = calcWeightRangePosition(records);
+    expect(result.position).toBe(50);
+    expect(result.zone).toBe("middle");
+  });
+});

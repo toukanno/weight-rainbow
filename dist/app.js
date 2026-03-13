@@ -2075,7 +2075,13 @@ var translations = {
     "tagImpact.hint": "\u5404\u30BF\u30B0\u304C\u3042\u308B\u65E5\u306E\u7FCC\u65E5\u306E\u4F53\u91CD\u5909\u5316",
     "tagImpact.positive": "\u5897\u52A0\u50BE\u5411",
     "tagImpact.negative": "\u6E1B\u5C11\u50BE\u5411",
-    "tagImpact.neutral": "\u5909\u5316\u306A\u3057"
+    "tagImpact.neutral": "\u5909\u5316\u306A\u3057",
+    "bestPeriod.title": "\u30D9\u30B9\u30C8\u8A18\u9332\u671F\u9593",
+    "bestPeriod.week": "\u6700\u826F\u306E7\u65E5\u9593",
+    "bestPeriod.month": "\u6700\u826F\u306E30\u65E5\u9593",
+    "bestPeriod.change": "{change}kg",
+    "bestPeriod.range": "{from} \u301C {to}",
+    "bestPeriod.weight": "{start}kg \u2192 {end}kg"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2504,7 +2510,13 @@ var translations = {
     "tagImpact.hint": "Weight change on days following each tag",
     "tagImpact.positive": "Gain trend",
     "tagImpact.negative": "Loss trend",
-    "tagImpact.neutral": "No change"
+    "tagImpact.neutral": "No change",
+    "bestPeriod.title": "Best Period",
+    "bestPeriod.week": "Best 7 days",
+    "bestPeriod.month": "Best 30 days",
+    "bestPeriod.change": "{change}kg",
+    "bestPeriod.range": "{from} to {to}",
+    "bestPeriod.weight": "{start}kg \u2192 {end}kg"
   }
 };
 function createTranslator(language) {
