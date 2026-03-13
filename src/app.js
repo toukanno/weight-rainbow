@@ -59,6 +59,7 @@ import {
   calcTagImpact,
   calcBestPeriod,
   calcWeeklyFrequency,
+  calcWeightVelocity,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -664,6 +665,7 @@ function render() {
             ${renderTagImpact()}
             ${renderBestPeriod()}
             ${renderWeeklyFrequency()}
+            ${renderWeightVelocity()}
             ${renderBodyFatStats()}
           </section>
 
@@ -1238,6 +1240,32 @@ function renderWeeklyFrequency() {
       <div class="freq-chart">${bars}</div>
       <div class="helper hint-small">${t("freq.avg").replace("{avg}", freq.avgPerWeek)} · ${t("freq.hint").replace("{weeks}", freq.weeks)}</div>
       ${hasPerfect ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;margin-top:2px;">${t("freq.perfect")}</div>` : ""}
+    </div>
+  `;
+}
+
+function renderWeightVelocity() {
+  const vel = calcWeightVelocity(state.records);
+  if (!vel) return "";
+  const renderPeriod = (key, data) => {
+    if (!data) return "";
+    const status = data.dailyRate < -0.01 ? "losing" : data.dailyRate > 0.01 ? "gaining" : "stable";
+    const statusCls = status === "losing" ? "vel-loss" : status === "gaining" ? "vel-gain" : "vel-stable";
+    return `
+      <div class="vel-period">
+        <div class="vel-label">${t("velocity." + key)}</div>
+        <div class="vel-rate ${statusCls}">${t("velocity.daily").replace("{rate}", (data.dailyRate > 0 ? "+" : "") + data.dailyRate.toFixed(2))}</div>
+        <div class="hint-small">${t("velocity.projection").replace("{amount}", (data.monthlyProjection > 0 ? "+" : "") + data.monthlyProjection.toFixed(1))}</div>
+        <div class="hint-small vel-status">${t("velocity." + status)}</div>
+      </div>`;
+  };
+  return `
+    <div class="vel-section">
+      <div class="helper">${t("velocity.title")}</div>
+      <div class="vel-display">
+        ${renderPeriod("week", vel.week)}
+        ${renderPeriod("month", vel.month)}
+      </div>
     </div>
   `;
 }
@@ -2121,7 +2149,7 @@ function exportExcel() {
       [t("export.header.weight")]: r.wt,
       [t("export.header.bmi")]: r.bmi ?? "",
       [t("export.header.bodyFat")]: r.bf ?? "",
-      [t("export.header.source")]: r.source,
+      [t("export.header.source")]: r.source ?? "manual",
       [t("export.header.note")]: r.note ?? "",
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -2145,7 +2173,7 @@ function exportCSV() {
     const headers = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source"), t("export.header.note")];
     const header = headers.map(csvEscape).join(",");
     const lines = state.records.map((r) =>
-      [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source, r.note ?? ""].map(csvEscape).join(",")
+      [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source ?? "manual", r.note ?? ""].map(csvEscape).join(",")
     );
     const csv = "\uFEFF" + [header, ...lines].join("\r\n");
     downloadFile(csv, `weight-rainbow-${todayLocal()}.csv`, "text/csv;charset=utf-8");

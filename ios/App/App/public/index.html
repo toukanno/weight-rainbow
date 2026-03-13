@@ -323,6 +323,9 @@
 
       .pill {
         padding: 10px 14px;
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
         border-radius: 999px;
         background: var(--surface);
         border: 1px solid var(--border);
@@ -1172,6 +1175,42 @@
         transition: height 0.3s ease;
       }
 
+      .vel-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .vel-display {
+        display: flex;
+        gap: 12px;
+        margin-top: 6px;
+        flex-wrap: wrap;
+      }
+      .vel-period {
+        flex: 1;
+        min-width: 120px;
+        padding: 8px 10px;
+        background: color-mix(in srgb, var(--accent) 8%, transparent);
+        border-radius: 8px;
+      }
+      .vel-label {
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--muted);
+      }
+      .vel-rate {
+        font-size: 1rem;
+        font-weight: 700;
+        margin-top: 2px;
+      }
+      .vel-loss { color: var(--ok, #10b981); }
+      .vel-gain { color: var(--warn, #f59e0b); }
+      .vel-stable { color: var(--muted); }
+      .vel-status {
+        font-weight: 600;
+        margin-top: 2px;
+      }
+
       .consistency-section {
         margin-top: 14px;
         padding-top: 12px;
@@ -1630,7 +1669,7 @@
 
       .date-shortcut {
         padding: 6px 12px;
-        min-height: 32px;
+        min-height: 44px;
         border-radius: 8px;
         border: 1px solid var(--border);
         background: var(--surface);
@@ -2643,8 +2682,8 @@
       }
 
       body[data-theme="midnight"] .btn.ghost {
-        color: #8b92b0;
-        border-color: rgba(139, 146, 176, 0.2);
+        color: #b0b6d0;
+        border-color: rgba(139, 146, 176, 0.25);
       }
 
       body[data-theme="midnight"] .tag {

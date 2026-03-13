@@ -1692,6 +1692,31 @@ function calcWeeklyFrequency(records, weeks = 8) {
   const avgPerWeek = Math.round(totalRecords / weeks * 10) / 10;
   return { buckets, maxCount, avgPerWeek, weeks };
 }
+function calcWeightVelocity(records) {
+  if (records.length < 3) return null;
+  const calc = (days2) => {
+    const cutoff = /* @__PURE__ */ new Date();
+    cutoff.setDate(cutoff.getDate() - days2);
+    const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+    const recent = records.filter((r) => r.dt >= cutoffStr);
+    if (recent.length < 2) return null;
+    const first = recent[0];
+    const last = recent[recent.length - 1];
+    const daySpan = (/* @__PURE__ */ new Date(last.dt + "T00:00:00") - /* @__PURE__ */ new Date(first.dt + "T00:00:00")) / 864e5;
+    if (daySpan < 1) return null;
+    const dailyRate = (last.wt - first.wt) / daySpan;
+    return {
+      dailyRate: Math.round(dailyRate * 100) / 100,
+      monthlyProjection: Math.round(dailyRate * 30 * 10) / 10,
+      change: Math.round((last.wt - first.wt) * 10) / 10,
+      days: Math.round(daySpan)
+    };
+  };
+  const week = calc(7);
+  const month = calc(30);
+  if (!week && !month) return null;
+  return { week, month };
+}
 
 // src/i18n.js
 var translations = {
@@ -2132,7 +2157,15 @@ var translations = {
     "freq.title": "\u9031\u5225 \u8A18\u9332\u983B\u5EA6",
     "freq.avg": "\u5E73\u5747: \u9031{avg}\u56DE",
     "freq.perfect": "\u6BCE\u65E5\u8A18\u9332\u9054\u6210\u306E\u9031\u3042\u308A\uFF01",
-    "freq.hint": "\u904E\u53BB{weeks}\u9031\u9593\u306E\u8A18\u9332\u6570"
+    "freq.hint": "\u904E\u53BB{weeks}\u9031\u9593\u306E\u8A18\u9332\u6570",
+    "velocity.title": "\u4F53\u91CD\u5909\u5316\u30DA\u30FC\u30B9",
+    "velocity.week": "\u76F4\u8FD17\u65E5\u9593",
+    "velocity.month": "\u76F4\u8FD130\u65E5\u9593",
+    "velocity.daily": "{rate}kg/\u65E5",
+    "velocity.projection": "\u3053\u306E\u30DA\u30FC\u30B9\u3060\u3068\u6708{amount}kg",
+    "velocity.losing": "\u6E1B\u5C11\u4E2D",
+    "velocity.gaining": "\u5897\u52A0\u4E2D",
+    "velocity.stable": "\u5B89\u5B9A"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2571,7 +2604,15 @@ var translations = {
     "freq.title": "Weekly Recording Frequency",
     "freq.avg": "Average: {avg}/week",
     "freq.perfect": "Perfect week achieved!",
-    "freq.hint": "Last {weeks} weeks"
+    "freq.hint": "Last {weeks} weeks",
+    "velocity.title": "Weight Velocity",
+    "velocity.week": "Last 7 days",
+    "velocity.month": "Last 30 days",
+    "velocity.daily": "{rate}kg/day",
+    "velocity.projection": "Projected {amount}kg/month at this pace",
+    "velocity.losing": "Losing",
+    "velocity.gaining": "Gaining",
+    "velocity.stable": "Stable"
   }
 };
 function createTranslator(language) {
@@ -23636,6 +23677,7 @@ function render() {
             ${renderTagImpact()}
             ${renderBestPeriod()}
             ${renderWeeklyFrequency()}
+            ${renderWeightVelocity()}
             ${renderBodyFatStats()}
           </section>
 
@@ -24191,6 +24233,31 @@ function renderWeeklyFrequency() {
       <div class="freq-chart">${bars}</div>
       <div class="helper hint-small">${t("freq.avg").replace("{avg}", freq.avgPerWeek)} \xB7 ${t("freq.hint").replace("{weeks}", freq.weeks)}</div>
       ${hasPerfect ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;margin-top:2px;">${t("freq.perfect")}</div>` : ""}
+    </div>
+  `;
+}
+function renderWeightVelocity() {
+  const vel = calcWeightVelocity(state.records);
+  if (!vel) return "";
+  const renderPeriod = (key, data) => {
+    if (!data) return "";
+    const status = data.dailyRate < -0.01 ? "losing" : data.dailyRate > 0.01 ? "gaining" : "stable";
+    const statusCls = status === "losing" ? "vel-loss" : status === "gaining" ? "vel-gain" : "vel-stable";
+    return `
+      <div class="vel-period">
+        <div class="vel-label">${t("velocity." + key)}</div>
+        <div class="vel-rate ${statusCls}">${t("velocity.daily").replace("{rate}", (data.dailyRate > 0 ? "+" : "") + data.dailyRate.toFixed(2))}</div>
+        <div class="hint-small">${t("velocity.projection").replace("{amount}", (data.monthlyProjection > 0 ? "+" : "") + data.monthlyProjection.toFixed(1))}</div>
+        <div class="hint-small vel-status">${t("velocity." + status)}</div>
+      </div>`;
+  };
+  return `
+    <div class="vel-section">
+      <div class="helper">${t("velocity.title")}</div>
+      <div class="vel-display">
+        ${renderPeriod("week", vel.week)}
+        ${renderPeriod("month", vel.month)}
+      </div>
     </div>
   `;
 }
@@ -24982,7 +25049,7 @@ function exportExcel() {
       [t("export.header.weight")]: r.wt,
       [t("export.header.bmi")]: r.bmi ?? "",
       [t("export.header.bodyFat")]: r.bf ?? "",
-      [t("export.header.source")]: r.source,
+      [t("export.header.source")]: r.source ?? "manual",
       [t("export.header.note")]: r.note ?? ""
     }));
     const ws = utils.json_to_sheet(rows);
@@ -25003,7 +25070,7 @@ function exportCSV() {
     const headers = [t("export.header.date"), t("export.header.weight"), t("export.header.bmi"), t("export.header.bodyFat"), t("export.header.source"), t("export.header.note")];
     const header = headers.map(csvEscape).join(",");
     const lines = state.records.map(
-      (r) => [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source, r.note ?? ""].map(csvEscape).join(",")
+      (r) => [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source ?? "manual", r.note ?? ""].map(csvEscape).join(",")
     );
     const csv = "\uFEFF" + [header, ...lines].join("\r\n");
     downloadFile(csv, `weight-rainbow-${todayLocal()}.csv`, "text/csv;charset=utf-8");
