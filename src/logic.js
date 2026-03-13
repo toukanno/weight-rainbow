@@ -990,7 +990,7 @@ export function calcWeekdayVsWeekend(records) {
 
 export function csvEscape(val) {
   const str = String(val ?? "");
-  if (/[,"\r\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
+  if (/[,"\r\n\t]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
   return str;
 }
 
@@ -3062,4 +3062,35 @@ export function calcGoalScenarios(records, goalWeight) {
   });
 
   return { current, goal: goalWeight, remaining, scenarios };
+}
+
+/**
+ * Generate a streak calendar grid for the last N weeks.
+ * Returns { weeks: [[{ date, recorded, isToday }]], totalRecorded, totalDays }
+ */
+export function calcStreakCalendar(records, numWeeks = 12) {
+  const dateSet = new Set(records.map((r) => r.dt));
+  const today = new Date();
+  const todayStr = localDateStr(today);
+  // Find start of grid: go back numWeeks*7 days, align to Sunday
+  const start = new Date(today);
+  start.setDate(start.getDate() - (numWeeks * 7 - 1) - start.getDay());
+
+  const weeks = [];
+  let totalRecorded = 0;
+  let totalDays = 0;
+  const d = new Date(start);
+  while (d <= today) {
+    const week = [];
+    for (let dow = 0; dow < 7 && d <= today; dow++) {
+      const ds = localDateStr(d);
+      const recorded = dateSet.has(ds);
+      if (recorded) totalRecorded++;
+      totalDays++;
+      week.push({ date: ds, recorded, isToday: ds === todayStr });
+      d.setDate(d.getDate() + 1);
+    }
+    weeks.push(week);
+  }
+  return { weeks, totalRecorded, totalDays };
 }

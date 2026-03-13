@@ -103,6 +103,7 @@ import {
   calcMilestoneHistory,
   calcWeightJourney,
   calcGoalScenarios,
+  calcStreakCalendar,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -7931,5 +7932,43 @@ describe("calcGoalScenarios", () => {
     const result = calcGoalScenarios(records, 60.0);
     expect(result.remaining).toBe(5.0);
     expect(result.scenarios[2].weeks).toBe(5); // 5kg / 1.0kg per week
+  });
+});
+
+describe("calcStreakCalendar", () => {
+  it("returns weeks array with days", () => {
+    const records = [{ dt: "2026-03-14", wt: 70 }];
+    const result = calcStreakCalendar(records, 2);
+    expect(result.weeks.length).toBeGreaterThan(0);
+    expect(result.totalDays).toBeGreaterThan(0);
+  });
+
+  it("marks recorded days correctly", () => {
+    const records = [
+      { dt: "2026-03-10", wt: 70 },
+      { dt: "2026-03-12", wt: 69 },
+      { dt: "2026-03-14", wt: 68 },
+    ];
+    const result = calcStreakCalendar(records, 1);
+    const allDays = result.weeks.flat();
+    const recordedDays = allDays.filter((d) => d.recorded);
+    expect(recordedDays.length).toBe(result.totalRecorded);
+  });
+
+  it("identifies today", () => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const records = [{ dt: todayStr, wt: 70 }];
+    const result = calcStreakCalendar(records, 1);
+    const allDays = result.weeks.flat();
+    const todayDay = allDays.find((d) => d.isToday);
+    expect(todayDay).toBeDefined();
+    expect(todayDay.recorded).toBe(true);
+  });
+
+  it("counts total correctly with no records", () => {
+    const result = calcStreakCalendar([], 2);
+    expect(result.totalRecorded).toBe(0);
+    expect(result.totalDays).toBeGreaterThan(0);
   });
 });

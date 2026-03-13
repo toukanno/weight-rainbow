@@ -535,7 +535,7 @@ function render() {
             <div class="input-grid">
               <div class="field">
                 <label for="name">${t("profile.name")}</label>
-                <input id="name" name="name" maxlength="40" value="${escapeAttr(state.profile.name)}" />
+                <input id="name" name="name" maxlength="40" autocomplete="name" value="${escapeAttr(state.profile.name)}" />
               </div>
               <div class="field">
                 <label for="gender">${t("profile.gender")}</label>
@@ -548,11 +548,11 @@ function render() {
               </div>
               <div class="field">
                 <label for="heightCm">${t("profile.height")}</label>
-                <input id="heightCm" name="heightCm" inputmode="decimal" value="${escapeAttr(state.profile.heightCm)}" />
+                <input id="heightCm" name="heightCm" inputmode="decimal" autocomplete="off" value="${escapeAttr(state.profile.heightCm)}" />
               </div>
               <div class="field">
                 <label for="age">${t("profile.age")}</label>
-                <input id="age" name="age" inputmode="numeric" value="${escapeAttr(state.profile.age)}" />
+                <input id="age" name="age" inputmode="numeric" autocomplete="off" value="${escapeAttr(state.profile.age)}" />
               </div>
             </div>
           </section>
@@ -602,7 +602,7 @@ function render() {
               </div>
               <div class="field">
                 <label for="entryNote">${t("entry.note")}</label>
-                <input id="entryNote" name="note" type="text" maxlength="100" placeholder="${escapeAttr(t("entry.noteHint"))}" value="${escapeAttr(state.form.note)}" />
+                <input id="entryNote" name="note" type="text" maxlength="100" autocomplete="off" placeholder="${escapeAttr(t("entry.noteHint"))}" value="${escapeAttr(state.form.note)}" />
                 ${(state.form.note || "").length > 50 ? `<div class="hint-small" style="text-align:right;">${(state.form.note || "").length}/100</div>` : ""}
                 <div class="note-tags-row" role="group" aria-label="${t("note.tags")}">
                   ${NOTE_TAGS.map((tag) => {
@@ -862,8 +862,8 @@ function render() {
             <div class="record-date-range">
               <div class="helper hint-small">${t("records.dateRange")}</div>
               <div class="date-range-fields">
-                <label>${t("records.from")}<input id="dateRangeFrom" type="date" value="${escapeAttr(recordDateFrom)}" max="${todayLocal()}" /></label>
-                <label>${t("records.to")}<input id="dateRangeTo" type="date" value="${escapeAttr(recordDateTo)}" max="${todayLocal()}" /></label>
+                <label>${t("records.from")}<input id="dateRangeFrom" type="date" autocomplete="off" value="${escapeAttr(recordDateFrom)}" max="${todayLocal()}" /></label>
+                <label>${t("records.to")}<input id="dateRangeTo" type="date" autocomplete="off" value="${escapeAttr(recordDateTo)}" max="${todayLocal()}" /></label>
                 ${recordDateFrom || recordDateTo ? `<button type="button" class="btn ghost" data-action="clear-date-range">${t("records.clearRange")}</button>` : ""}
               </div>
             </div>` : ""}
