@@ -7080,4 +7080,108 @@ describe("generateAICoachReport", () => {
     expect(r.score).toBeGreaterThanOrEqual(0);
     expect(r.score).toBeLessThanOrEqual(100);
   });
+
+  it("handles all identical weights gracefully", () => {
+    const now = new Date();
+    const records = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(now.getTime() - (13 - i) * 86400000);
+      return { dt: d.toISOString().slice(0, 10), wt: 75.0 };
+    });
+    const r = generateAICoachReport(records, profile, 65);
+    expect(r.score).toBeGreaterThanOrEqual(0);
+    expect(r.score).toBeLessThanOrEqual(100);
+    expect(r.grade).toBeDefined();
+  });
+
+  it("handles goal weight equal to current weight", () => {
+    const now = new Date();
+    const records = Array.from({ length: 10 }, (_, i) => {
+      const d = new Date(now.getTime() - (9 - i) * 86400000);
+      return { dt: d.toISOString().slice(0, 10), wt: 75 };
+    });
+    const r = generateAICoachReport(records, profile, 75);
+    expect(r.score).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("calcWeeklyRate edge cases", () => {
+  it("returns null for same-day records", () => {
+    const records = [
+      { dt: "2024-01-01", wt: 70 },
+      { dt: "2024-01-01", wt: 71 },
+    ];
+    const r = calcWeeklyRate(records);
+    expect(r).toBeNull();
+  });
+
+  it("returns null for records less than 7 days apart", () => {
+    const records = [
+      { dt: "2024-01-01", wt: 70 },
+      { dt: "2024-01-06", wt: 69 },
+    ];
+    const r = calcWeeklyRate(records);
+    expect(r).toBeNull();
+  });
+
+  it("calculates correctly at exactly 7 days", () => {
+    const records = [
+      { dt: "2024-01-01", wt: 70 },
+      { dt: "2024-01-08", wt: 69 },
+    ];
+    const r = calcWeeklyRate(records);
+    expect(r).not.toBeNull();
+    expect(r.weeklyRate).toBe(-1);
+  });
+});
+
+describe("calcWeightTrend edge cases", () => {
+  it("returns flat for all identical weights", () => {
+    const now = new Date();
+    const records = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(now.getTime() - (6 - i) * 86400000);
+      return { dt: d.toISOString().slice(0, 10), wt: 75 };
+    });
+    const r = calcWeightTrend(records);
+    expect(r).toBe("flat");
+  });
+});
+
+describe("filterRecordsByDateRange edge cases", () => {
+  const records = [
+    { dt: "2024-12-31", wt: 70 },
+    { dt: "2025-01-01", wt: 71 },
+    { dt: "2025-01-31", wt: 72 },
+    { dt: "2025-02-01", wt: 73 },
+  ];
+
+  it("handles year boundary", () => {
+    const r = filterRecordsByDateRange(records, "2024-12-31", "2025-01-01");
+    expect(r.length).toBe(2);
+  });
+
+  it("handles month boundary", () => {
+    const r = filterRecordsByDateRange(records, "2025-01-31", "2025-02-01");
+    expect(r.length).toBe(2);
+  });
+
+  it("handles same from and to date", () => {
+    const r = filterRecordsByDateRange(records, "2025-01-01", "2025-01-01");
+    expect(r.length).toBe(1);
+    expect(r[0].dt).toBe("2025-01-01");
+  });
+});
+
+describe("calcStats edge cases", () => {
+  it("handles all identical weights", () => {
+    const records = [
+      { dt: "2024-01-01", wt: 75 },
+      { dt: "2024-01-02", wt: 75 },
+      { dt: "2024-01-03", wt: 75 },
+    ];
+    const r = calcStats(records, { heightCm: 170 });
+    expect(r.avgWeight).toBe(75);
+    expect(r.minWeight).toBe(75);
+    expect(r.maxWeight).toBe(75);
+    expect(r.change).toBe(0);
+  });
 });

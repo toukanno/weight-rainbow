@@ -3677,7 +3677,13 @@ var translations = {
     "ai.prediction.goalDate": "\u4E88\u60F3\u9054\u6210\u65E5: {date}",
     "ai.prediction.achieved": "\u{1F389} \u76EE\u6A19\u9054\u6210\u6E08\u307F\uFF01",
     "ai.prediction.noTrend": "\u30C8\u30EC\u30F3\u30C9\u30C7\u30FC\u30BF\u304C\u4E0D\u8DB3\u3057\u3066\u3044\u307E\u3059",
-    "ai.prediction.insufficient": "\u73FE\u5728\u306E\u30DA\u30FC\u30B9\u3067\u306F\u76EE\u6A19\u9054\u6210\u304C\u96E3\u3057\u3044\u3067\u3059\u3002\u30DA\u30FC\u30B9\u3092\u898B\u76F4\u3057\u307E\u3057\u3087\u3046"
+    "ai.prediction.insufficient": "\u73FE\u5728\u306E\u30DA\u30FC\u30B9\u3067\u306F\u76EE\u6A19\u9054\u6210\u304C\u96E3\u3057\u3044\u3067\u3059\u3002\u30DA\u30FC\u30B9\u3092\u898B\u76F4\u3057\u307E\u3057\u3087\u3046",
+    "dash.weight": "\u6700\u65B0\u4F53\u91CD",
+    "dash.change": "\u524D\u56DE\u6BD4",
+    "dash.bmi": "BMI",
+    "dash.streak": "\u9023\u7D9A\u8A18\u9332",
+    "dash.days": "{n}\u65E5",
+    "dash.noRecord": "\u672A\u8A18\u9332"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4413,7 +4419,13 @@ var translations = {
     "ai.prediction.goalDate": "Estimated: {date}",
     "ai.prediction.achieved": "\u{1F389} Goal achieved!",
     "ai.prediction.noTrend": "Not enough trend data yet",
-    "ai.prediction.insufficient": "Current pace is insufficient. Consider adjusting your approach"
+    "ai.prediction.insufficient": "Current pace is insufficient. Consider adjusting your approach",
+    "dash.weight": "Latest",
+    "dash.change": "Change",
+    "dash.bmi": "BMI",
+    "dash.streak": "Streak",
+    "dash.days": "{n} days",
+    "dash.noRecord": "No record"
   }
 };
 function createTranslator(language) {
