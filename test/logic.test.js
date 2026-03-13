@@ -3890,3 +3890,92 @@ describe("calcMovingAverages edge cases", () => {
     expect(["below", "above", "aligned"]).toContain(result.signal);
   });
 });
+
+describe("calcConsistencyStreak edge cases", () => {
+  it("returns null for fewer than 2 records", () => {
+    expect(calcConsistencyStreak([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns streak for consistent weights", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70.0 },
+      { dt: "2025-01-02", wt: 70.2 },
+      { dt: "2025-01-03", wt: 70.1 },
+      { dt: "2025-01-04", wt: 70.3 },
+    ];
+    const result = calcConsistencyStreak(records);
+    expect(result).not.toBeNull();
+    expect(result.streak).toBe(4); // all within 0.5 of latest
+    expect(result.best).toBeGreaterThanOrEqual(result.streak);
+  });
+
+  it("breaks streak on large change", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72.0 },
+      { dt: "2025-01-02", wt: 70.0 },
+      { dt: "2025-01-03", wt: 70.2 },
+    ];
+    const result = calcConsistencyStreak(records);
+    expect(result).not.toBeNull();
+    expect(result.streak).toBe(2); // only last 2 within 0.5
+  });
+});
+
+describe("calcDataHealth edge cases", () => {
+  it("returns null for fewer than 2 records", () => {
+    expect(calcDataHealth([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns high score for consecutive records with BMI", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 70, bmi: 22.5,
+    }));
+    const result = calcDataHealth(records);
+    expect(result).not.toBeNull();
+    expect(result.score).toBe(100);
+    expect(result.issues.length).toBe(0);
+  });
+
+  it("detects gaps and reduces score", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-20", wt: 70 }, // 19-day gap
+    ];
+    const result = calcDataHealth(records);
+    expect(result.issues.some(i => i.type === "gap")).toBe(true);
+    expect(result.score).toBeLessThan(100);
+  });
+
+  it("detects outliers", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 80 }, // 10kg jump — outlier
+      { dt: "2025-01-03", wt: 70 },
+    ];
+    const result = calcDataHealth(records);
+    expect(result.issues.some(i => i.type === "outlier")).toBe(true);
+  });
+});
+
+describe("calcWeekdayVsWeekend edge cases", () => {
+  it("returns null for fewer than 5 records", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    expect(calcWeekdayVsWeekend(records)).toBeNull();
+  });
+
+  it("returns weekday vs weekend comparison", () => {
+    // 2025-01-06 is Monday, 2025-01-11 is Saturday
+    const records = [
+      { dt: "2025-01-06", wt: 70 }, // Mon
+      { dt: "2025-01-07", wt: 70 }, // Tue
+      { dt: "2025-01-08", wt: 70 }, // Wed
+      { dt: "2025-01-11", wt: 71 }, // Sat
+      { dt: "2025-01-12", wt: 71 }, // Sun
+    ];
+    const result = calcWeekdayVsWeekend(records);
+    expect(result).not.toBeNull();
+    expect(result.weekdayAvg).toBe(70);
+    expect(result.weekendAvg).toBe(71);
+    expect(result.diff).toBe(1);
+  });
+});
