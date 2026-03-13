@@ -1552,7 +1552,17 @@ function exportText() {
     const noteStr = r.note ? `  [${r.note}]` : "";
     return `${r.dt}  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})${noteStr}`;
   });
-  const text = `${t("app.title")} - ${new Date().toISOString().slice(0, 10)}\n${"=".repeat(48)}\n${lines.join("\n")}`;
+  const stats = calcStats(state.records, state.profile);
+  const summaryLines = [];
+  if (stats) {
+    summaryLines.push("");
+    summaryLines.push("=".repeat(48));
+    summaryLines.push(`${t("chart.latest")}: ${stats.latestWeight.toFixed(1)}kg / ${t("chart.avg")}: ${stats.avgWeight.toFixed(1)}kg`);
+    summaryLines.push(`${t("chart.min")}: ${stats.minWeight.toFixed(1)}kg / ${t("chart.max")}: ${stats.maxWeight.toFixed(1)}kg`);
+    summaryLines.push(`${t("chart.change")}: ${stats.change > 0 ? "+" : ""}${stats.change.toFixed(1)}kg / ${t("summary.count")}: ${state.records.length}`);
+    if (stats.latestBMI) summaryLines.push(`BMI: ${stats.latestBMI.toFixed(1)} (${t(getBMIStatus(stats.latestBMI))})`);
+  }
+  const text = `${t("app.title")} - ${new Date().toISOString().slice(0, 10)}\n${"=".repeat(48)}\n${lines.join("\n")}${summaryLines.join("\n")}`;
   downloadFile(text, `weight-rainbow-${new Date().toISOString().slice(0, 10)}.txt`, "text/plain");
   setStatus(t("export.textDone"));
 }
