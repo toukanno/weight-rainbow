@@ -2000,6 +2000,10 @@ function renderRecordList() {
     }
   }
 
+  if (hasFilter && displayed.length === 0) {
+    return `<div class="empty-state"><div class="helper">${t("records.noMatch")}</div></div>`;
+  }
+
   // Build dt→index map for O(1) lookup instead of O(n) indexOf
   const dtIndex = new Map(state.records.map((r, i) => [r.dt, i]));
   return displayed.map((record) => {
@@ -2033,6 +2037,14 @@ function bindEvents() {
     button.addEventListener("click", () => {
       activeEntryMode = button.dataset.mode;
       render();
+      // Focus primary input in the selected mode
+      if (activeEntryMode === "manual") {
+        document.getElementById("pickerInt")?.focus();
+      } else if (activeEntryMode === "voice") {
+        app.querySelector("[data-action='toggle-voice']")?.focus();
+      } else if (activeEntryMode === "photo") {
+        app.querySelector("[data-action='pick-photo']")?.focus();
+      }
     });
   });
 

@@ -2811,6 +2811,7 @@ var translations = {
     "note.tag.stress": "\u30B9\u30C8\u30EC\u30B9",
     "note.tag.sleep": "\u7761\u7720\u4E0D\u8DB3",
     "note.tag.alcohol": "\u98F2\u9152",
+    "records.noMatch": "\u8A72\u5F53\u3059\u308B\u8A18\u9332\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093",
     "records.dateRange": "\u671F\u9593\u3067\u7D5E\u308A\u8FBC\u307F",
     "records.from": "\u958B\u59CB\u65E5",
     "records.to": "\u7D42\u4E86\u65E5",
@@ -3426,6 +3427,7 @@ var translations = {
     "note.tag.stress": "Stress",
     "note.tag.sleep": "Poor Sleep",
     "note.tag.alcohol": "Alcohol",
+    "records.noMatch": "No matching records found",
     "records.dateRange": "Filter by date range",
     "records.from": "From",
     "records.to": "To",
@@ -25949,6 +25951,9 @@ function renderRecordList() {
       }
     }
   }
+  if (hasFilter && displayed.length === 0) {
+    return `<div class="empty-state"><div class="helper">${t("records.noMatch")}</div></div>`;
+  }
   const dtIndex = new Map(state.records.map((r, i) => [r.dt, i]));
   return displayed.map((record) => {
     const idx = dtIndex.get(record.dt) ?? -1;
@@ -25978,6 +25983,13 @@ function bindEvents() {
     button.addEventListener("click", () => {
       activeEntryMode = button.dataset.mode;
       render();
+      if (activeEntryMode === "manual") {
+        document.getElementById("pickerInt")?.focus();
+      } else if (activeEntryMode === "voice") {
+        app.querySelector("[data-action='toggle-voice']")?.focus();
+      } else if (activeEntryMode === "photo") {
+        app.querySelector("[data-action='pick-photo']")?.focus();
+      }
     });
   });
   app.querySelector('[data-action="save-profile"]')?.addEventListener("click", saveProfile);
