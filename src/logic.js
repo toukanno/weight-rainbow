@@ -3965,3 +3965,40 @@ export function calcThenVsNow(records, days = 7) {
     diff: +(nowData.avg - thenData.avg).toFixed(1),
   };
 }
+
+/**
+ * Calculate quick weight presets for faster entry.
+ * Returns up to 3 suggested weights based on recent history.
+ * Returns [{ label, weight }] — deduplicated and sorted.
+ */
+export function calcQuickWeightPresets(records) {
+  if (!records || records.length === 0) return [];
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const last = sorted[sorted.length - 1].wt;
+  const presets = new Map();
+
+  // Last recorded weight
+  presets.set(last.toFixed(1), { label: "last", weight: +last.toFixed(1) });
+
+  // Average of last 3
+  if (sorted.length >= 3) {
+    const recent3 = sorted.slice(-3);
+    const avg3 = +(recent3.reduce((s, r) => s + r.wt, 0) / 3).toFixed(1);
+    if (!presets.has(avg3.toFixed(1))) {
+      presets.set(avg3.toFixed(1), { label: "avg3", weight: avg3 });
+    }
+  }
+
+  // Typical next weight (based on recent trend)
+  if (sorted.length >= 2) {
+    const prev = sorted[sorted.length - 2].wt;
+    const trend = last - prev;
+    const predicted = +(last + trend).toFixed(1);
+    if (predicted >= 20 && predicted <= 300 && !presets.has(predicted.toFixed(1))) {
+      presets.set(predicted.toFixed(1), { label: "trend", weight: predicted });
+    }
+  }
+
+  return [...presets.values()].sort((a, b) => a.weight - b.weight);
+}

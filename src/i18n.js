@@ -920,6 +920,9 @@ export const translations = {
     "tvn.avg": "平均",
     "tvn.range": "範囲",
     "tvn.change": "変化",
+    "preset.last": "前回",
+    "preset.avg3": "3日平均",
+    "preset.trend": "予測",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1842,6 +1845,9 @@ export const translations = {
     "tvn.avg": "Avg",
     "tvn.range": "Range",
     "tvn.change": "Change",
+    "preset.last": "Last",
+    "preset.avg3": "3-day avg",
+    "preset.trend": "Predicted",
   },
 };
 

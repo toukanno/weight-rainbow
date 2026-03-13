@@ -3920,6 +3920,29 @@ function calcThenVsNow(records, days2 = 7) {
     diff: +(nowData.avg - thenData.avg).toFixed(1)
   };
 }
+function calcQuickWeightPresets(records) {
+  if (!records || records.length === 0) return [];
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const last = sorted[sorted.length - 1].wt;
+  const presets = /* @__PURE__ */ new Map();
+  presets.set(last.toFixed(1), { label: "last", weight: +last.toFixed(1) });
+  if (sorted.length >= 3) {
+    const recent3 = sorted.slice(-3);
+    const avg3 = +(recent3.reduce((s, r) => s + r.wt, 0) / 3).toFixed(1);
+    if (!presets.has(avg3.toFixed(1))) {
+      presets.set(avg3.toFixed(1), { label: "avg3", weight: avg3 });
+    }
+  }
+  if (sorted.length >= 2) {
+    const prev = sorted[sorted.length - 2].wt;
+    const trend = last - prev;
+    const predicted = +(last + trend).toFixed(1);
+    if (predicted >= 20 && predicted <= 300 && !presets.has(predicted.toFixed(1))) {
+      presets.set(predicted.toFixed(1), { label: "trend", weight: predicted });
+    }
+  }
+  return [...presets.values()].sort((a, b) => a.weight - b.weight);
+}
 
 // src/i18n.js
 var translations = {
@@ -4856,7 +4879,10 @@ var translations = {
     "tvn.now": "\u76F4\u8FD1\u306E7\u65E5",
     "tvn.avg": "\u5E73\u5747",
     "tvn.range": "\u7BC4\u56F2",
-    "tvn.change": "\u5909\u5316"
+    "tvn.change": "\u5909\u5316",
+    "preset.last": "\u524D\u56DE",
+    "preset.avg3": "3\u65E5\u5E73\u5747",
+    "preset.trend": "\u4E88\u6E2C"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5791,7 +5817,10 @@ var translations = {
     "tvn.now": "Last 7 days",
     "tvn.avg": "Avg",
     "tvn.range": "Range",
-    "tvn.change": "Change"
+    "tvn.change": "Change",
+    "preset.last": "Last",
+    "preset.avg3": "3-day avg",
+    "preset.trend": "Predicted"
   }
 };
 function createTranslator(language) {
@@ -26748,6 +26777,11 @@ function render() {
                     </select>
                     <span class="picker-unit">${t("picker.kg")}</span>
                   </div>
+                  ${(() => {
+      const presets = calcQuickWeightPresets(state.records);
+      if (presets.length === 0) return "";
+      return `<div class="weight-presets">${presets.map((p) => `<button type="button" class="weight-preset-btn" data-pick-weight="${p.weight}" title="${t("preset." + p.label)}">${t("preset." + p.label)} ${p.weight}kg</button>`).join("")}</div>`;
+    })()}
                 </div>
                 <div class="field">
                   <label for="recordDate">${t("entry.date")}</label>

@@ -4206,6 +4206,33 @@
         font-weight: 600;
       }
 
+      .weight-presets {
+        display: flex;
+        gap: 6px;
+        margin-top: 6px;
+        flex-wrap: wrap;
+      }
+
+      .weight-preset-btn {
+        padding: 5px 10px;
+        min-height: 36px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.15s;
+      }
+
+      @media (hover: hover) {
+        .weight-preset-btn:hover {
+          border-color: var(--accent);
+          background: color-mix(in srgb, var(--accent) 8%, transparent);
+        }
+      }
+
       .date-shortcuts {
         display: flex;
         gap: 6px;

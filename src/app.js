@@ -124,6 +124,7 @@ import {
   calcDailyChangeDist,
   calcGoalStreak,
   calcThenVsNow,
+  calcQuickWeightPresets,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -614,6 +615,11 @@ function render() {
                     </select>
                     <span class="picker-unit">${t("picker.kg")}</span>
                   </div>
+                  ${(() => {
+                    const presets = calcQuickWeightPresets(state.records);
+                    if (presets.length === 0) return "";
+                    return `<div class="weight-presets">${presets.map((p) => `<button type="button" class="weight-preset-btn" data-pick-weight="${p.weight}" title="${t("preset." + p.label)}">${t("preset." + p.label)} ${p.weight}kg</button>`).join("")}</div>`;
+                  })()}
                 </div>
                 <div class="field">
                   <label for="recordDate">${t("entry.date")}</label>
