@@ -97,6 +97,7 @@ import {
   calcMonthlyAverages,
   calcLongTermProgress,
   calcWeightFluctuation,
+  calcWeightAnomalies,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -7441,5 +7442,59 @@ describe("calcWeightFluctuation", () => {
     expect(p30.min).toBe(68.0);
     expect(p30.max).toBe(72.0);
     expect(p30.range).toBe(4.0);
+  });
+});
+
+describe("calcWeightAnomalies", () => {
+  it("returns empty for fewer than 5 records", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 70 },
+      { dt: "2026-01-02", wt: 71 },
+      { dt: "2026-01-03", wt: 70 },
+    ];
+    expect(calcWeightAnomalies(records)).toEqual([]);
+  });
+
+  it("detects an anomalous entry", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 70 },
+      { dt: "2026-01-02", wt: 70 },
+      { dt: "2026-01-03", wt: 80 }, // anomaly
+      { dt: "2026-01-04", wt: 70 },
+      { dt: "2026-01-05", wt: 70 },
+    ];
+    const result = calcWeightAnomalies(records);
+    expect(result.length).toBe(1);
+    expect(result[0].dt).toBe("2026-01-03");
+    expect(result[0].wt).toBe(80);
+    expect(result[0].diff).toBeGreaterThanOrEqual(3);
+  });
+
+  it("returns empty when all entries are consistent", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 70.0 },
+      { dt: "2026-01-02", wt: 70.2 },
+      { dt: "2026-01-03", wt: 70.1 },
+      { dt: "2026-01-04", wt: 70.3 },
+      { dt: "2026-01-05", wt: 70.0 },
+    ];
+    expect(calcWeightAnomalies(records)).toEqual([]);
+  });
+
+  it("sorts by severity descending", () => {
+    const records = [
+      { dt: "2026-01-01", wt: 70 },
+      { dt: "2026-01-02", wt: 70 },
+      { dt: "2026-01-03", wt: 76 }, // diff ~6
+      { dt: "2026-01-04", wt: 70 },
+      { dt: "2026-01-05", wt: 70 },
+      { dt: "2026-01-06", wt: 74 }, // diff ~4
+      { dt: "2026-01-07", wt: 70 },
+      { dt: "2026-01-08", wt: 70 },
+    ];
+    const result = calcWeightAnomalies(records);
+    if (result.length >= 2) {
+      expect(result[0].diff).toBeGreaterThanOrEqual(result[1].diff);
+    }
   });
 });

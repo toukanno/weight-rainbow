@@ -2229,7 +2229,7 @@
         outline-offset: -2px;
       }
 
-      .trend-indicator {
+      .trend-card {
         display: flex;
         align-items: center;
         gap: 10px;
@@ -2237,13 +2237,13 @@
         border-radius: 10px;
         margin-bottom: 10px;
       }
-      .trend-indicator.trend-down {
+      .trend-card.trend-down {
         background: color-mix(in srgb, var(--accent-3) 12%, transparent);
       }
-      .trend-indicator.trend-up {
+      .trend-card.trend-up {
         background: color-mix(in srgb, var(--accent-2) 12%, transparent);
       }
-      .trend-indicator.trend-stable {
+      .trend-card.trend-stable {
         background: color-mix(in srgb, var(--accent) 10%, transparent);
       }
       .trend-arrow {
@@ -2576,6 +2576,17 @@
         min-width: 58px;
         text-align: right;
       }
+
+      .anomaly-section {
+        margin-top: 14px;
+      }
+      .anomaly-row {
+        padding: 6px 0;
+        font-size: 0.8rem;
+        color: var(--warn);
+        border-bottom: 1px solid var(--border);
+      }
+      .anomaly-row:last-child { border-bottom: none; }
 
       .mpr-section {
         margin-top: 14px;
@@ -4305,7 +4316,8 @@
         box-shadow: 0 4px 16px rgba(255, 95, 109, 0.2);
       }
 
-      body[data-theme="midnight"] .trend-indicator {
+      body[data-theme="midnight"] .trend-indicator,
+      body[data-theme="midnight"] .trend-card {
         background: rgba(30, 35, 55, 0.6);
         border-color: rgba(139, 146, 176, 0.18);
       }

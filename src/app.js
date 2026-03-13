@@ -100,6 +100,7 @@ import {
   calcMonthlyAverages,
   calcLongTermProgress,
   calcWeightFluctuation,
+  calcWeightAnomalies,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -785,6 +786,7 @@ function render() {
                 ${renderShareSummary()}
                 ${renderDuplicateCheck()}
                 ${renderNoteTagStats()}
+                ${renderWeightAnomalies()}
               </div>
               ` : ""}
             </div>
@@ -2054,7 +2056,7 @@ function renderTrendIndicator() {
   }
   const recentText = t("trend.recent").replace("{avg}", trend.recentAvg.toFixed(1));
   return `
-    <div class="trend-indicator ${cls}">
+    <div class="trend-card ${cls}">
       <span class="trend-arrow">${arrow}</span>
       <div class="trend-text">
         <div class="trend-msg">${msg}</div>
@@ -2200,6 +2202,26 @@ function renderWeightFluctuation() {
   return `
     <div class="fluct-section">
       <div class="helper">${t("fluct.title")}</div>
+      ${rows}
+    </div>
+  `;
+}
+
+function renderWeightAnomalies() {
+  const anomalies = calcWeightAnomalies(state.records);
+  if (anomalies.length === 0) return "";
+  const rows = anomalies.slice(0, 5).map((a) => {
+    const text = t("anomaly.entry")
+      .replace("{date}", a.dt.slice(5).replace("-", "/"))
+      .replace("{wt}", a.wt.toFixed(1))
+      .replace("{expected}", a.expected.toFixed(1))
+      .replace("{diff}", a.diff.toFixed(1));
+    return `<div class="anomaly-row">⚠️ ${text}</div>`;
+  }).join("");
+  return `
+    <div class="anomaly-section">
+      <div class="helper">${t("anomaly.title")}</div>
+      <div class="helper hint-small">${t("anomaly.hint")}</div>
       ${rows}
     </div>
   `;

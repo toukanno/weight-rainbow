@@ -742,6 +742,9 @@ export const translations = {
     "fluct.7d": "直近7日",
     "fluct.30d": "直近30日",
     "fluct.range": "幅",
+    "anomaly.title": "異常値検出",
+    "anomaly.entry": "{date}の記録 {wt}kg（予測: {expected}kg、差: {diff}kg）",
+    "anomaly.hint": "入力ミスの可能性があるデータです",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1486,6 +1489,9 @@ export const translations = {
     "fluct.7d": "Last 7 days",
     "fluct.30d": "Last 30 days",
     "fluct.range": "Range",
+    "anomaly.title": "Anomaly Detection",
+    "anomaly.entry": "{date}: {wt}kg (expected: {expected}kg, diff: {diff}kg)",
+    "anomaly.hint": "These entries may contain data entry errors",
   },
 };
 

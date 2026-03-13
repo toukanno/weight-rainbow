@@ -3083,6 +3083,25 @@ function calcWeightFluctuation(records) {
   });
   return { latest: latest.wt, periods };
 }
+function calcWeightAnomalies(records, threshold = 3) {
+  if (records.length < 5) return [];
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const anomalies = [];
+  for (let i = 2; i < sorted.length - 2; i++) {
+    const neighbors = [sorted[i - 2], sorted[i - 1], sorted[i + 1], sorted[i + 2]];
+    const avg = neighbors.reduce((s, r) => s + r.wt, 0) / neighbors.length;
+    const diff = Math.round(Math.abs(sorted[i].wt - avg) * 10) / 10;
+    if (diff >= threshold) {
+      anomalies.push({
+        dt: sorted[i].dt,
+        wt: sorted[i].wt,
+        expected: Math.round(avg * 10) / 10,
+        diff
+      });
+    }
+  }
+  return anomalies.sort((a, b) => b.diff - a.diff);
+}
 
 // src/i18n.js
 var translations = {
@@ -3841,7 +3860,10 @@ var translations = {
     "fluct.title": "\u4F53\u91CD\u5909\u52D5\u5E45",
     "fluct.7d": "\u76F4\u8FD17\u65E5",
     "fluct.30d": "\u76F4\u8FD130\u65E5",
-    "fluct.range": "\u5E45"
+    "fluct.range": "\u5E45",
+    "anomaly.title": "\u7570\u5E38\u5024\u691C\u51FA",
+    "anomaly.entry": "{date}\u306E\u8A18\u9332 {wt}kg\uFF08\u4E88\u6E2C: {expected}kg\u3001\u5DEE: {diff}kg\uFF09",
+    "anomaly.hint": "\u5165\u529B\u30DF\u30B9\u306E\u53EF\u80FD\u6027\u304C\u3042\u308B\u30C7\u30FC\u30BF\u3067\u3059"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4598,7 +4620,10 @@ var translations = {
     "fluct.title": "Weight Fluctuation",
     "fluct.7d": "Last 7 days",
     "fluct.30d": "Last 30 days",
-    "fluct.range": "Range"
+    "fluct.range": "Range",
+    "anomaly.title": "Anomaly Detection",
+    "anomaly.entry": "{date}: {wt}kg (expected: {expected}kg, diff: {diff}kg)",
+    "anomaly.hint": "These entries may contain data entry errors"
   }
 };
 function createTranslator(language) {
@@ -25740,6 +25765,7 @@ function render() {
                 ${renderShareSummary()}
                 ${renderDuplicateCheck()}
                 ${renderNoteTagStats()}
+                ${renderWeightAnomalies()}
               </div>
               ` : ""}
             </div>
@@ -26946,7 +26972,7 @@ function renderTrendIndicator() {
   }
   const recentText = t("trend.recent").replace("{avg}", trend.recentAvg.toFixed(1));
   return `
-    <div class="trend-indicator ${cls}">
+    <div class="trend-card ${cls}">
       <span class="trend-arrow">${arrow}</span>
       <div class="trend-text">
         <div class="trend-msg">${msg}</div>
@@ -27083,6 +27109,21 @@ function renderWeightFluctuation() {
   return `
     <div class="fluct-section">
       <div class="helper">${t("fluct.title")}</div>
+      ${rows}
+    </div>
+  `;
+}
+function renderWeightAnomalies() {
+  const anomalies = calcWeightAnomalies(state.records);
+  if (anomalies.length === 0) return "";
+  const rows = anomalies.slice(0, 5).map((a) => {
+    const text = t("anomaly.entry").replace("{date}", a.dt.slice(5).replace("-", "/")).replace("{wt}", a.wt.toFixed(1)).replace("{expected}", a.expected.toFixed(1)).replace("{diff}", a.diff.toFixed(1));
+    return `<div class="anomaly-row">\u26A0\uFE0F ${text}</div>`;
+  }).join("");
+  return `
+    <div class="anomaly-section">
+      <div class="helper">${t("anomaly.title")}</div>
+      <div class="helper hint-small">${t("anomaly.hint")}</div>
       ${rows}
     </div>
   `;

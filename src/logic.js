@@ -2828,3 +2828,28 @@ export function calcWeightFluctuation(records) {
   });
   return { latest: latest.wt, periods };
 }
+
+/**
+ * Detect weight anomalies — entries that deviate significantly from neighbors.
+ * threshold: kg difference from moving average of neighbors to flag as anomaly.
+ * Returns [{ dt, wt, expected, diff }] sorted by severity.
+ */
+export function calcWeightAnomalies(records, threshold = 3) {
+  if (records.length < 5) return [];
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const anomalies = [];
+  for (let i = 2; i < sorted.length - 2; i++) {
+    const neighbors = [sorted[i - 2], sorted[i - 1], sorted[i + 1], sorted[i + 2]];
+    const avg = neighbors.reduce((s, r) => s + r.wt, 0) / neighbors.length;
+    const diff = Math.round(Math.abs(sorted[i].wt - avg) * 10) / 10;
+    if (diff >= threshold) {
+      anomalies.push({
+        dt: sorted[i].dt,
+        wt: sorted[i].wt,
+        expected: Math.round(avg * 10) / 10,
+        diff,
+      });
+    }
+  }
+  return anomalies.sort((a, b) => b.diff - a.diff);
+}
