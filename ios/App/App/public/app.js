@@ -1582,10 +1582,44 @@ function calcDataHealth(records) {
   const score = Math.max(0, 100 - issues.length * 15);
   return { score, issues, total: records.length };
 }
+function calcWeekdayVsWeekend(records) {
+  if (records.length < 5) return null;
+  const weekday = [];
+  const weekend = [];
+  for (const r of records) {
+    const day = (/* @__PURE__ */ new Date(r.dt + "T00:00:00")).getDay();
+    if (day === 0 || day === 6) weekend.push(r.wt);
+    else weekday.push(r.wt);
+  }
+  if (!weekday.length || !weekend.length) return null;
+  const wdAvg = Math.round(weekday.reduce((s, w) => s + w, 0) / weekday.length * 10) / 10;
+  const weAvg = Math.round(weekend.reduce((s, w) => s + w, 0) / weekend.length * 10) / 10;
+  const diff = Math.round((weAvg - wdAvg) * 10) / 10;
+  return {
+    weekdayAvg: wdAvg,
+    weekendAvg: weAvg,
+    diff,
+    weekdayCount: weekday.length,
+    weekendCount: weekend.length,
+    heavier: diff > 0.2 ? "weekend" : diff < -0.2 ? "weekday" : "similar"
+  };
+}
 function csvEscape(val) {
   const str = String(val ?? "");
   if (/[,"\r\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
   return str;
+}
+function calcWeightRangePosition(records) {
+  if (records.length < 3) return null;
+  const latest = records[records.length - 1].wt;
+  const weights = records.map((r) => r.wt);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  const range = max - min;
+  if (range === 0) return { position: 50, latest, min, max, zone: "middle" };
+  const position = Math.round((latest - min) / range * 100);
+  const zone = position <= 25 ? "low" : position >= 75 ? "high" : "middle";
+  return { position, latest, min, max, zone };
 }
 
 // src/i18n.js
@@ -1804,6 +1838,13 @@ var translations = {
     "health.gap": "{from} \u301C {to} \u306B{days}\u65E5\u9593\u306E\u7A7A\u767D\u304C\u3042\u308A\u307E\u3059",
     "health.outlier": "{date}\u306E{weight}kg\u306F\u5916\u308C\u5024\u306E\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\uFF08\u524D\u5F8C\u5E73\u5747: {expected}kg\uFF09",
     "health.noBMI": "BMI\u304C\u8A08\u7B97\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002\u8EAB\u9577\u3092\u8A2D\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044",
+    "wdwe.title": "\u5E73\u65E5 vs \u9031\u672B",
+    "wdwe.weekday": "\u5E73\u65E5\u5E73\u5747",
+    "wdwe.weekend": "\u9031\u672B\u5E73\u5747",
+    "wdwe.diff": "\u5DEE",
+    "wdwe.heavier.weekend": "\u9031\u672B\u304C\u3084\u3084\u91CD\u3044\u50BE\u5411",
+    "wdwe.heavier.weekday": "\u5E73\u65E5\u304C\u3084\u3084\u91CD\u3044\u50BE\u5411",
+    "wdwe.heavier.similar": "\u5E73\u65E5\u30FB\u9031\u672B\u3067\u307B\u307C\u540C\u3058",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
     "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01\uFF08-{diff}kg\uFF09",
     "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
@@ -1992,7 +2033,14 @@ var translations = {
     "stability.stddev": "\u6A19\u6E96\u504F\u5DEE",
     "stability.high": "\u5B89\u5B9A",
     "stability.medium": "\u3084\u3084\u5909\u52D5",
-    "stability.low": "\u5909\u52D5\u5927"
+    "stability.low": "\u5909\u52D5\u5927",
+    "range.title": "\u4F53\u91CD\u30EC\u30F3\u30B8",
+    "range.position": "\u73FE\u5728\u306E\u4F4D\u7F6E: \u4E0B\u304B\u3089{pct}%",
+    "range.low": "\u904E\u53BB\u6700\u8EFD\u91CF\u306B\u8FD1\u3044",
+    "range.high": "\u904E\u53BB\u6700\u91CD\u91CF\u306B\u8FD1\u3044",
+    "range.middle": "\u4E2D\u9593\u306E\u7BC4\u56F2",
+    "range.min": "\u6700\u5C0F {weight}kg",
+    "range.max": "\u6700\u5927 {weight}kg"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2211,6 +2259,13 @@ var translations = {
     "health.gap": "{days}-day gap between {from} and {to}",
     "health.outlier": "{weight}kg on {date} may be an outlier (neighbor avg: {expected}kg)",
     "health.noBMI": "BMI not calculated \u2014 please set your height",
+    "wdwe.title": "Weekday vs Weekend",
+    "wdwe.weekday": "Weekday avg",
+    "wdwe.weekend": "Weekend avg",
+    "wdwe.diff": "Diff",
+    "wdwe.heavier.weekend": "Slightly heavier on weekends",
+    "wdwe.heavier.weekday": "Slightly heavier on weekdays",
+    "wdwe.heavier.similar": "Similar on weekdays and weekends",
     "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
@@ -2396,7 +2451,14 @@ var translations = {
     "stability.stddev": "Std Dev",
     "stability.high": "Stable",
     "stability.medium": "Moderate",
-    "stability.low": "Fluctuating"
+    "stability.low": "Fluctuating",
+    "range.title": "Weight Range",
+    "range.position": "Current position: {pct}% from lowest",
+    "range.low": "Near your all-time lowest",
+    "range.high": "Near your all-time highest",
+    "range.middle": "Mid-range",
+    "range.min": "Min {weight}kg",
+    "range.max": "Max {weight}kg"
   }
 };
 function createTranslator(language) {
@@ -23450,11 +23512,13 @@ function render() {
               ${insight.weekComparison !== null ? `<div class="helper">${insight.weekComparison > 0.05 ? t("insight.weekUp").replace("{diff}", insight.weekComparison.toFixed(1)) : insight.weekComparison < -0.05 ? t("insight.weekDown").replace("{diff}", insight.weekComparison.toFixed(1)) : t("insight.weekSame")}</div>` : ""}
             </div>` : ""}
             ${renderDayOfWeekAvg()}
+            ${renderWeekdayWeekend()}
             ${renderStability()}
             ${renderConsistencyStreak()}
             ${renderBMIDistribution()}
             ${renderWeightPercentile()}
             ${renderMovingAverages()}
+            ${renderWeightRange()}
             ${renderBodyFatStats()}
           </section>
 
@@ -23879,6 +23943,34 @@ function renderSourceBreakdown() {
     </div>
   `;
 }
+function renderWeekdayWeekend() {
+  const wdwe = calcWeekdayVsWeekend(state.records);
+  if (!wdwe) return "";
+  const diffCls = wdwe.diff > 0 ? "positive" : wdwe.diff < 0 ? "negative" : "";
+  return `
+    <div class="wdwe-section">
+      <div class="helper">${t("wdwe.title")}</div>
+      <div class="wdwe-display">
+        <div class="wdwe-col">
+          <div class="wdwe-label">${t("wdwe.weekday")}</div>
+          <div class="wdwe-value">${wdwe.weekdayAvg.toFixed(1)}kg</div>
+          <div class="hint-small">${wdwe.weekdayCount} ${t("chart.records")}</div>
+        </div>
+        <div class="wdwe-vs">vs</div>
+        <div class="wdwe-col">
+          <div class="wdwe-label">${t("wdwe.weekend")}</div>
+          <div class="wdwe-value">${wdwe.weekendAvg.toFixed(1)}kg</div>
+          <div class="hint-small">${wdwe.weekendCount} ${t("chart.records")}</div>
+        </div>
+        <div class="wdwe-col">
+          <div class="wdwe-label">${t("wdwe.diff")}</div>
+          <div class="wdwe-value ${diffCls}">${wdwe.diff > 0 ? "+" : ""}${wdwe.diff.toFixed(1)}kg</div>
+        </div>
+      </div>
+      <div class="helper hint-small" style="margin-top:4px;">${t("wdwe.heavier." + wdwe.heavier)}</div>
+    </div>
+  `;
+}
 function renderDataHealth() {
   const health = calcDataHealth(state.records);
   if (!health) return "";
@@ -23899,6 +23991,28 @@ function renderDataHealth() {
           ${issueHtml}
         </div>
       </div>
+    </div>
+  `;
+}
+function renderWeightRange() {
+  const range = calcWeightRangePosition(state.records);
+  if (!range) return "";
+  const zoneCls = range.zone === "low" ? "range-low" : range.zone === "high" ? "range-high" : "range-mid";
+  return `
+    <div class="range-section">
+      <div class="helper">${t("range.title")}</div>
+      <div class="range-bar-container">
+        <div class="range-bar-track">
+          <div class="range-bar-fill" style="width:${range.position}%"></div>
+          <div class="range-bar-marker" style="left:${range.position}%"></div>
+        </div>
+        <div class="range-labels">
+          <span class="hint-small">${t("range.min").replace("{weight}", range.min.toFixed(1))}</span>
+          <span class="hint-small">${t("range.max").replace("{weight}", range.max.toFixed(1))}</span>
+        </div>
+      </div>
+      <div class="helper hint-small ${zoneCls}">${t("range.position").replace("{pct}", range.position)}</div>
+      <div class="helper hint-small" style="margin-top:2px;">${t("range." + range.zone)}</div>
     </div>
   `;
 }
@@ -24463,6 +24577,7 @@ function undoLastSave() {
 async function preprocessImageForOCR(source) {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
+  if (!ctx) return source;
   let bitmap;
   if (source instanceof Blob || source instanceof File) {
     bitmap = await createImageBitmap(source);
@@ -24948,6 +25063,7 @@ function drawChart() {
   canvas.width = rect.width * dpr;
   canvas.height = rect.height * dpr;
   const context = canvas.getContext("2d");
+  if (!context) return;
   context.scale(dpr, dpr);
   const width = rect.width;
   const height = rect.height;
@@ -24992,7 +25108,7 @@ function drawChart() {
     context.lineTo(width - padX, y);
     context.stroke();
     const weightLabel = (max - index / 4 * range).toFixed(1);
-    context.fillStyle = cs.getPropertyValue("--muted");
+    context.fillStyle = cs.getPropertyValue("--muted").trim() || "#6b7280";
     context.font = "11px sans-serif";
     context.textAlign = "right";
     context.fillText(weightLabel, padX - 6, y + 4);
@@ -25093,14 +25209,14 @@ function drawChart() {
     const goalY = toY(goalWeight);
     context.save();
     context.setLineDash([8, 6]);
-    context.strokeStyle = cs.getPropertyValue("--ok") || "#10b981";
+    context.strokeStyle = cs.getPropertyValue("--ok").trim() || "#10b981";
     context.lineWidth = 2;
     context.beginPath();
     context.moveTo(padX, goalY);
     context.lineTo(width - padX, goalY);
     context.stroke();
     context.setLineDash([]);
-    context.fillStyle = cs.getPropertyValue("--ok") || "#10b981";
+    context.fillStyle = cs.getPropertyValue("--ok").trim() || "#10b981";
     context.font = "bold 11px sans-serif";
     context.textAlign = "left";
     context.fillText(`${t("goal.title")} ${goalWeight.toFixed(1)}`, padX + 4, goalY - 6);
@@ -25146,7 +25262,7 @@ function drawChart() {
     const tx = toX(todayIdx);
     context.save();
     context.setLineDash([2, 3]);
-    context.strokeStyle = cs.getPropertyValue("--accent") || "#ff5f6d";
+    context.strokeStyle = cs.getPropertyValue("--accent").trim() || "#ff5f6d";
     context.lineWidth = 1;
     context.globalAlpha = 0.4;
     context.beginPath();
@@ -25155,7 +25271,7 @@ function drawChart() {
     context.stroke();
     context.restore();
   }
-  context.fillStyle = cs.getPropertyValue("--muted");
+  context.fillStyle = cs.getPropertyValue("--muted").trim() || "#6b7280";
   context.font = "12px sans-serif";
   context.textAlign = "center";
   [0, Math.floor((chartRecords.length - 1) / 2), chartRecords.length - 1].filter((value, index, array) => array.indexOf(value) === index).forEach((index) => {

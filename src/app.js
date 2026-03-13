@@ -54,6 +54,8 @@ import {
   calcRecordingTimeStats,
   calcConsistencyStreak,
   calcDataHealth,
+  calcWeekdayVsWeekend,
+  calcWeightRangePosition,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -648,11 +650,13 @@ function render() {
               }</div>` : ""}
             </div>` : ""}
             ${renderDayOfWeekAvg()}
+            ${renderWeekdayWeekend()}
             ${renderStability()}
             ${renderConsistencyStreak()}
             ${renderBMIDistribution()}
             ${renderWeightPercentile()}
             ${renderMovingAverages()}
+            ${renderWeightRange()}
             ${renderBodyFatStats()}
           </section>
 
@@ -1089,6 +1093,35 @@ function renderSourceBreakdown() {
   `;
 }
 
+function renderWeekdayWeekend() {
+  const wdwe = calcWeekdayVsWeekend(state.records);
+  if (!wdwe) return "";
+  const diffCls = wdwe.diff > 0 ? "positive" : wdwe.diff < 0 ? "negative" : "";
+  return `
+    <div class="wdwe-section">
+      <div class="helper">${t("wdwe.title")}</div>
+      <div class="wdwe-display">
+        <div class="wdwe-col">
+          <div class="wdwe-label">${t("wdwe.weekday")}</div>
+          <div class="wdwe-value">${wdwe.weekdayAvg.toFixed(1)}kg</div>
+          <div class="hint-small">${wdwe.weekdayCount} ${t("chart.records")}</div>
+        </div>
+        <div class="wdwe-vs">vs</div>
+        <div class="wdwe-col">
+          <div class="wdwe-label">${t("wdwe.weekend")}</div>
+          <div class="wdwe-value">${wdwe.weekendAvg.toFixed(1)}kg</div>
+          <div class="hint-small">${wdwe.weekendCount} ${t("chart.records")}</div>
+        </div>
+        <div class="wdwe-col">
+          <div class="wdwe-label">${t("wdwe.diff")}</div>
+          <div class="wdwe-value ${diffCls}">${wdwe.diff > 0 ? "+" : ""}${wdwe.diff.toFixed(1)}kg</div>
+        </div>
+      </div>
+      <div class="helper hint-small" style="margin-top:4px;">${t("wdwe.heavier." + wdwe.heavier)}</div>
+    </div>
+  `;
+}
+
 function renderDataHealth() {
   const health = calcDataHealth(state.records);
   if (!health) return "";
@@ -1111,6 +1144,29 @@ function renderDataHealth() {
           ${issueHtml}
         </div>
       </div>
+    </div>
+  `;
+}
+
+function renderWeightRange() {
+  const range = calcWeightRangePosition(state.records);
+  if (!range) return "";
+  const zoneCls = range.zone === "low" ? "range-low" : range.zone === "high" ? "range-high" : "range-mid";
+  return `
+    <div class="range-section">
+      <div class="helper">${t("range.title")}</div>
+      <div class="range-bar-container">
+        <div class="range-bar-track">
+          <div class="range-bar-fill" style="width:${range.position}%"></div>
+          <div class="range-bar-marker" style="left:${range.position}%"></div>
+        </div>
+        <div class="range-labels">
+          <span class="hint-small">${t("range.min").replace("{weight}", range.min.toFixed(1))}</span>
+          <span class="hint-small">${t("range.max").replace("{weight}", range.max.toFixed(1))}</span>
+        </div>
+      </div>
+      <div class="helper hint-small ${zoneCls}">${t("range.position").replace("{pct}", range.position)}</div>
+      <div class="helper hint-small" style="margin-top:2px;">${t("range." + range.zone)}</div>
     </div>
   `;
 }
@@ -1726,6 +1782,7 @@ async function preprocessImageForOCR(source) {
   // Enhance contrast and sharpen to improve OCR accuracy for scale displays
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
+  if (!ctx) return source;
   let bitmap;
   if (source instanceof Blob || source instanceof File) {
     bitmap = await createImageBitmap(source);
@@ -2272,6 +2329,7 @@ function drawChart() {
   canvas.width = rect.width * dpr;
   canvas.height = rect.height * dpr;
   const context = canvas.getContext("2d");
+  if (!context) return;
   context.scale(dpr, dpr);
 
   const width = rect.width;
@@ -2328,7 +2386,7 @@ function drawChart() {
 
     // Y-axis labels
     const weightLabel = (max - (index / 4) * range).toFixed(1);
-    context.fillStyle = cs.getPropertyValue("--muted");
+    context.fillStyle = cs.getPropertyValue("--muted").trim() || "#6b7280";
     context.font = "11px sans-serif";
     context.textAlign = "right";
     context.fillText(weightLabel, padX - 6, y + 4);
@@ -2444,14 +2502,14 @@ function drawChart() {
     const goalY = toY(goalWeight);
     context.save();
     context.setLineDash([8, 6]);
-    context.strokeStyle = cs.getPropertyValue("--ok") || "#10b981";
+    context.strokeStyle = cs.getPropertyValue("--ok").trim() || "#10b981";
     context.lineWidth = 2;
     context.beginPath();
     context.moveTo(padX, goalY);
     context.lineTo(width - padX, goalY);
     context.stroke();
     context.setLineDash([]);
-    context.fillStyle = cs.getPropertyValue("--ok") || "#10b981";
+    context.fillStyle = cs.getPropertyValue("--ok").trim() || "#10b981";
     context.font = "bold 11px sans-serif";
     context.textAlign = "left";
     context.fillText(`${t("goal.title")} ${goalWeight.toFixed(1)}`, padX + 4, goalY - 6);
@@ -2502,7 +2560,7 @@ function drawChart() {
     const tx = toX(todayIdx);
     context.save();
     context.setLineDash([2, 3]);
-    context.strokeStyle = cs.getPropertyValue("--accent") || "#ff5f6d";
+    context.strokeStyle = cs.getPropertyValue("--accent").trim() || "#ff5f6d";
     context.lineWidth = 1;
     context.globalAlpha = 0.4;
     context.beginPath();
@@ -2513,7 +2571,7 @@ function drawChart() {
   }
 
   // X-axis labels
-  context.fillStyle = cs.getPropertyValue("--muted");
+  context.fillStyle = cs.getPropertyValue("--muted").trim() || "#6b7280";
   context.font = "12px sans-serif";
   context.textAlign = "center";
   [0, Math.floor((chartRecords.length - 1) / 2), chartRecords.length - 1]

@@ -1004,15 +1004,83 @@
         border: 2px solid var(--warn, #f59e0b);
       }
       .health-score.low {
-        background: color-mix(in srgb, var(--danger, #ef4444) 18%, transparent);
-        color: var(--danger, #ef4444);
-        border: 2px solid var(--danger, #ef4444);
+        background: color-mix(in srgb, var(--error, #ef4444) 18%, transparent);
+        color: var(--error, #ef4444);
+        border: 2px solid var(--error, #ef4444);
       }
       .health-issue {
         font-size: 0.75rem;
         color: var(--text);
         margin-top: 2px;
       }
+
+      .wdwe-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .wdwe-display {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 6px;
+        flex-wrap: wrap;
+      }
+      .wdwe-col { text-align: center; }
+      .wdwe-label {
+        font-size: 0.72rem;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .wdwe-value {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text);
+      }
+      .wdwe-value.positive { color: var(--warn, #f59e0b); }
+      .wdwe-value.negative { color: var(--ok, #10b981); }
+      .wdwe-vs {
+        font-size: 0.8rem;
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .range-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .range-bar-container { margin-top: 8px; }
+      .range-bar-track {
+        position: relative;
+        height: 12px;
+        background: color-mix(in srgb, var(--primary) 15%, transparent);
+        border-radius: 6px;
+        overflow: visible;
+      }
+      .range-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--ok, #10b981), var(--warn, #f59e0b), var(--danger, #ef4444));
+        border-radius: 6px 0 0 6px;
+        transition: width 0.3s ease;
+      }
+      .range-bar-marker {
+        position: absolute;
+        top: -4px;
+        width: 4px;
+        height: 20px;
+        background: var(--text);
+        border-radius: 2px;
+        transform: translateX(-2px);
+      }
+      .range-labels {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 4px;
+      }
+      .range-low { color: var(--ok, #10b981); font-weight: 600; }
+      .range-high { color: var(--danger, #ef4444); font-weight: 600; }
+      .range-mid { color: var(--muted); }
 
       .consistency-section {
         margin-top: 14px;
@@ -2595,8 +2663,14 @@
       body[data-theme="midnight"] .percentile-section,
       body[data-theme="midnight"] .bodyfat-stats-section,
       body[data-theme="midnight"] .time-stats-section,
-      body[data-theme="midnight"] .consistency-section {
+      body[data-theme="midnight"] .consistency-section,
+      body[data-theme="midnight"] .health-section,
+      body[data-theme="midnight"] .wdwe-section {
         border-color: rgba(139, 146, 176, 0.14);
+      }
+
+      body[data-theme="midnight"] .health-score {
+        background: rgba(30, 35, 55, 0.6);
       }
 
       body[data-theme="midnight"] .percentile-ring {
@@ -2765,11 +2839,11 @@
         }
 
         .calendar-grid {
-          font-size: 10px;
+          font-size: 11px;
         }
 
         .calendar-wt {
-          font-size: 8px;
+          font-size: 10px;
         }
 
         .summary-tabs {

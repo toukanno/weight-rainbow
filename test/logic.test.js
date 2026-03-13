@@ -52,6 +52,8 @@ import {
   calcRecordingTimeStats,
   calcConsistencyStreak,
   calcDataHealth,
+  calcWeekdayVsWeekend,
+  calcWeightRangePosition,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -2170,5 +2172,109 @@ describe("calcDataHealth", () => {
     const result = calcDataHealth(records);
     expect(result.score).toBeLessThan(100);
     expect(result.issues.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("calcWeekdayVsWeekend", () => {
+  it("returns null for fewer than 5 records", () => {
+    const records = [
+      { dt: "2025-01-06", wt: 70 },
+      { dt: "2025-01-07", wt: 70.5 },
+    ];
+    expect(calcWeekdayVsWeekend(records)).toBeNull();
+  });
+
+  it("returns null when no weekend records exist", () => {
+    // Mon-Fri only
+    const records = [
+      { dt: "2025-01-06", wt: 70 },
+      { dt: "2025-01-07", wt: 70.5 },
+      { dt: "2025-01-08", wt: 71 },
+      { dt: "2025-01-09", wt: 70.2 },
+      { dt: "2025-01-10", wt: 70.8 },
+    ];
+    expect(calcWeekdayVsWeekend(records)).toBeNull();
+  });
+
+  it("calculates weekday vs weekend averages correctly", () => {
+    // Mon=70, Tue=72, Wed=74 → avg 72.0; Sat=76, Sun=78 → avg 77.0
+    const records = [
+      { dt: "2025-01-06", wt: 70 },   // Mon
+      { dt: "2025-01-07", wt: 72 },   // Tue
+      { dt: "2025-01-08", wt: 74 },   // Wed
+      { dt: "2025-01-11", wt: 76 },   // Sat
+      { dt: "2025-01-12", wt: 78 },   // Sun
+    ];
+    const result = calcWeekdayVsWeekend(records);
+    expect(result).not.toBeNull();
+    expect(result.weekdayAvg).toBe(72);
+    expect(result.weekendAvg).toBe(77);
+    expect(result.diff).toBe(5);
+    expect(result.weekdayCount).toBe(3);
+    expect(result.weekendCount).toBe(2);
+    expect(result.heavier).toBe("weekend");
+  });
+
+  it("returns heavier=weekday when weekday avg is higher", () => {
+    const records = [
+      { dt: "2025-01-06", wt: 78 },   // Mon
+      { dt: "2025-01-07", wt: 80 },   // Tue
+      { dt: "2025-01-08", wt: 79 },   // Wed
+      { dt: "2025-01-11", wt: 70 },   // Sat
+      { dt: "2025-01-12", wt: 71 },   // Sun
+    ];
+    const result = calcWeekdayVsWeekend(records);
+    expect(result.diff).toBeLessThan(0);
+    expect(result.heavier).toBe("weekday");
+  });
+
+  it("returns heavier=similar when difference is small", () => {
+    const records = [
+      { dt: "2025-01-06", wt: 70.0 },  // Mon
+      { dt: "2025-01-07", wt: 70.1 },  // Tue
+      { dt: "2025-01-08", wt: 70.2 },  // Wed
+      { dt: "2025-01-11", wt: 70.1 },  // Sat
+      { dt: "2025-01-12", wt: 70.2 },  // Sun
+    ];
+    const result = calcWeekdayVsWeekend(records);
+    expect(Math.abs(result.diff)).toBeLessThanOrEqual(0.2);
+    expect(result.heavier).toBe("similar");
+  });
+});
+
+describe("calcWeightRangePosition", () => {
+  it("returns null for fewer than 3 records", () => {
+    const records = [{ wt: 70 }, { wt: 71 }];
+    expect(calcWeightRangePosition(records)).toBeNull();
+  });
+
+  it("returns position 0 when latest is at minimum", () => {
+    const records = [{ wt: 80 }, { wt: 75 }, { wt: 70 }];
+    const result = calcWeightRangePosition(records);
+    expect(result.position).toBe(0);
+    expect(result.zone).toBe("low");
+    expect(result.min).toBe(70);
+    expect(result.max).toBe(80);
+  });
+
+  it("returns position 100 when latest is at maximum", () => {
+    const records = [{ wt: 60 }, { wt: 65 }, { wt: 80 }];
+    const result = calcWeightRangePosition(records);
+    expect(result.position).toBe(100);
+    expect(result.zone).toBe("high");
+  });
+
+  it("returns middle zone for mid-range weight", () => {
+    const records = [{ wt: 60 }, { wt: 80 }, { wt: 70 }];
+    const result = calcWeightRangePosition(records);
+    expect(result.position).toBe(50);
+    expect(result.zone).toBe("middle");
+  });
+
+  it("handles all same weights", () => {
+    const records = [{ wt: 70 }, { wt: 70 }, { wt: 70 }];
+    const result = calcWeightRangePosition(records);
+    expect(result.position).toBe(50);
+    expect(result.zone).toBe("middle");
   });
 });

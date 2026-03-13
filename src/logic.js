@@ -934,6 +934,58 @@ export function calcConsistencyStreak(records, tolerance = 0.5) {
   return { streak, best, tolerance, latest };
 }
 
+export function calcDataHealth(records) {
+  if (records.length < 2) return null;
+  const issues = [];
+  // Check for large gaps (>7 days)
+  for (let i = 1; i < records.length; i++) {
+    const prev = new Date(records[i - 1].dt + "T00:00:00");
+    const curr = new Date(records[i].dt + "T00:00:00");
+    const gap = Math.round((curr - prev) / (1000 * 60 * 60 * 24));
+    if (gap > 7) {
+      issues.push({ type: "gap", days: gap, from: records[i - 1].dt, to: records[i].dt });
+    }
+  }
+  // Check for outliers (>3kg from neighbors)
+  for (let i = 1; i < records.length - 1; i++) {
+    const avg = (records[i - 1].wt + records[i + 1].wt) / 2;
+    const diff = Math.abs(records[i].wt - avg);
+    if (diff > 3) {
+      issues.push({ type: "outlier", date: records[i].dt, weight: records[i].wt, expected: Math.round(avg * 10) / 10 });
+    }
+  }
+  // Check for missing BMI (no height set)
+  const missingBMI = records.filter((r) => r.bmi == null).length;
+  if (missingBMI > 0 && missingBMI === records.length) {
+    issues.push({ type: "noBMI", count: missingBMI });
+  }
+  const score = Math.max(0, 100 - issues.length * 15);
+  return { score, issues, total: records.length };
+}
+
+export function calcWeekdayVsWeekend(records) {
+  if (records.length < 5) return null;
+  const weekday = [];
+  const weekend = [];
+  for (const r of records) {
+    const day = new Date(r.dt + "T00:00:00").getDay();
+    if (day === 0 || day === 6) weekend.push(r.wt);
+    else weekday.push(r.wt);
+  }
+  if (!weekday.length || !weekend.length) return null;
+  const wdAvg = Math.round((weekday.reduce((s, w) => s + w, 0) / weekday.length) * 10) / 10;
+  const weAvg = Math.round((weekend.reduce((s, w) => s + w, 0) / weekend.length) * 10) / 10;
+  const diff = Math.round((weAvg - wdAvg) * 10) / 10;
+  return {
+    weekdayAvg: wdAvg,
+    weekendAvg: weAvg,
+    diff,
+    weekdayCount: weekday.length,
+    weekendCount: weekend.length,
+    heavier: diff > 0.2 ? "weekend" : diff < -0.2 ? "weekday" : "similar",
+  };
+}
+
 export function csvEscape(val) {
   const str = String(val ?? "");
   if (/[,"\r\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
@@ -947,4 +999,17 @@ export function exportRecordsToCSV(records) {
     [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source ?? "", r.note ?? ""].map(csvEscape).join(",")
   );
   return [header, ...rows].join("\n");
+}
+
+export function calcWeightRangePosition(records) {
+  if (records.length < 3) return null;
+  const latest = records[records.length - 1].wt;
+  const weights = records.map((r) => r.wt);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  const range = max - min;
+  if (range === 0) return { position: 50, latest, min, max, zone: "middle" };
+  const position = Math.round(((latest - min) / range) * 100);
+  const zone = position <= 25 ? "low" : position >= 75 ? "high" : "middle";
+  return { position, latest, min, max, zone };
 }
