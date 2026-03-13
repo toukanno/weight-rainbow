@@ -122,6 +122,7 @@ import {
   calcRecentWeightBars,
   calcWeightAnniversary,
   calcDailyChangeDist,
+  calcGoalStreak,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -686,7 +687,7 @@ function render() {
                   <input id="photoInput" type="file" accept="image/*" capture="environment" class="hidden" />`}
                 </div>
                 ${imagePreviewUrl ? `
-                  <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" data-action="zoom-photo" role="button" tabindex="0" />
+                  <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" data-action="zoom-photo" role="button" tabindex="0" aria-label="${t("photo.zoomHint")}" />
                   <p class="helper hint-small" style="margin-top: 4px; text-align: center;">${t("photo.zoomHint")}</p>
                   ${!supportsTextDetection && !detectedWeights.length ? `<p class="helper" style="margin-top: 8px; text-align: center;">${t("photo.manualHint")}</p>` : ""}
                 ` : ""}

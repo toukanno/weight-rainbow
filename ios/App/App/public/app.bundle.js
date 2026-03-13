@@ -4789,7 +4789,12 @@ var translations = {
     "cdist.avg": "\u5E73\u5747\u5909\u52D5",
     "cdist.median": "\u4E2D\u592E\u5024",
     "cdist.normal": "\u901A\u5E38\u7BC4\u56F2",
-    "cdist.to": "\u301C"
+    "cdist.to": "\u301C",
+    "gstreak.title": "\u76EE\u6A19\u9023\u7D9A\u8A18\u9332",
+    "gstreak.days": "\u65E5\u9023\u7D9A\u3067\u76EE\u6A19\u306B\u8FD1\u3065\u3044\u3066\u3044\u307E\u3059",
+    "gstreak.dist": "\u76EE\u6A19\u307E\u3067",
+    "gstreak.closest": "\u6700\u63A5\u8FD1",
+    "gstreak.achieved": "\u76EE\u6A19\u9054\u6210\u4E2D\uFF01"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5713,7 +5718,12 @@ var translations = {
     "cdist.avg": "Avg change",
     "cdist.median": "Median",
     "cdist.normal": "Normal range",
-    "cdist.to": "to"
+    "cdist.to": "to",
+    "gstreak.title": "Goal Streak",
+    "gstreak.days": "consecutive days trending toward goal",
+    "gstreak.dist": "Distance to goal",
+    "gstreak.closest": "Closest",
+    "gstreak.achieved": "Goal achieved!"
   }
 };
 function createTranslator(language) {
@@ -26742,7 +26752,7 @@ function render() {
                   <input id="photoInput" type="file" accept="image/*" capture="environment" class="hidden" />`}
                 </div>
                 ${imagePreviewUrl ? `
-                  <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" data-action="zoom-photo" role="button" tabindex="0" />
+                  <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" data-action="zoom-photo" role="button" tabindex="0" aria-label="${t("photo.zoomHint")}" />
                   <p class="helper hint-small" style="margin-top: 4px; text-align: center;">${t("photo.zoomHint")}</p>
                   ${!supportsTextDetection && !detectedWeights.length ? `<p class="helper" style="margin-top: 8px; text-align: center;">${t("photo.manualHint")}</p>` : ""}
                 ` : ""}
