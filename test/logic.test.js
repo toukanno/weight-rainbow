@@ -2832,6 +2832,74 @@ describe("filterRecordsByDateRange edge cases", () => {
   });
 });
 
+describe("calcInsight additional edge cases", () => {
+  it("returns object with bestDay and weekComparison", () => {
+    const today = new Date();
+    const records = Array.from({ length: 10 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      return { dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, wt: 80 - i * 0.3 };
+    });
+    const insight = calcInsight(records);
+    expect(insight).not.toBeNull();
+    expect(typeof insight.bestDay).toBe("number");
+    expect(insight.bestDay).toBeGreaterThanOrEqual(0);
+    expect(insight.bestDay).toBeLessThanOrEqual(6);
+  });
+
+  it("returns null for fewer than 3 records", () => {
+    expect(calcInsight([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+});
+
+describe("calcWeightStability additional tests", () => {
+  it("returns low score for high variance in recent records", () => {
+    const today = new Date();
+    const records = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      records.push({ dt, wt: i % 2 === 0 ? 60 : 80 });
+    }
+    const result = calcWeightStability(records);
+    expect(result).not.toBeNull();
+    expect(result.score).toBeLessThan(50);
+  });
+
+  it("returns high score for consistent recent weights", () => {
+    const today = new Date();
+    const records = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      records.push({ dt, wt: 70 + (i % 3) * 0.1 });
+    }
+    const result = calcWeightStability(records);
+    expect(result).not.toBeNull();
+    expect(result.score).toBeGreaterThan(90);
+  });
+});
+
+describe("exportRecordsToCSV additional tests", () => {
+  it("includes all fields in CSV output", () => {
+    const records = [{ dt: "2025-01-01", wt: 70.5, bmi: 24.4, bf: 18.5, source: "manual", note: "test" }];
+    const csv = exportRecordsToCSV(records);
+    expect(csv).toContain("70.5");
+    expect(csv).toContain("24.4");
+    expect(csv).toContain("18.5");
+    expect(csv).toContain("manual");
+    expect(csv).toContain("test");
+  });
+
+  it("handles records with special characters in notes", () => {
+    const records = [{ dt: "2025-01-01", wt: 70, source: "manual", note: 'He said "hello, world"' }];
+    const csv = exportRecordsToCSV(records);
+    expect(csv).toContain('"He said ""hello, world"""');
+  });
+});
+
 describe("upsertRecord edge cases", () => {
   it("replaces existing record with same date", () => {
     const records = [{ dt: "2025-01-01", wt: 70 }];
