@@ -390,12 +390,14 @@ function render() {
   const description = document.querySelector('meta[name="description"]');
   if (description) description.setAttribute("content", t("app.description"));
   document.body.dataset.theme = state.settings.theme;
-  // Update browser theme-color to match current theme accent
-  const themeColor = document.querySelector('meta[name="theme-color"]');
-  if (themeColor) {
-    const accent = getComputedStyle(document.body).getPropertyValue("--accent").trim();
-    if (accent) themeColor.setAttribute("content", accent);
-  }
+  // Update browser theme-color to match current theme accent (deferred to ensure CSS applied)
+  requestAnimationFrame(() => {
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) {
+      const accent = getComputedStyle(document.body).getPropertyValue("--accent").trim();
+      if (accent) themeColor.setAttribute("content", accent);
+    }
+  });
 
   const stats = calcStats(state.records, state.profile);
   const dailyDiff = calcDailyDiff(state.records);

@@ -26018,11 +26018,13 @@ function render() {
     const description = document.querySelector('meta[name="description"]');
     if (description) description.setAttribute("content", t("app.description"));
     document.body.dataset.theme = state.settings.theme;
-    const themeColor = document.querySelector('meta[name="theme-color"]');
-    if (themeColor) {
-      const accent = getComputedStyle(document.body).getPropertyValue("--accent").trim();
-      if (accent) themeColor.setAttribute("content", accent);
-    }
+    requestAnimationFrame(() => {
+      const themeColor = document.querySelector('meta[name="theme-color"]');
+      if (themeColor) {
+        const accent = getComputedStyle(document.body).getPropertyValue("--accent").trim();
+        if (accent) themeColor.setAttribute("content", accent);
+      }
+    });
     const stats = calcStats(state.records, state.profile);
     const dailyDiff = calcDailyDiff(state.records);
     const weightComp = calcWeightComparison(state.records);
