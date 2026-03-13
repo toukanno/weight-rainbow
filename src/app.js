@@ -870,7 +870,7 @@ function renderRecord(record, prevRecord) {
           <div class="record-weight">${formatWeight(record.wt)} ${diffHtml}</div>
           <div class="helper">${escapeAttr(record.dt)}${record.imageName ? ` / ${escapeAttr(record.imageName)}` : ""}</div>
         </div>
-        <div class="helper">${t("bmi.title")}: ${bmiText}${record.bf ? ` / ${t("bodyFat.label")}: ${record.bf}%` : ""}</div>
+        <div class="helper">${t("bmi.title")}: ${bmiText}${record.bf ? ` / ${t("bodyFat.label")}: ${Number(record.bf).toFixed(1)}%` : ""}</div>
         ${record.note ? `<div class="helper record-note">📝 ${escapeAttr(record.note)}</div>` : ""}
       </div>
       <button type="button" class="record-delete" data-delete-date="${escapeAttr(record.dt)}" aria-label="${t("records.delete")} ${escapeAttr(record.dt)} ${record.wt.toFixed(1)}kg">${t("records.delete")}</button>
@@ -1548,7 +1548,7 @@ function exportText() {
   }
   const lines = state.records.map((r) => {
     const bmiStr = r.bmi ? ` / BMI: ${r.bmi.toFixed(1)}` : "";
-    const bfStr = r.bf ? ` / BF: ${r.bf.toFixed(1)}%` : "";
+    const bfStr = r.bf ? ` / BF: ${Number(r.bf).toFixed(1)}%` : "";
     const noteStr = r.note ? `  [${r.note}]` : "";
     return `${r.dt}  ${r.wt.toFixed(1)}kg${bmiStr}${bfStr}  (${r.source})${noteStr}`;
   });
@@ -1922,7 +1922,7 @@ function drawChart() {
     const tip = document.getElementById("chartTooltip");
     if (cd < 30 && tip) {
       const r = snapRecords[ci];
-      tip.textContent = `${r.dt}: ${r.wt.toFixed(1)}kg${r.bmi ? ` (BMI ${r.bmi.toFixed(1)})` : ""}${r.bf ? ` BF ${r.bf}%` : ""}${r.note ? ` — ${r.note}` : ""}`;
+      tip.textContent = `${r.dt}: ${r.wt.toFixed(1)}kg${r.bmi ? ` (BMI ${r.bmi.toFixed(1)})` : ""}${r.bf ? ` BF ${Number(r.bf).toFixed(1)}%` : ""}${r.note ? ` — ${r.note}` : ""}`;
       tip.style.display = "block";
       // Auto-hide after 3 seconds
       clearTimeout(canvas._tooltipTimer);
