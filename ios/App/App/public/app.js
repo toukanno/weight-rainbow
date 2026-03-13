@@ -1403,6 +1403,23 @@ function calcTrendForecast(records, forecastDays = 14) {
   }
   return { slope: Math.round(slope * 100) / 100, forecast };
 }
+function calcSmoothedWeight(records, smoothing = 0.1) {
+  if (!records.length) return null;
+  if (records.length === 1) return { smoothed: records[0].wt, trend: 0 };
+  let ema = records[0].wt;
+  for (let i = 1; i < records.length; i++) {
+    ema = smoothing * records[i].wt + (1 - smoothing) * ema;
+  }
+  const smoothed = Math.round(ema * 10) / 10;
+  const lookback = Math.min(7, records.length - 1);
+  let emaOld = records[0].wt;
+  const targetIdx = records.length - 1 - lookback;
+  for (let i = 1; i <= targetIdx; i++) {
+    emaOld = smoothing * records[i].wt + (1 - smoothing) * emaOld;
+  }
+  const trend = lookback > 0 ? Math.round((smoothed - Math.round(emaOld * 10) / 10) * 10) / 10 : 0;
+  return { smoothed, trend };
+}
 
 // src/i18n.js
 var translations = {
@@ -1574,6 +1591,10 @@ var translations = {
     "freshness.days": "{days}\u65E5\u9593 \u672A\u8A18\u9332",
     "freshness.nudge": "\u4ECA\u65E5\u306E\u4F53\u91CD\u3092\u8A18\u9332\u3057\u307E\u3057\u3087\u3046\uFF01",
     "streak.longest": "\u6700\u9577\u9023\u7D9A\u8A18\u9332: {days}\u65E5",
+    "smoothed.title": "\u5E73\u6ED1\u5316\u4F53\u91CD",
+    "smoothed.value": "\u30C8\u30EC\u30F3\u30C9\u4F53\u91CD",
+    "smoothed.trend": "7\u56DE\u5206\u306E\u5909\u5316",
+    "smoothed.hint": "\u65E5\u3005\u306E\u5909\u52D5\u3092\u9664\u3044\u305F\u672C\u5F53\u306E\u4F53\u91CD\u30C8\u30EC\u30F3\u30C9",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
     "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01\uFF08-{diff}kg\uFF09",
     "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
@@ -1926,6 +1947,10 @@ var translations = {
     "freshness.nudge": "Time to record today's weight!",
     "streak.longest": "Longest streak: {days} days",
     "rainbow.congrats": "Congrats! Weight decreased!",
+    "smoothed.title": "Smoothed Weight",
+    "smoothed.value": "Trend Weight",
+    "smoothed.trend": "7-record change",
+    "smoothed.hint": "Your true weight trend, filtering daily fluctuations",
     "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
@@ -22623,10 +22648,10 @@ window.onerror = function(msg, src, line, col, err) {
   console.error("[WeightRainbow] Uncaught error:", msg, "at", src, line, col, err);
   if (app && !app.innerHTML.trim()) {
     app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
-      <h2 style="color:#dc2626;">\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F</h2>
+      <h2 style="color:#dc2626;">\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F / An error occurred</h2>
       <p style="color:#666;margin:12px 0;">${String(msg)}</p>
       <p style="color:#999;font-size:0.8rem;">Line ${line}:${col}</p>
-      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F</button>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
     </div>`;
   }
 };
@@ -22674,10 +22699,10 @@ try {
 } catch (e) {
   console.error("[WeightRainbow] Init error:", e);
   app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
-    <h2 style="color:#dc2626;">\u521D\u671F\u5316\u30A8\u30E9\u30FC</h2>
+    <h2 style="color:#dc2626;">\u521D\u671F\u5316\u30A8\u30E9\u30FC / Init Error</h2>
     <p style="color:#666;margin:12px 0;">${e.message}</p>
-    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F</button>
-    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">\u30C7\u30FC\u30BF\u30EA\u30BB\u30C3\u30C8</button>
+    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
+    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">\u30C7\u30FC\u30BF\u30EA\u30BB\u30C3\u30C8 / Reset Data</button>
   </div>`;
 }
 initReminder();
@@ -22838,6 +22863,7 @@ function render() {
     const insight = calcInsight(state.records);
     const daysSinceLast = calcDaysSinceLastRecord(state.records);
     const longestStreak = calcLongestStreak(state.records);
+    const smoothedWeight = calcSmoothedWeight(state.records);
     const previewWeightResult = validateWeight(state.form.weight);
     const currentBMI = previewWeightResult.valid && state.profile.heightCm ? buildRecord({
       date: state.form.date || todayLocal(),
@@ -22883,6 +22909,7 @@ function render() {
           ${renderMetric(t("chart.change"), stats ? signedWeight(stats.change) : "--")}
           ${renderMetric(t("chart.avg"), stats ? formatWeight(stats.avgWeight) : "--")}
           ${renderMetric(t("chart.bmi"), stats?.latestBMI ? stats.latestBMI.toFixed(1) : "--")}
+          ${smoothedWeight ? renderMetric(t("smoothed.value"), `${formatWeight(smoothedWeight.smoothed)} <span class="${smoothedWeight.trend < 0 ? "negative" : smoothedWeight.trend > 0 ? "positive" : ""}" style="font-size:0.7em">${smoothedWeight.trend > 0 ? "+" : ""}${smoothedWeight.trend.toFixed(1)}</span>`) : ""}
         </div>
 
         <!-- Daily Diff & Goal Progress -->
@@ -23399,10 +23426,10 @@ function render() {
   } catch (e) {
     console.error("[WeightRainbow] Render error:", e);
     app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
-      <h2 style="color:#dc2626;">\u63CF\u753B\u30A8\u30E9\u30FC</h2>
+      <h2 style="color:#dc2626;">\u63CF\u753B\u30A8\u30E9\u30FC / Render Error</h2>
       <p style="color:#666;margin:12px 0;">${e.message}</p>
       <p style="color:#999;font-size:0.8rem;">${e.stack ? e.stack.split("\n").slice(0, 3).join("<br>") : ""}</p>
-      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F</button>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
     </div>`;
   }
 }
@@ -24231,7 +24258,7 @@ function exportExcel() {
     const ws = utils.json_to_sheet(rows);
     const wb = utils.book_new();
     utils.book_append_sheet(wb, ws, t("chart.records"));
-    writeFileSync(wb, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.xlsx`);
+    writeFileSync(wb, `weight-rainbow-${todayLocal()}.xlsx`);
     setStatus(t("export.excelDone"));
   } catch {
     setStatus(t("export.error"), "error");
@@ -24254,7 +24281,7 @@ function exportCSV() {
       (r) => [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source, r.note ?? ""].map(csvEscape).join(",")
     );
     const csv = "\uFEFF" + [header, ...lines].join("\r\n");
-    downloadFile(csv, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
+    downloadFile(csv, `weight-rainbow-${todayLocal()}.csv`, "text/csv;charset=utf-8");
     setStatus(t("export.csvDone"));
   } catch {
     setStatus(t("export.error"), "error");
@@ -24316,10 +24343,10 @@ function exportText() {
       summaryLines.push(`${t("chart.change")}: ${stats.change > 0 ? "+" : ""}${stats.change.toFixed(1)}kg / ${t("summary.count")}: ${state.records.length}`);
       if (stats.latestBMI) summaryLines.push(`BMI: ${stats.latestBMI.toFixed(1)} (${t(getBMIStatus(stats.latestBMI))})`);
     }
-    const text = `${t("app.title")} - ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}
+    const text = `${t("app.title")} - ${todayLocal()}
 ${"=".repeat(48)}
 ${lines.join("\n")}${summaryLines.join("\n")}`;
-    downloadFile(text, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.txt`, "text/plain");
+    downloadFile(text, `weight-rainbow-${todayLocal()}.txt`, "text/plain");
     setStatus(t("export.textDone"));
   } catch {
     setStatus(t("export.error"), "error");
@@ -24351,7 +24378,7 @@ async function shareChart() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `weight-chart-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.png`;
+    a.download = `weight-chart-${todayLocal()}.png`;
     a.click();
     URL.revokeObjectURL(url);
     setStatus(t("share.done"));
@@ -24400,7 +24427,7 @@ function exportData() {
   };
   downloadFile(
     JSON.stringify(payload, null, 2),
-    `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.json`,
+    `weight-rainbow-${todayLocal()}.json`,
     "application/json"
   );
   setStatus(t("status.exported"));

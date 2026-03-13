@@ -42,6 +42,7 @@ import {
   calcDaysSinceLastRecord,
   calcLongestStreak,
   calcTrendForecast,
+  calcSmoothedWeight,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -1354,5 +1355,41 @@ describe("calcTrendForecast", () => {
     const result = calcTrendForecast(records);
     expect(result).not.toBeNull();
     expect(result.slope).toBeGreaterThan(0);
+  });
+});
+
+describe("calcSmoothedWeight", () => {
+  it("returns null for empty records", () => {
+    expect(calcSmoothedWeight([])).toBeNull();
+  });
+
+  it("returns single record weight", () => {
+    const result = calcSmoothedWeight([{ dt: "2025-01-01", wt: 70 }]);
+    expect(result.smoothed).toBe(70);
+    expect(result.trend).toBe(0);
+  });
+
+  it("smooths multiple records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72 },
+      { dt: "2025-01-02", wt: 71.5 },
+      { dt: "2025-01-03", wt: 71 },
+      { dt: "2025-01-04", wt: 70.5 },
+      { dt: "2025-01-05", wt: 70 },
+    ];
+    const result = calcSmoothedWeight(records);
+    expect(result).not.toBeNull();
+    // Smoothed should be between min and max
+    expect(result.smoothed).toBeGreaterThanOrEqual(70);
+    expect(result.smoothed).toBeLessThanOrEqual(72);
+  });
+
+  it("shows negative trend for decreasing weights", () => {
+    const records = [];
+    for (let i = 0; i < 10; i++) {
+      records.push({ dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 75 - i * 0.3 });
+    }
+    const result = calcSmoothedWeight(records);
+    expect(result.trend).toBeLessThan(0);
   });
 });

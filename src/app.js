@@ -44,6 +44,7 @@ import {
   calcDaysSinceLastRecord,
   calcLongestStreak,
   calcTrendForecast,
+  calcSmoothedWeight,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -57,10 +58,10 @@ window.onerror = function(msg, src, line, col, err) {
   console.error("[WeightRainbow] Uncaught error:", msg, "at", src, line, col, err);
   if (app && !app.innerHTML.trim()) {
     app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
-      <h2 style="color:#dc2626;">エラーが発生しました</h2>
+      <h2 style="color:#dc2626;">エラーが発生しました / An error occurred</h2>
       <p style="color:#666;margin:12px 0;">${String(msg)}</p>
       <p style="color:#999;font-size:0.8rem;">Line ${line}:${col}</p>
-      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">再読み込み</button>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">再読み込み / Reload</button>
     </div>`;
   }
 };
@@ -114,10 +115,10 @@ try {
 } catch (e) {
   console.error("[WeightRainbow] Init error:", e);
   app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
-    <h2 style="color:#dc2626;">初期化エラー</h2>
+    <h2 style="color:#dc2626;">初期化エラー / Init Error</h2>
     <p style="color:#666;margin:12px 0;">${e.message}</p>
-    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">再読み込み</button>
-    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">データリセット</button>
+    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">再読み込み / Reload</button>
+    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">データリセット / Reset Data</button>
   </div>`;
 }
 
@@ -292,6 +293,7 @@ function render() {
   const insight = calcInsight(state.records);
   const daysSinceLast = calcDaysSinceLastRecord(state.records);
   const longestStreak = calcLongestStreak(state.records);
+  const smoothedWeight = calcSmoothedWeight(state.records);
   const previewWeightResult = validateWeight(state.form.weight);
   const currentBMI = previewWeightResult.valid && state.profile.heightCm
     ? buildRecord({
@@ -340,6 +342,7 @@ function render() {
           ${renderMetric(t("chart.change"), stats ? signedWeight(stats.change) : "--")}
           ${renderMetric(t("chart.avg"), stats ? formatWeight(stats.avgWeight) : "--")}
           ${renderMetric(t("chart.bmi"), stats?.latestBMI ? stats.latestBMI.toFixed(1) : "--")}
+          ${smoothedWeight ? renderMetric(t("smoothed.value"), `${formatWeight(smoothedWeight.smoothed)} <span class="${smoothedWeight.trend < 0 ? "negative" : smoothedWeight.trend > 0 ? "positive" : ""}" style="font-size:0.7em">${smoothedWeight.trend > 0 ? "+" : ""}${smoothedWeight.trend.toFixed(1)}</span>`) : ""}
         </div>
 
         <!-- Daily Diff & Goal Progress -->
@@ -878,10 +881,10 @@ function render() {
   } catch (e) {
     console.error("[WeightRainbow] Render error:", e);
     app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
-      <h2 style="color:#dc2626;">描画エラー</h2>
+      <h2 style="color:#dc2626;">描画エラー / Render Error</h2>
       <p style="color:#666;margin:12px 0;">${e.message}</p>
       <p style="color:#999;font-size:0.8rem;">${e.stack ? e.stack.split('\n').slice(0, 3).join('<br>') : ''}</p>
-      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">再読み込み</button>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">再読み込み / Reload</button>
     </div>`;
   }
 }
@@ -1800,7 +1803,7 @@ function exportExcel() {
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, t("chart.records"));
-    XLSX.writeFile(wb, `weight-rainbow-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `weight-rainbow-${todayLocal()}.xlsx`);
     setStatus(t("export.excelDone"));
   } catch {
     setStatus(t("export.error"), "error");
@@ -1825,7 +1828,7 @@ function exportCSV() {
       [r.dt, r.wt, r.bmi ?? "", r.bf ?? "", r.source, r.note ?? ""].map(csvEscape).join(",")
     );
     const csv = "\uFEFF" + [header, ...lines].join("\r\n");
-    downloadFile(csv, `weight-rainbow-${new Date().toISOString().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
+    downloadFile(csv, `weight-rainbow-${todayLocal()}.csv`, "text/csv;charset=utf-8");
     setStatus(t("export.csvDone"));
   } catch {
     setStatus(t("export.error"), "error");
@@ -1889,8 +1892,8 @@ function exportText() {
       summaryLines.push(`${t("chart.change")}: ${stats.change > 0 ? "+" : ""}${stats.change.toFixed(1)}kg / ${t("summary.count")}: ${state.records.length}`);
       if (stats.latestBMI) summaryLines.push(`BMI: ${stats.latestBMI.toFixed(1)} (${t(getBMIStatus(stats.latestBMI))})`);
     }
-    const text = `${t("app.title")} - ${new Date().toISOString().slice(0, 10)}\n${"=".repeat(48)}\n${lines.join("\n")}${summaryLines.join("\n")}`;
-    downloadFile(text, `weight-rainbow-${new Date().toISOString().slice(0, 10)}.txt`, "text/plain");
+    const text = `${t("app.title")} - ${todayLocal()}\n${"=".repeat(48)}\n${lines.join("\n")}${summaryLines.join("\n")}`;
+    downloadFile(text, `weight-rainbow-${todayLocal()}.txt`, "text/plain");
     setStatus(t("export.textDone"));
   } catch {
     setStatus(t("export.error"), "error");
@@ -1925,7 +1928,7 @@ async function shareChart() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `weight-chart-${new Date().toISOString().slice(0, 10)}.png`;
+    a.download = `weight-chart-${todayLocal()}.png`;
     a.click();
     URL.revokeObjectURL(url);
     setStatus(t("share.done"));
@@ -1975,7 +1978,7 @@ function exportData() {
   };
   downloadFile(
     JSON.stringify(payload, null, 2),
-    `weight-rainbow-${new Date().toISOString().slice(0, 10)}.json`,
+    `weight-rainbow-${todayLocal()}.json`,
     "application/json"
   );
   setStatus(t("status.exported"));

@@ -764,6 +764,29 @@ export function calcTrendForecast(records, forecastDays = 14) {
   return { slope: Math.round(slope * 100) / 100, forecast };
 }
 
+export function calcSmoothedWeight(records, smoothing = 0.1) {
+  if (!records.length) return null;
+  if (records.length === 1) return { smoothed: records[0].wt, trend: 0 };
+
+  // Exponential moving average (EMA)
+  let ema = records[0].wt;
+  for (let i = 1; i < records.length; i++) {
+    ema = smoothing * records[i].wt + (1 - smoothing) * ema;
+  }
+  const smoothed = Math.round(ema * 10) / 10;
+
+  // Trend: compare current EMA to EMA from 7 records ago
+  const lookback = Math.min(7, records.length - 1);
+  let emaOld = records[0].wt;
+  const targetIdx = records.length - 1 - lookback;
+  for (let i = 1; i <= targetIdx; i++) {
+    emaOld = smoothing * records[i].wt + (1 - smoothing) * emaOld;
+  }
+  const trend = lookback > 0 ? Math.round((smoothed - Math.round(emaOld * 10) / 10) * 10) / 10 : 0;
+
+  return { smoothed, trend };
+}
+
 export function exportRecordsToCSV(records) {
   if (!records.length) return "";
   const header = "date,weight,bmi,bodyFat,source,note";
