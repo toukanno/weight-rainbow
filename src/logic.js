@@ -2306,7 +2306,7 @@ export function calcNoteTagStats(records) {
   for (let i = 0; i < sorted.length; i++) {
     const r = sorted[i];
     if (!r.note) continue;
-    const tags = r.note.split(",").map((s) => s.trim()).filter(Boolean);
+    const tags = (r.note.match(/#[\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF66-\uFF9F]+/g) || []).map((s) => s.slice(1));
     const prev = i > 0 ? sorted[i - 1] : null;
     const change = prev ? r.wt - prev.wt : 0;
     for (const tag of tags) {

@@ -2242,6 +2242,35 @@
         margin-top: 2px;
       }
 
+      .tag-stats-section {
+        margin-top: 14px;
+      }
+      .tag-stat-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 0;
+        border-bottom: 1px solid color-mix(in srgb, var(--border) 30%, transparent);
+        font-size: 0.85rem;
+      }
+      .tag-stat-row:last-child { border-bottom: none; }
+      .tag-stat-name {
+        flex: 1;
+        font-weight: 500;
+      }
+      .tag-stat-count {
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+      .tag-stat-change {
+        font-size: 0.8rem;
+        font-weight: 600;
+        min-width: 55px;
+        text-align: right;
+      }
+      .tag-stat-down { color: var(--accent-3); }
+      .tag-stat-up { color: var(--accent-2); }
+
       .analytics-toggle-section {
         margin-top: 14px;
         padding-top: 12px;

@@ -2037,9 +2037,9 @@ function renderNoteTagStats() {
     const changeSign = t_.avgChange > 0 ? "+" : "";
     const changeClass = t_.avgChange < 0 ? "tag-stat-down" : t_.avgChange > 0 ? "tag-stat-up" : "";
     return `<div class="tag-stat-row">
-      <span class="tag-stat-name">${icon} ${t_.tag}</span>
+      <span class="tag-stat-name">${icon} ${escapeAttr(t_.tag)}</span>
       <span class="tag-stat-count">${t("tagStats.count").replace("{count}", t_.count).replace("{pct}", t_.pct)}</span>
-      <span class="tag-stat-change ${changeClass}">${changeSign}${t_.avgChange}kg</span>
+      <span class="tag-stat-change ${changeClass}">${changeSign}${t_.avgChange.toFixed(1)}kg</span>
     </div>`;
   }).join("");
   return `
