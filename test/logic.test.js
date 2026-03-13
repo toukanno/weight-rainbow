@@ -324,6 +324,21 @@ describe("calcPeriodSummary", () => {
     expect(result.min).toBe(70);
     expect(result.max).toBe(72);
   });
+
+  it("calculates change correctly", () => {
+    const d1 = new Date();
+    const d2 = new Date(d1.getTime() - 86400000);
+    const records = [
+      { dt: d2.toISOString().slice(0, 10), wt: 72.0 },
+      { dt: d1.toISOString().slice(0, 10), wt: 70.0 },
+    ];
+    const result = calcPeriodSummary(records, 7);
+    expect(result.change).toBeCloseTo(-2.0, 1);
+  });
+
+  it("returns null for empty records", () => {
+    expect(calcPeriodSummary([], 7)).toBeNull();
+  });
 });
 
 describe("calcStreak", () => {
