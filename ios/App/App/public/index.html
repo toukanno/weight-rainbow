@@ -3571,6 +3571,11 @@
         background: var(--surface);
         border: 1px solid var(--border);
         transition: transform 0.15s ease, box-shadow 0.15s ease;
+        animation: recordSlideIn 0.3s ease-out;
+      }
+      @keyframes recordSlideIn {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
       }
 
       @media (hover: hover) {
@@ -3612,20 +3617,21 @@
       }
 
       .record-diff {
-        font-size: 0.75rem;
+        font-size: 0.8rem;
         font-weight: 700;
-        padding: 2px 6px;
+        padding: 3px 8px;
         border-radius: 8px;
+        margin-left: 4px;
       }
 
       .record-diff.negative {
         color: var(--ok);
-        background: color-mix(in srgb, var(--ok) 10%, transparent);
+        background: color-mix(in srgb, var(--ok) 12%, transparent);
       }
 
       .record-diff.positive {
         color: var(--error);
-        background: color-mix(in srgb, var(--error) 8%, transparent);
+        background: color-mix(in srgb, var(--error) 10%, transparent);
       }
 
       .tag {
@@ -3869,8 +3875,27 @@
 
       .empty-state {
         text-align: center;
-        padding: 28px 16px;
+        padding: 36px 20px;
         color: var(--muted);
+        background: var(--hero);
+        border-radius: 20px;
+        border: 1px solid var(--border);
+      }
+      .empty-state .empty-emoji {
+        font-size: 3rem;
+        display: block;
+        margin-bottom: 12px;
+        animation: fadeIn 0.5s ease-out;
+      }
+      .empty-state .empty-msg {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--text);
+        margin-bottom: 4px;
+      }
+      .empty-state .empty-hint {
+        font-size: 0.85rem;
+        margin-bottom: 16px;
       }
 
       .empty-state-actions {

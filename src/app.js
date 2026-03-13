@@ -885,10 +885,11 @@ function render() {
             ${state.records.length ? `<div class="export-row"><button type="button" class="btn ghost" data-action="export-csv">📥 ${t("export.csv")}</button><button type="button" class="btn ghost" data-action="import-csv">📤 ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>` : `<div class="export-row"><button type="button" class="btn ghost" data-action="import-csv">📤 ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>`}
             <div class="record-list">
               ${state.records.length ? renderRecordList() : `<div class="empty-state">
-                <div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">📊</div>
-                <div class="helper">${t("records.empty")}</div>
+                <span class="empty-emoji" aria-hidden="true">📊</span>
+                <div class="empty-msg">${t("records.empty")}</div>
+                <div class="empty-hint">${t("records.emptyHint")}</div>
                 <div class="empty-state-actions">
-                  <button type="button" class="btn secondary" data-mode="manual" aria-label="${t("entry.manual")}">✏️ ${t("entry.manual")}</button>
+                  <button type="button" class="btn" data-mode="manual" aria-label="${t("entry.manual")}">✏️ ${t("entry.manual")}</button>
                   <button type="button" class="btn secondary" data-mode="voice" aria-label="${t("entry.voice")}">🎤 ${t("entry.voice")}</button>
                   <button type="button" class="btn secondary" data-mode="photo" aria-label="${t("entry.photo")}">📷 ${t("entry.photo")}</button>
                 </div>

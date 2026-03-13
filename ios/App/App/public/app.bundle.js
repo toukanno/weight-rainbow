@@ -3617,6 +3617,7 @@ var translations = {
     "quick.lastWeight": "\u524D\u56DE\u306E\u4F53\u91CD",
     "section.records": "\u8A18\u9332\u4E00\u89A7",
     "records.empty": "\u307E\u3060\u8A18\u9332\u304C\u3042\u308A\u307E\u305B\u3093",
+    "records.emptyHint": "\u4F53\u91CD\u3092\u8A18\u9332\u3057\u3066\u3001\u5909\u5316\u3092\u898B\u3048\u308B\u5316\u3057\u307E\u3057\u3087\u3046",
     "records.delete": "\u524A\u9664",
     "records.deleted": "\u8A18\u9332\u3092\u524A\u9664\u3057\u307E\u3057\u305F",
     "records.showAll": "\u3059\u3079\u3066\u8868\u793A",
@@ -4455,6 +4456,7 @@ var translations = {
     "quick.lastWeight": "Last weight",
     "section.records": "Records",
     "records.empty": "No records yet",
+    "records.emptyHint": "Start tracking your weight to visualize your progress",
     "records.delete": "Delete",
     "records.deleted": "Record deleted",
     "records.showAll": "Show all",
@@ -26383,10 +26385,11 @@ function render() {
             ${state.records.length ? `<div class="export-row"><button type="button" class="btn ghost" data-action="export-csv">\u{1F4E5} ${t("export.csv")}</button><button type="button" class="btn ghost" data-action="import-csv">\u{1F4E4} ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>` : `<div class="export-row"><button type="button" class="btn ghost" data-action="import-csv">\u{1F4E4} ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>`}
             <div class="record-list">
               ${state.records.length ? renderRecordList() : `<div class="empty-state">
-                <div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">\u{1F4CA}</div>
-                <div class="helper">${t("records.empty")}</div>
+                <span class="empty-emoji" aria-hidden="true">\u{1F4CA}</span>
+                <div class="empty-msg">${t("records.empty")}</div>
+                <div class="empty-hint">${t("records.emptyHint")}</div>
                 <div class="empty-state-actions">
-                  <button type="button" class="btn secondary" data-mode="manual" aria-label="${t("entry.manual")}">\u270F\uFE0F ${t("entry.manual")}</button>
+                  <button type="button" class="btn" data-mode="manual" aria-label="${t("entry.manual")}">\u270F\uFE0F ${t("entry.manual")}</button>
                   <button type="button" class="btn secondary" data-mode="voice" aria-label="${t("entry.voice")}">\u{1F3A4} ${t("entry.voice")}</button>
                   <button type="button" class="btn secondary" data-mode="photo" aria-label="${t("entry.photo")}">\u{1F4F7} ${t("entry.photo")}</button>
                 </div>
