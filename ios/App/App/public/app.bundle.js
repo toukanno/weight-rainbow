@@ -4035,7 +4035,7 @@ var translations = {
     "dowChange.title": "\u66DC\u65E5\u5225 \u4F53\u91CD\u5909\u5316",
     "dowChange.best": "\u6700\u3082\u6E1B\u308B\u66DC\u65E5: {day}\uFF08\u5E73\u5747 {avg}kg\uFF09",
     "dowChange.worst": "\u6700\u3082\u5897\u3048\u308B\u66DC\u65E5: {day}\uFF08\u5E73\u5747 +{avg}kg\uFF09",
-    "dowChange.hint": "\u9023\u7D9A\u3057\u305F\u65E5\u306E\u4F53\u91CD\u5909\u5316\u3092\u66DC\u65E5\u5225\u306B\u96C6\u8A08",
+    "dowChange.hint": "\u66DC\u65E5\u3054\u3068\u306E\u4F53\u91CD\u5909\u5316\u306E\u5E73\u5747",
     "pr.title": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u8A18\u9332",
     "pr.allTimeLow": "\u904E\u53BB\u6700\u8EFD\u91CF: {weight}kg\uFF08{date}\uFF09",
     "pr.biggestDrop": "\u6700\u5927\u65E5\u6B21\u6E1B\u5C11: -{drop}kg\uFF08{date}\uFF09",

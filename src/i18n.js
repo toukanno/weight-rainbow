@@ -515,7 +515,7 @@ export const translations = {
     "dowChange.title": "曜日別 体重変化",
     "dowChange.best": "最も減る曜日: {day}（平均 {avg}kg）",
     "dowChange.worst": "最も増える曜日: {day}（平均 +{avg}kg）",
-    "dowChange.hint": "連続した日の体重変化を曜日別に集計",
+    "dowChange.hint": "曜日ごとの体重変化の平均",
     "pr.title": "自己ベスト記録",
     "pr.allTimeLow": "過去最軽量: {weight}kg（{date}）",
     "pr.biggestDrop": "最大日次減少: -{drop}kg（{date}）",
