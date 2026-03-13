@@ -2775,6 +2775,32 @@ function calcMultiPeriodRate(records) {
   });
   return { periods, latestWeight: latest.wt };
 }
+function calcRecordMilestone(recordCount) {
+  const milestones = [10, 25, 50, 100, 200, 365, 500, 750, 1e3];
+  let reached = null;
+  let next = null;
+  for (const m of milestones) {
+    if (recordCount === m) {
+      reached = m;
+    }
+    if (m > recordCount && next === null) {
+      next = m;
+    }
+  }
+  if (next === null) {
+    const nextBig = Math.ceil((recordCount + 1) / 500) * 500;
+    next = nextBig;
+    if (recordCount === nextBig - 500 && recordCount > 1e3) {
+      reached = recordCount;
+    }
+  }
+  return {
+    reached,
+    current: recordCount,
+    next,
+    remaining: next - recordCount
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -3467,7 +3493,9 @@ var translations = {
     "multiRate.days": "\u904E\u53BB{days}\u65E5",
     "multiRate.change": "{change}kg",
     "multiRate.weekly": "\u9031\u3042\u305F\u308A {rate}kg",
-    "multiRate.noData": "\u2014"
+    "multiRate.noData": "\u2014",
+    "milestone.reached": "{count}\u56DE\u76EE\u306E\u8A18\u9332\u9054\u6210\uFF01",
+    "milestone.next": "\u6B21\u306E\u76EE\u6A19: {next}\u56DE\uFF08\u3042\u3068{remaining}\u56DE\uFF09"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4158,7 +4186,9 @@ var translations = {
     "multiRate.days": "Last {days}d",
     "multiRate.change": "{change}kg",
     "multiRate.weekly": "{rate}kg/week",
-    "multiRate.noData": "\u2014"
+    "multiRate.noData": "\u2014",
+    "milestone.reached": "{count} records reached!",
+    "milestone.next": "Next milestone: {next} (only {remaining} more)"
   }
 };
 function createTranslator(language) {
@@ -25232,6 +25262,7 @@ function render() {
               ${insight.weekComparison !== null ? `<div class="helper">${insight.weekComparison > 0.05 ? t("insight.weekUp").replace("{diff}", insight.weekComparison.toFixed(1)) : insight.weekComparison < -0.05 ? t("insight.weekDown").replace("{diff}", insight.weekComparison.toFixed(1)) : t("insight.weekSame")}</div>` : ""}
             </div>` : ""}
             ${renderDataFreshness()}
+            ${renderRecordMilestone()}
             ${renderTrendIndicator()}
             ${renderMomentumScore()}
             ${renderStreakRewards()}
@@ -26586,6 +26617,17 @@ function renderMultiPeriodRate() {
       <div class="mpr-grid">${cols}</div>
     </div>
   `;
+}
+function renderRecordMilestone() {
+  const ms = calcRecordMilestone(state.records.length);
+  if (!ms) return "";
+  if (ms.reached) {
+    return `<div class="milestone-banner milestone-reached">${t("milestone.reached").replace("{count}", ms.reached)}</div>`;
+  }
+  if (ms.remaining <= 5) {
+    return `<div class="milestone-banner milestone-close">${t("milestone.next").replace("{next}", ms.next).replace("{remaining}", ms.remaining)}</div>`;
+  }
+  return "";
 }
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);

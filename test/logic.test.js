@@ -90,6 +90,7 @@ import {
   calcIdealWeightRange,
   calcDataFreshness,
   calcMultiPeriodRate,
+  calcRecordMilestone,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -6981,5 +6982,43 @@ describe("calcMultiPeriodRate", () => {
     ];
     const result = calcMultiPeriodRate(records);
     expect(result.latestWeight).toBe(70);
+  });
+});
+
+describe("calcRecordMilestone", () => {
+  it("detects milestone at exact count", () => {
+    const r = calcRecordMilestone(100);
+    expect(r.reached).toBe(100);
+  });
+
+  it("returns null reached when not at milestone", () => {
+    const r = calcRecordMilestone(99);
+    expect(r.reached).toBeNull();
+  });
+
+  it("calculates next milestone and remaining", () => {
+    const r = calcRecordMilestone(42);
+    expect(r.next).toBe(50);
+    expect(r.remaining).toBe(8);
+  });
+
+  it("handles count beyond 1000", () => {
+    const r = calcRecordMilestone(1200);
+    expect(r.next).toBe(1500);
+    expect(r.remaining).toBe(300);
+  });
+
+  it("detects first milestone at 10", () => {
+    const r = calcRecordMilestone(10);
+    expect(r.reached).toBe(10);
+    expect(r.current).toBe(10);
+  });
+
+  it("returns correct structure", () => {
+    const r = calcRecordMilestone(5);
+    expect(r).toHaveProperty("reached");
+    expect(r).toHaveProperty("current");
+    expect(r).toHaveProperty("next");
+    expect(r).toHaveProperty("remaining");
   });
 });

@@ -676,6 +676,8 @@ export const translations = {
     "multiRate.change": "{change}kg",
     "multiRate.weekly": "週あたり {rate}kg",
     "multiRate.noData": "—",
+    "milestone.reached": "{count}回目の記録達成！",
+    "milestone.next": "次の目標: {next}回（あと{remaining}回）",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1354,6 +1356,8 @@ export const translations = {
     "multiRate.change": "{change}kg",
     "multiRate.weekly": "{rate}kg/week",
     "multiRate.noData": "—",
+    "milestone.reached": "{count} records reached!",
+    "milestone.next": "Next milestone: {next} (only {remaining} more)",
   },
 };
 

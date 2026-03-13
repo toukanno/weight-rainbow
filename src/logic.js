@@ -2436,3 +2436,38 @@ export function calcMultiPeriodRate(records) {
 
   return { periods, latestWeight: latest.wt };
 }
+
+/**
+ * Check if the user has reached a recording milestone.
+ * Returns { reached, milestone, next, remaining } or null if no milestone is near.
+ */
+export function calcRecordMilestone(recordCount) {
+  const milestones = [10, 25, 50, 100, 200, 365, 500, 750, 1000];
+  let reached = null;
+  let next = null;
+
+  for (const m of milestones) {
+    if (recordCount === m) {
+      reached = m;
+    }
+    if (m > recordCount && next === null) {
+      next = m;
+    }
+  }
+
+  if (next === null) {
+    // Beyond 1000, milestone every 500
+    const nextBig = Math.ceil((recordCount + 1) / 500) * 500;
+    next = nextBig;
+    if (recordCount === nextBig - 500 && recordCount > 1000) {
+      reached = recordCount;
+    }
+  }
+
+  return {
+    reached,
+    current: recordCount,
+    next,
+    remaining: next - recordCount,
+  };
+}
