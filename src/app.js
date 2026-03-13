@@ -1557,7 +1557,7 @@ function exportExcel() {
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Weight Records");
+  XLSX.utils.book_append_sheet(wb, ws, t("chart.records"));
   XLSX.writeFile(wb, `weight-rainbow-${new Date().toISOString().slice(0, 10)}.xlsx`);
   setStatus(t("export.excelDone"));
 }

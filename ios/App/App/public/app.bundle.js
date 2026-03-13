@@ -23699,7 +23699,7 @@ function exportExcel() {
   }));
   const ws = utils.json_to_sheet(rows);
   const wb = utils.book_new();
-  utils.book_append_sheet(wb, ws, "Weight Records");
+  utils.book_append_sheet(wb, ws, t("chart.records"));
   writeFileSync(wb, `weight-rainbow-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.xlsx`);
   setStatus(t("export.excelDone"));
 }
