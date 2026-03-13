@@ -946,6 +946,13 @@ function bindEvents() {
     element.addEventListener("input", handleFieldInput);
     element.addEventListener("change", handleFieldInput);
   });
+
+  // Enter key on note or body fat field triggers save
+  const noteInput = document.getElementById("entryNote");
+  const bfInput = document.getElementById("bodyFat");
+  const handleEnterSave = (e) => { if (e.key === "Enter") { e.preventDefault(); saveRecordFromPicker(); } };
+  noteInput?.addEventListener("keydown", handleEnterSave);
+  bfInput?.addEventListener("keydown", handleEnterSave);
 }
 
 function handleFieldInput(event) {
@@ -1789,6 +1796,23 @@ function drawChart() {
     context.font = "bold 11px sans-serif";
     context.textAlign = "left";
     context.fillText(`${t("goal.title")} ${goalWeight.toFixed(1)}`, padX + 4, goalY - 6);
+    context.restore();
+  }
+
+  // Today marker
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayIdx = chartRecords.findIndex((r) => r.dt === todayStr);
+  if (todayIdx >= 0) {
+    const tx = toX(todayIdx);
+    context.save();
+    context.setLineDash([2, 3]);
+    context.strokeStyle = getComputedStyle(document.body).getPropertyValue("--accent") || "#ff5f6d";
+    context.lineWidth = 1;
+    context.globalAlpha = 0.4;
+    context.beginPath();
+    context.moveTo(tx, padY);
+    context.lineTo(tx, height - padY);
+    context.stroke();
     context.restore();
   }
 

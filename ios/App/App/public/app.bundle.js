@@ -23058,6 +23058,16 @@
       element.addEventListener("input", handleFieldInput);
       element.addEventListener("change", handleFieldInput);
     });
+    const noteInput = document.getElementById("entryNote");
+    const bfInput = document.getElementById("bodyFat");
+    const handleEnterSave = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        saveRecordFromPicker();
+      }
+    };
+    noteInput?.addEventListener("keydown", handleEnterSave);
+    bfInput?.addEventListener("keydown", handleEnterSave);
   }
   function handleFieldInput(event) {
     const { name, value } = event.target;
