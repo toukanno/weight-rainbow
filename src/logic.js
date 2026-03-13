@@ -1277,3 +1277,55 @@ export function calcMomentumScore(records, goalWeight = null) {
   const level = score >= 75 ? "great" : score >= 50 ? "good" : score >= 25 ? "fair" : "low";
   return { score, level, factors };
 }
+
+export function calcNextMilestones(records, heightCm = null) {
+  if (!records.length) return null;
+  const latest = records[records.length - 1].wt;
+  const milestones = [];
+
+  // Next round number below current weight
+  const nextRoundDown = Math.floor(latest);
+  if (nextRoundDown >= WEIGHT_RANGE.min && nextRoundDown < latest) {
+    milestones.push({
+      type: "roundDown",
+      target: nextRoundDown,
+      remaining: Math.round((latest - nextRoundDown) * 10) / 10,
+    });
+  }
+
+  // Next 5kg milestone below
+  const next5Down = Math.floor(latest / 5) * 5;
+  if (next5Down >= WEIGHT_RANGE.min && next5Down < latest && next5Down !== nextRoundDown) {
+    milestones.push({
+      type: "fiveDown",
+      target: next5Down,
+      remaining: Math.round((latest - next5Down) * 10) / 10,
+    });
+  }
+
+  // BMI zone boundary milestones
+  if (heightCm) {
+    const hm2 = (heightCm / 100) ** 2;
+    const currentBMI = latest / hm2;
+    const boundaries = [
+      { bmi: 25, label: "normalMax" },
+      { bmi: 18.5, label: "underMax" },
+      { bmi: 30, label: "overMax" },
+    ];
+    for (const b of boundaries) {
+      const targetWt = Math.round(b.bmi * hm2 * 10) / 10;
+      if (currentBMI > b.bmi && targetWt < latest) {
+        milestones.push({
+          type: "bmiZone",
+          target: targetWt,
+          remaining: Math.round((latest - targetWt) * 10) / 10,
+          bmiLabel: b.label,
+          bmiValue: b.bmi,
+        });
+      }
+    }
+  }
+
+  milestones.sort((a, b) => a.remaining - b.remaining);
+  return milestones.length ? milestones.slice(0, 3) : null;
+}

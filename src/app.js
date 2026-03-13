@@ -65,6 +65,7 @@ import {
   calcRecordGaps,
   calcCalorieEstimate,
   calcMomentumScore,
+  calcNextMilestones,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -661,6 +662,7 @@ function render() {
               }</div>` : ""}
             </div>` : ""}
             ${renderMomentumScore()}
+            ${renderNextMilestones()}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
             ${renderBMIDistribution()}
@@ -1399,6 +1401,24 @@ function renderMomentumScore() {
   `;
 }
 
+function renderNextMilestones() {
+  const ms = calcNextMilestones(state.records, state.profile.heightCm);
+  if (!ms) return "";
+  const items = ms.map((m) => {
+    const key = `milestone.next.${m.type}`;
+    let text = t(key).replace("{target}", m.target).replace("{remaining}", m.remaining);
+    if (m.bmiValue) text = text.replace("{bmi}", m.bmiValue);
+    return `<div class="next-milestone-item">🎯 ${text}</div>`;
+  }).join("");
+  return `
+    <div class="next-milestone-section">
+      <div class="helper">${t("milestone.next.title")}</div>
+      ${items}
+      <div class="helper hint-small">${t("milestone.next.hint")}</div>
+    </div>
+  `;
+}
+
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -1751,7 +1771,7 @@ function bindEvents() {
       lastUndoState = { records: [...state.records], quickWeight };
       state.records = state.records.filter((r) => r.dt !== button.dataset.deleteDate);
       persist();
-      setStatus(t("records.deleted"));
+      showUndoSnackbar(t("records.deleted"));
     });
   });
 
@@ -2152,7 +2172,7 @@ async function pickNativePhoto() {
     }
 
     activeEntryMode = "photo";
-    setStatus(t("status.photoReady"));
+    setStatus(detectedWeights.length ? t("status.photoReady") : t("status.photoNoDetection"));
   } catch {
     setStatus(t("status.permissionDenied"), "error");
     return;

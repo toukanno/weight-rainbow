@@ -1345,6 +1345,21 @@
         font-size: 0.85rem;
       }
 
+      .next-milestone-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .next-milestone-item {
+        font-size: 0.85rem;
+        color: var(--text);
+        padding: 4px 0;
+        border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+      }
+      .next-milestone-item:last-of-type {
+        border-bottom: none;
+      }
+
       .analytics-toggle-section {
         margin-top: 14px;
         padding-top: 12px;
@@ -2957,8 +2972,12 @@
       body[data-theme="midnight"] .gaps-section,
       body[data-theme="midnight"] .calorie-section,
       body[data-theme="midnight"] .momentum-section,
+      body[data-theme="midnight"] .next-milestone-section,
       body[data-theme="midnight"] .analytics-toggle-section {
         border-color: rgba(139, 146, 176, 0.14);
+      }
+      body[data-theme="midnight"] .next-milestone-item {
+        border-color: rgba(139, 146, 176, 0.1);
       }
       body[data-theme="midnight"] .calorie-card {
         background: rgba(139, 146, 176, 0.08);

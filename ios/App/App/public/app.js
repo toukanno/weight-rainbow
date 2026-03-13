@@ -1890,6 +1890,50 @@ function calcMomentumScore(records, goalWeight = null) {
   const level = score >= 75 ? "great" : score >= 50 ? "good" : score >= 25 ? "fair" : "low";
   return { score, level, factors };
 }
+function calcNextMilestones(records, heightCm = null) {
+  if (!records.length) return null;
+  const latest = records[records.length - 1].wt;
+  const milestones = [];
+  const nextRoundDown = Math.floor(latest);
+  if (nextRoundDown >= WEIGHT_RANGE.min && nextRoundDown < latest) {
+    milestones.push({
+      type: "roundDown",
+      target: nextRoundDown,
+      remaining: Math.round((latest - nextRoundDown) * 10) / 10
+    });
+  }
+  const next5Down = Math.floor(latest / 5) * 5;
+  if (next5Down >= WEIGHT_RANGE.min && next5Down < latest && next5Down !== nextRoundDown) {
+    milestones.push({
+      type: "fiveDown",
+      target: next5Down,
+      remaining: Math.round((latest - next5Down) * 10) / 10
+    });
+  }
+  if (heightCm) {
+    const hm2 = (heightCm / 100) ** 2;
+    const currentBMI = latest / hm2;
+    const boundaries = [
+      { bmi: 25, label: "normalMax" },
+      { bmi: 18.5, label: "underMax" },
+      { bmi: 30, label: "overMax" }
+    ];
+    for (const b of boundaries) {
+      const targetWt = Math.round(b.bmi * hm2 * 10) / 10;
+      if (currentBMI > b.bmi && targetWt < latest) {
+        milestones.push({
+          type: "bmiZone",
+          target: targetWt,
+          remaining: Math.round((latest - targetWt) * 10) / 10,
+          bmiLabel: b.label,
+          bmiValue: b.bmi
+        });
+      }
+    }
+  }
+  milestones.sort((a, b) => a.remaining - b.remaining);
+  return milestones.length ? milestones.slice(0, 3) : null;
+}
 
 // src/i18n.js
 var translations = {
@@ -23939,6 +23983,7 @@ function render() {
               ${insight.weekComparison !== null ? `<div class="helper">${insight.weekComparison > 0.05 ? t("insight.weekUp").replace("{diff}", insight.weekComparison.toFixed(1)) : insight.weekComparison < -0.05 ? t("insight.weekDown").replace("{diff}", insight.weekComparison.toFixed(1)) : t("insight.weekSame")}</div>` : ""}
             </div>` : ""}
             ${renderMomentumScore()}
+            ${renderNextMilestones()}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
             ${renderBMIDistribution()}
@@ -24649,6 +24694,23 @@ function renderMomentumScore() {
     </div>
   `;
 }
+function renderNextMilestones() {
+  const ms = calcNextMilestones(state.records, state.profile.heightCm);
+  if (!ms) return "";
+  const items = ms.map((m) => {
+    const key = `milestone.next.${m.type}`;
+    let text = t(key).replace("{target}", m.target).replace("{remaining}", m.remaining);
+    if (m.bmiValue) text = text.replace("{bmi}", m.bmiValue);
+    return `<div class="next-milestone-item">\u{1F3AF} ${text}</div>`;
+  }).join("");
+  return `
+    <div class="next-milestone-section">
+      <div class="helper">${t("milestone.next.title")}</div>
+      ${items}
+      <div class="helper hint-small">${t("milestone.next.hint")}</div>
+    </div>
+  `;
+}
 function renderRecordingTime() {
   const timeStats = calcRecordingTimeStats(state.records);
   if (!timeStats) return "";
@@ -24988,7 +25050,7 @@ function bindEvents() {
       lastUndoState = { records: [...state.records], quickWeight };
       state.records = state.records.filter((r) => r.dt !== button.dataset.deleteDate);
       persist();
-      setStatus(t("records.deleted"));
+      showUndoSnackbar(t("records.deleted"));
     });
   });
   app.querySelector('[data-action="share-chart"]')?.addEventListener("click", shareChart);
@@ -25333,7 +25395,7 @@ async function pickNativePhoto() {
       }
     }
     activeEntryMode = "photo";
-    setStatus(t("status.photoReady"));
+    setStatus(detectedWeights.length ? t("status.photoReady") : t("status.photoNoDetection"));
   } catch {
     setStatus(t("status.permissionDenied"), "error");
     return;

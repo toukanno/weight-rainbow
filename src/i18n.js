@@ -484,6 +484,11 @@ export const translations = {
     "momentum.fair": "もう少し",
     "momentum.low": "立て直しが必要",
     "momentum.hint": "トレンド・記録頻度・安定性から算出",
+    "milestone.next.title": "次のマイルストーン",
+    "milestone.next.roundDown": "{target}kg まであと {remaining}kg",
+    "milestone.next.fiveDown": "{target}kg まであと {remaining}kg",
+    "milestone.next.bmiZone": "BMI {bmi}以下まであと {remaining}kg（{target}kg）",
+    "milestone.next.hint": "直近の目標地点",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -970,6 +975,11 @@ export const translations = {
     "momentum.fair": "Needs improvement",
     "momentum.low": "Time to refocus",
     "momentum.hint": "Based on trend, consistency, and stability",
+    "milestone.next.title": "Next Milestones",
+    "milestone.next.roundDown": "{remaining}kg to {target}kg",
+    "milestone.next.fiveDown": "{remaining}kg to {target}kg",
+    "milestone.next.bmiZone": "{remaining}kg to BMI {bmi} ({target}kg)",
+    "milestone.next.hint": "Your nearest targets",
   },
 };
 

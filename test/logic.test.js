@@ -63,6 +63,7 @@ import {
   calcRecordGaps,
   calcCalorieEstimate,
   calcMomentumScore,
+  calcNextMilestones,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -3400,5 +3401,47 @@ describe("pickWeightCandidate edge cases", () => {
   it("handles non-finite fallback as no fallback", () => {
     expect(pickWeightCandidate([65, 70], NaN)).toBe(65);
     expect(pickWeightCandidate([65, 70], null)).toBe(65);
+  });
+});
+
+describe("calcNextMilestones", () => {
+  it("returns null for empty records", () => {
+    expect(calcNextMilestones([])).toBeNull();
+  });
+
+  it("returns round number milestone", () => {
+    const records = [{ dt: "2025-01-01", wt: 70.5 }];
+    const result = calcNextMilestones(records);
+    expect(result).not.toBeNull();
+    const round = result.find((m) => m.type === "roundDown");
+    expect(round).toBeDefined();
+    expect(round.target).toBe(70);
+    expect(round.remaining).toBe(0.5);
+  });
+
+  it("returns 5kg milestone when applicable", () => {
+    const records = [{ dt: "2025-01-01", wt: 73.2 }];
+    const result = calcNextMilestones(records);
+    expect(result).not.toBeNull();
+    const five = result.find((m) => m.type === "fiveDown");
+    expect(five).toBeDefined();
+    expect(five.target).toBe(70);
+  });
+
+  it("includes BMI zone milestone with height", () => {
+    // At 170cm, BMI 25 = 72.25kg. Weight 74kg → remaining ~1.8kg
+    const records = [{ dt: "2025-01-01", wt: 74 }];
+    const result = calcNextMilestones(records, 170);
+    expect(result).not.toBeNull();
+    const bmi = result.find((m) => m.type === "bmiZone");
+    expect(bmi).toBeDefined();
+    expect(bmi.bmiValue).toBe(25);
+  });
+
+  it("limits to 3 milestones", () => {
+    const records = [{ dt: "2025-01-01", wt: 88.7 }];
+    const result = calcNextMilestones(records, 170);
+    expect(result).not.toBeNull();
+    expect(result.length).toBeLessThanOrEqual(3);
   });
 });
