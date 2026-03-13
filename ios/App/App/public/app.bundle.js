@@ -1448,6 +1448,25 @@ function calcBMIDistribution(records) {
     total
   };
 }
+function calcWeightPercentile(records) {
+  if (records.length < 3) return null;
+  const latest = records[records.length - 1].wt;
+  const sorted = records.map((r) => r.wt).sort((a, b) => a - b);
+  let below = 0;
+  for (const w of sorted) {
+    if (w < latest) below++;
+    else break;
+  }
+  const percentile = Math.round(below / sorted.length * 100);
+  return {
+    percentile,
+    latest,
+    min: sorted[0],
+    max: sorted[sorted.length - 1],
+    rank: below + 1,
+    total: sorted.length
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -2004,6 +2023,10 @@ var translations = {
     "bmiDist.over": "Overweight",
     "bmiDist.obese": "Obese",
     "bmiDist.total": "BMI records: {count}",
+    "percentile.title": "Weight Percentile",
+    "percentile.value": "Lighter than {pct}% of all records",
+    "percentile.rank": "Rank {rank} of {total} (lightest first)",
+    "percentile.best": "Near your all-time lightest!",
     "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
@@ -23226,6 +23249,7 @@ function render() {
             ${renderDayOfWeekAvg()}
             ${renderStability()}
             ${renderBMIDistribution()}
+            ${renderWeightPercentile()}
             ${renderBodyFatStats()}
           </section>
 
@@ -23685,6 +23709,26 @@ function renderBMIDistribution() {
       <div class="bmi-dist-bar">${bars}</div>
       <div class="bmi-dist-legend">${legend}</div>
       <div class="helper hint-small" style="margin-top:4px;">${t("bmiDist.total").replace("{count}", dist.total)}</div>
+    </div>
+  `;
+}
+function renderWeightPercentile() {
+  const pctl = calcWeightPercentile(state.records);
+  if (!pctl) return "";
+  const level = pctl.percentile <= 20 ? "excellent" : pctl.percentile <= 40 ? "good" : "neutral";
+  return `
+    <div class="percentile-section">
+      <div class="helper">${t("percentile.title")}</div>
+      <div class="percentile-display">
+        <div class="percentile-ring ${level}">
+          <span class="percentile-value">${pctl.percentile}%</span>
+        </div>
+        <div class="percentile-details">
+          <div class="percentile-label">${t("percentile.value").replace("{pct}", pctl.percentile)}</div>
+          <div class="helper hint-small">${t("percentile.rank").replace("{rank}", pctl.rank).replace("{total}", pctl.total)}</div>
+          ${pctl.percentile <= 10 ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("percentile.best")}</div>` : ""}
+        </div>
+      </div>
     </div>
   `;
 }

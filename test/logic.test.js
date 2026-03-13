@@ -1592,3 +1592,69 @@ describe("calcWeightPercentile", () => {
     expect(result.rank).toBe(1);
   });
 });
+
+describe("calcLongestStreak", () => {
+  it("returns 0 for empty records", () => {
+    expect(calcLongestStreak([])).toBe(0);
+  });
+
+  it("returns 1 for a single record", () => {
+    expect(calcLongestStreak([{ dt: "2025-01-01", wt: 70 }])).toBe(1);
+  });
+
+  it("finds longest streak with gaps", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70 },
+      { dt: "2025-01-03", wt: 70 },
+      // gap
+      { dt: "2025-01-10", wt: 70 },
+      { dt: "2025-01-11", wt: 70 },
+      { dt: "2025-01-12", wt: 70 },
+      { dt: "2025-01-13", wt: 70 },
+      { dt: "2025-01-14", wt: 70 },
+    ];
+    expect(calcLongestStreak(records)).toBe(5);
+  });
+
+  it("handles duplicate dates", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-01", wt: 71 },
+      { dt: "2025-01-02", wt: 69 },
+    ];
+    expect(calcLongestStreak(records)).toBe(2);
+  });
+});
+
+describe("calcTrendForecast", () => {
+  it("returns null for fewer than 7 records", () => {
+    const records = Array.from({ length: 6 }, (_, i) => ({
+      dt: `2025-03-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 - i * 0.1,
+    }));
+    expect(calcTrendForecast(records)).toBeNull();
+  });
+
+  it("produces forecast points for downward trend", () => {
+    // Use dates relative to today so they fall within the 14-day filter
+    const today = new Date();
+    const records = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - 13 + i);
+      const dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      return { dt, wt: 75 - i * 0.2 };
+    });
+    const result = calcTrendForecast(records);
+    expect(result).not.toBeNull();
+    expect(result.slope).toBeLessThan(0);
+    expect(result.forecast.length).toBeGreaterThan(1);
+    expect(result.forecast[0].dayOffset).toBe(0);
+  });
+});
+
+describe("calcDaysSinceLastRecord", () => {
+  it("returns null for empty records", () => {
+    expect(calcDaysSinceLastRecord([])).toBeNull();
+  });
+});
