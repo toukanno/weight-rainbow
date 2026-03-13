@@ -74,6 +74,7 @@ import {
   calcWeightRegression,
   calcBMIHistory,
   calcWeightHeatmap,
+  calcStreakRewards,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -674,6 +675,7 @@ function render() {
               }</div>` : ""}
             </div>` : ""}
             ${renderMomentumScore()}
+            ${renderStreakRewards()}
             ${renderNextMilestones()}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
@@ -1629,6 +1631,31 @@ function renderWeightHeatmap() {
         <span class="heatmap-legend-text gain-text">${t("heatmap.gain")}</span>
       </div>
       <div class="helper hint-small">${t("heatmap.hint").replace("{days}", hm.daysWithData)}</div>
+    </div>
+  `;
+}
+
+function renderStreakRewards() {
+  const sr = calcStreakRewards(state.records);
+  if (!sr || sr.streak < 1) return "";
+  const icons = { starter: "🌱", beginner: "🌿", steady: "🌳", committed: "💪", dedicated: "🔥", expert: "⭐", master: "👑", legend: "🏆" };
+  const icon = icons[sr.level] || "🌱";
+  const pct = sr.next ? Math.round((sr.streak / sr.next) * 100) : 100;
+  return `
+    <div class="streak-reward-section">
+      <div class="helper">${t("streakReward.title")}</div>
+      <div class="streak-reward-main">
+        <span class="streak-reward-icon">${icon}</span>
+        <div class="streak-reward-info">
+          <div class="streak-reward-badge">${t("streakReward." + sr.level)}</div>
+          <div class="streak-reward-days">${t("streakReward.days").replace("{streak}", sr.streak)}</div>
+        </div>
+      </div>
+      <div class="streak-reward-progress-track">
+        <div class="streak-reward-progress-fill" style="width:${pct}%"></div>
+      </div>
+      ${sr.next ? `<div class="streak-reward-next">${t("streakReward.next").replace("{next}", sr.next).replace("{remaining}", sr.nextRemaining)}</div>` : ""}
+      <div class="helper hint-small">${t("streakReward.hint")}</div>
     </div>
   `;
 }

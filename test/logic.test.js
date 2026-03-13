@@ -71,6 +71,7 @@ import {
   calcWeightRegression,
   calcBMIHistory,
   calcWeightHeatmap,
+  calcStreakRewards,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -4623,6 +4624,53 @@ describe("calcWeightHeatmap", () => {
   });
 });
 
+describe("calcStreakRewards", () => {
+  function localDateStr(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  it("returns null for empty records", () => {
+    expect(calcStreakRewards([])).toBeNull();
+  });
+
+  it("calculates current streak from today", () => {
+    const today = new Date();
+    const records = Array.from({ length: 5 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      return { dt: localDateStr(d), wt: 70 };
+    });
+    const result = calcStreakRewards(records);
+    expect(result.streak).toBe(5);
+    expect(result.level).toBe("beginner");
+  });
+
+  it("assigns correct badge levels", () => {
+    const today = new Date();
+    const records = Array.from({ length: 31 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      return { dt: localDateStr(d), wt: 70 };
+    });
+    const result = calcStreakRewards(records);
+    expect(result.streak).toBe(31);
+    expect(result.level).toBe("dedicated");
+    expect(result.earned).toContain(30);
+    expect(result.next).toBe(60);
+  });
+
+  it("breaks streak on gap", () => {
+    const today = new Date();
+    const records = [
+      { dt: localDateStr(today), wt: 70 },
+      // skip yesterday
+      (() => { const d = new Date(today); d.setDate(d.getDate() - 2); return { dt: localDateStr(d), wt: 70 }; })(),
+    ];
+    const result = calcStreakRewards(records);
+    expect(result.streak).toBe(1);
+  });
+});
+
 describe("buildRecord edge cases", () => {
   it("truncates note to 100 characters", () => {
     const longNote = "x".repeat(150);
@@ -4898,5 +4946,59 @@ describe("calcBMIHistory edge cases", () => {
     ];
     const result = calcBMIHistory(records);
     expect(result.avg).toBe(22.0);
+  });
+});
+
+describe("calcStreakRewards", () => {
+  it("returns null for empty records", () => {
+    expect(calcStreakRewards([])).toBeNull();
+  });
+
+  it("returns starter level for single record", () => {
+    const today = new Date();
+    const dt = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const result = calcStreakRewards([{ dt, wt: 70 }]);
+    expect(result).not.toBeNull();
+    expect(result.streak).toBeGreaterThanOrEqual(1);
+    expect(result.totalRecords).toBe(1);
+  });
+
+  it("assigns correct level for 7-day streak", () => {
+    const records = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - 6 + i);
+      return {
+        dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+        wt: 70 + i * 0.1,
+      };
+    });
+    const result = calcStreakRewards(records);
+    expect(result).not.toBeNull();
+    expect(result.streak).toBe(7);
+    expect(result.level).toBe("steady");
+    expect(result.earned).toContain(3);
+    expect(result.earned).toContain(7);
+  });
+
+  it("returns next milestone and remaining days", () => {
+    const today = new Date();
+    const dt = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const result = calcStreakRewards([{ dt, wt: 70 }]);
+    expect(result.next).toBe(3);
+    expect(result.nextRemaining).toBe(2);
+  });
+
+  it("assigns dedicated level for 30-day streak", () => {
+    const records = Array.from({ length: 30 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - 29 + i);
+      return {
+        dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+        wt: 70,
+      };
+    });
+    const result = calcStreakRewards(records);
+    expect(result.streak).toBe(30);
+    expect(result.level).toBe("dedicated");
   });
 });

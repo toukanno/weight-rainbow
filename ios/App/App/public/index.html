@@ -1662,6 +1662,49 @@
       .loss-text { color: #10b981; }
       .gain-text { color: #ef4444; }
 
+      .streak-reward-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .streak-reward-main {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 6px;
+      }
+      .streak-reward-icon {
+        font-size: 2rem;
+        line-height: 1;
+      }
+      .streak-reward-badge {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--accent);
+      }
+      .streak-reward-days {
+        font-size: 0.82rem;
+        color: var(--text);
+      }
+      .streak-reward-progress-track {
+        height: 6px;
+        border-radius: 3px;
+        background: color-mix(in srgb, var(--text) 12%, transparent);
+        margin-top: 8px;
+        overflow: hidden;
+      }
+      .streak-reward-progress-fill {
+        height: 100%;
+        border-radius: 3px;
+        background: var(--accent);
+        transition: width 0.4s ease;
+      }
+      .streak-reward-next {
+        font-size: 0.78rem;
+        color: var(--text);
+        margin-top: 4px;
+      }
+
       .analytics-toggle-section {
         margin-top: 14px;
         padding-top: 12px;
@@ -3297,6 +3340,7 @@
       body[data-theme="midnight"] .regression-section,
       body[data-theme="midnight"] .bmi-hist-section,
       body[data-theme="midnight"] .heatmap-section,
+      body[data-theme="midnight"] .streak-reward-section,
       body[data-theme="midnight"] .range-section,
       body[data-theme="midnight"] .vel-section,
       body[data-theme="midnight"] .stability-section,

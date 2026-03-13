@@ -2161,6 +2161,40 @@ function calcWeightHeatmap(records) {
   }
   return { weeks, threshold: Math.round(threshold * 100) / 100, daysWithData: changeCount };
 }
+function calcStreakRewards(records) {
+  if (records.length < 1) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const today = /* @__PURE__ */ new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const dateSet = new Set(sorted.map((r) => r.dt));
+  let streak = 0;
+  const d = new Date(today);
+  if (!dateSet.has(todayStr)) {
+    d.setDate(d.getDate() - 1);
+  }
+  while (true) {
+    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (dateSet.has(ds)) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  const milestones = [3, 7, 14, 21, 30, 60, 90, 120, 180, 365];
+  const earned = milestones.filter((m) => streak >= m);
+  const next = milestones.find((m) => streak < m) || null;
+  const nextRemaining = next ? next - streak : 0;
+  let level = "starter";
+  if (streak >= 365) level = "legend";
+  else if (streak >= 180) level = "master";
+  else if (streak >= 90) level = "expert";
+  else if (streak >= 30) level = "dedicated";
+  else if (streak >= 14) level = "committed";
+  else if (streak >= 7) level = "steady";
+  else if (streak >= 3) level = "beginner";
+  return { streak, level, earned, next, nextRemaining, totalRecords: records.length };
+}
 
 // src/i18n.js
 var translations = {
@@ -2715,7 +2749,19 @@ var translations = {
     "heatmap.gain": "\u5897\u52A0",
     "heatmap.noData": "\u30C7\u30FC\u30BF\u306A\u3057",
     "heatmap.low": "\u5C0F",
-    "heatmap.high": "\u5927"
+    "heatmap.high": "\u5927",
+    "streakReward.title": "\u8A18\u9332\u30B9\u30C8\u30EA\u30FC\u30AF",
+    "streakReward.days": "{streak}\u65E5\u9023\u7D9A\u8A18\u9332\u4E2D",
+    "streakReward.next": "\u6B21\u306E\u76EE\u6A19: {next}\u65E5\uFF08\u3042\u3068{remaining}\u65E5\uFF09",
+    "streakReward.starter": "\u30B9\u30BF\u30FC\u30C8",
+    "streakReward.beginner": "\u30D3\u30AE\u30CA\u30FC",
+    "streakReward.steady": "\u5B89\u5B9A",
+    "streakReward.committed": "\u7D99\u7D9A",
+    "streakReward.dedicated": "\u732E\u8EAB",
+    "streakReward.expert": "\u30A8\u30AD\u30B9\u30D1\u30FC\u30C8",
+    "streakReward.master": "\u30DE\u30B9\u30BF\u30FC",
+    "streakReward.legend": "\u30EC\u30B8\u30A7\u30F3\u30C9",
+    "streakReward.hint": "\u6BCE\u65E5\u8A18\u9332\u3057\u3066\u6B21\u306E\u30D0\u30C3\u30B8\u3092\u76EE\u6307\u305D\u3046\uFF01"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3268,7 +3314,19 @@ var translations = {
     "heatmap.gain": "Gain",
     "heatmap.noData": "No data",
     "heatmap.low": "Low",
-    "heatmap.high": "High"
+    "heatmap.high": "High",
+    "streakReward.title": "Recording Streak",
+    "streakReward.days": "{streak}-day streak",
+    "streakReward.next": "Next goal: {next} days ({remaining} to go)",
+    "streakReward.starter": "Starter",
+    "streakReward.beginner": "Beginner",
+    "streakReward.steady": "Steady",
+    "streakReward.committed": "Committed",
+    "streakReward.dedicated": "Dedicated",
+    "streakReward.expert": "Expert",
+    "streakReward.master": "Master",
+    "streakReward.legend": "Legend",
+    "streakReward.hint": "Record daily to earn the next badge!"
   }
 };
 function createTranslator(language) {
@@ -24326,6 +24384,7 @@ function render() {
               ${insight.weekComparison !== null ? `<div class="helper">${insight.weekComparison > 0.05 ? t("insight.weekUp").replace("{diff}", insight.weekComparison.toFixed(1)) : insight.weekComparison < -0.05 ? t("insight.weekDown").replace("{diff}", insight.weekComparison.toFixed(1)) : t("insight.weekSame")}</div>` : ""}
             </div>` : ""}
             ${renderMomentumScore()}
+            ${renderStreakRewards()}
             ${renderNextMilestones()}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
@@ -25241,6 +25300,30 @@ function renderWeightHeatmap() {
         <span class="heatmap-legend-text gain-text">${t("heatmap.gain")}</span>
       </div>
       <div class="helper hint-small">${t("heatmap.hint").replace("{days}", hm.daysWithData)}</div>
+    </div>
+  `;
+}
+function renderStreakRewards() {
+  const sr = calcStreakRewards(state.records);
+  if (!sr || sr.streak < 1) return "";
+  const icons = { starter: "\u{1F331}", beginner: "\u{1F33F}", steady: "\u{1F333}", committed: "\u{1F4AA}", dedicated: "\u{1F525}", expert: "\u2B50", master: "\u{1F451}", legend: "\u{1F3C6}" };
+  const icon = icons[sr.level] || "\u{1F331}";
+  const pct = sr.next ? Math.round(sr.streak / sr.next * 100) : 100;
+  return `
+    <div class="streak-reward-section">
+      <div class="helper">${t("streakReward.title")}</div>
+      <div class="streak-reward-main">
+        <span class="streak-reward-icon">${icon}</span>
+        <div class="streak-reward-info">
+          <div class="streak-reward-badge">${t("streakReward." + sr.level)}</div>
+          <div class="streak-reward-days">${t("streakReward.days").replace("{streak}", sr.streak)}</div>
+        </div>
+      </div>
+      <div class="streak-reward-progress-track">
+        <div class="streak-reward-progress-fill" style="width:${pct}%"></div>
+      </div>
+      ${sr.next ? `<div class="streak-reward-next">${t("streakReward.next").replace("{next}", sr.next).replace("{remaining}", sr.nextRemaining)}</div>` : ""}
+      <div class="helper hint-small">${t("streakReward.hint")}</div>
     </div>
   `;
 }
