@@ -3896,6 +3896,30 @@ function calcGoalStreak(records, goalWeight) {
     currentDist: +Math.abs(current - goalWeight).toFixed(1)
   };
 }
+function calcThenVsNow(records, days2 = 7) {
+  if (!records || records.length < days2 * 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const first = sorted.slice(0, days2);
+  const last = sorted.slice(-days2);
+  const calcGroup = (group) => {
+    const weights = group.map((r) => r.wt);
+    const avg = +(weights.reduce((s, w) => s + w, 0) / weights.length).toFixed(1);
+    return {
+      avg,
+      min: +Math.min(...weights).toFixed(1),
+      max: +Math.max(...weights).toFixed(1),
+      count: group.length,
+      period: `${group[0].dt} ~ ${group[group.length - 1].dt}`
+    };
+  };
+  const thenData = calcGroup(first);
+  const nowData = calcGroup(last);
+  return {
+    then: thenData,
+    now: nowData,
+    diff: +(nowData.avg - thenData.avg).toFixed(1)
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -4826,7 +4850,13 @@ var translations = {
     "gstreak.days": "\u65E5\u9023\u7D9A\u3067\u76EE\u6A19\u306B\u8FD1\u3065\u3044\u3066\u3044\u307E\u3059",
     "gstreak.dist": "\u76EE\u6A19\u307E\u3067",
     "gstreak.closest": "\u6700\u63A5\u8FD1",
-    "gstreak.achieved": "\u76EE\u6A19\u9054\u6210\u4E2D\uFF01"
+    "gstreak.achieved": "\u76EE\u6A19\u9054\u6210\u4E2D\uFF01",
+    "tvn.title": "\u30D3\u30D5\u30A9\u30FC\uFF06\u30A2\u30D5\u30BF\u30FC",
+    "tvn.then": "\u6700\u521D\u306E7\u65E5",
+    "tvn.now": "\u76F4\u8FD1\u306E7\u65E5",
+    "tvn.avg": "\u5E73\u5747",
+    "tvn.range": "\u7BC4\u56F2",
+    "tvn.change": "\u5909\u5316"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5755,7 +5785,13 @@ var translations = {
     "gstreak.days": "consecutive days trending toward goal",
     "gstreak.dist": "Distance to goal",
     "gstreak.closest": "Closest",
-    "gstreak.achieved": "Goal achieved!"
+    "gstreak.achieved": "Goal achieved!",
+    "tvn.title": "Before & After",
+    "tvn.then": "First 7 days",
+    "tvn.now": "Last 7 days",
+    "tvn.avg": "Avg",
+    "tvn.range": "Range",
+    "tvn.change": "Change"
   }
 };
 function createTranslator(language) {
@@ -26916,6 +26952,7 @@ function render() {
             ${renderWeightAnniversary()}
             ${renderTrendForecast()}
             ${renderGoalStreak()}
+            ${renderThenVsNow()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -28942,6 +28979,31 @@ function renderGoalStreak() {
         <span>${t("gstreak.dist")}: ${data.currentDist}kg</span>
         <span>${t("gstreak.closest")}: ${data.closestToGoal}kg</span>
       </div>
+    </div>
+  `;
+}
+function renderThenVsNow() {
+  const data = calcThenVsNow(state.records, 7);
+  if (!data) return "";
+  const diffSign = data.diff > 0 ? "+" : "";
+  const diffCls = data.diff < 0 ? "tvn-loss" : data.diff > 0 ? "tvn-gain" : "";
+  return `
+    <div class="tvn-section">
+      <div class="helper">${t("tvn.title")}</div>
+      <div class="tvn-grid">
+        <div class="tvn-col tvn-then">
+          <div class="tvn-period">${t("tvn.then")}</div>
+          <div class="tvn-avg">${data.then.avg}kg</div>
+          <div class="tvn-range">${data.then.min}\u2013${data.then.max}kg</div>
+        </div>
+        <div class="tvn-arrow">${data.diff < 0 ? "\u{1F4C9}" : data.diff > 0 ? "\u{1F4C8}" : "\u27A1\uFE0F"}</div>
+        <div class="tvn-col tvn-now">
+          <div class="tvn-period">${t("tvn.now")}</div>
+          <div class="tvn-avg">${data.now.avg}kg</div>
+          <div class="tvn-range">${data.now.min}\u2013${data.now.max}kg</div>
+        </div>
+      </div>
+      <div class="tvn-diff ${diffCls}">${t("tvn.change")}: ${diffSign}${data.diff}kg</div>
     </div>
   `;
 }

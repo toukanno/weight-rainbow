@@ -120,6 +120,7 @@ import {
   calcWeightAnniversary,
   calcDailyChangeDist,
   calcGoalStreak,
+  calcThenVsNow,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -8948,5 +8949,55 @@ describe("calcGoalStreak", () => {
     ];
     const result = calcGoalStreak(records, 65);
     expect(result.closestToGoal).toBe(69);
+  });
+});
+
+describe("calcThenVsNow", () => {
+  const makeRecords = (count, startWt, delta = -0.1) =>
+    Array.from({ length: count }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: +(startWt + delta * i).toFixed(1),
+    }));
+
+  it("returns null for fewer than 14 records", () => {
+    expect(calcThenVsNow(null, 7)).toBeNull();
+    expect(calcThenVsNow([], 7)).toBeNull();
+    expect(calcThenVsNow(makeRecords(10, 70), 7)).toBeNull();
+  });
+
+  it("compares first 7 vs last 7 records", () => {
+    const records = makeRecords(20, 75, -0.2);
+    const result = calcThenVsNow(records, 7);
+    expect(result).not.toBeNull();
+    expect(result.then.count).toBe(7);
+    expect(result.now.count).toBe(7);
+    expect(result.diff).toBeLessThan(0);
+  });
+
+  it("calculates correct averages", () => {
+    const records = [
+      ...Array.from({ length: 7 }, (_, i) => ({ dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 70 })),
+      ...Array.from({ length: 7 }, (_, i) => ({ dt: `2025-01-${String(i + 8).padStart(2, "0")}`, wt: 68 })),
+    ];
+    const result = calcThenVsNow(records, 7);
+    expect(result.then.avg).toBe(70);
+    expect(result.now.avg).toBe(68);
+    expect(result.diff).toBe(-2);
+  });
+
+  it("includes min and max in results", () => {
+    const records = makeRecords(14, 75, -0.1);
+    const result = calcThenVsNow(records, 7);
+    expect(result.then).toHaveProperty("min");
+    expect(result.then).toHaveProperty("max");
+    expect(result.now).toHaveProperty("min");
+    expect(result.now).toHaveProperty("max");
+  });
+
+  it("includes period strings", () => {
+    const records = makeRecords(14, 75);
+    const result = calcThenVsNow(records, 7);
+    expect(result.then.period).toContain("2025-01-01");
+    expect(result.now.period).toContain("2025-01-14");
   });
 });

@@ -914,6 +914,12 @@ export const translations = {
     "gstreak.dist": "目標まで",
     "gstreak.closest": "最接近",
     "gstreak.achieved": "目標達成中！",
+    "tvn.title": "ビフォー＆アフター",
+    "tvn.then": "最初の7日",
+    "tvn.now": "直近の7日",
+    "tvn.avg": "平均",
+    "tvn.range": "範囲",
+    "tvn.change": "変化",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1830,6 +1836,12 @@ export const translations = {
     "gstreak.dist": "Distance to goal",
     "gstreak.closest": "Closest",
     "gstreak.achieved": "Goal achieved!",
+    "tvn.title": "Before & After",
+    "tvn.then": "First 7 days",
+    "tvn.now": "Last 7 days",
+    "tvn.avg": "Avg",
+    "tvn.range": "Range",
+    "tvn.change": "Change",
   },
 };
 

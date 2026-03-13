@@ -3931,3 +3931,37 @@ export function calcGoalStreak(records, goalWeight) {
     currentDist: +Math.abs(current - goalWeight).toFixed(1),
   };
 }
+
+/**
+ * Compare the user's first N days of tracking vs the last N days.
+ * Shows concrete "then vs now" progress.
+ * Returns { then: { avg, min, max, count, period }, now: { avg, min, max, count, period }, diff }
+ */
+export function calcThenVsNow(records, days = 7) {
+  if (!records || records.length < days * 2) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const first = sorted.slice(0, days);
+  const last = sorted.slice(-days);
+
+  const calcGroup = (group) => {
+    const weights = group.map((r) => r.wt);
+    const avg = +(weights.reduce((s, w) => s + w, 0) / weights.length).toFixed(1);
+    return {
+      avg,
+      min: +Math.min(...weights).toFixed(1),
+      max: +Math.max(...weights).toFixed(1),
+      count: group.length,
+      period: `${group[0].dt} ~ ${group[group.length - 1].dt}`,
+    };
+  };
+
+  const thenData = calcGroup(first);
+  const nowData = calcGroup(last);
+
+  return {
+    then: thenData,
+    now: nowData,
+    diff: +(nowData.avg - thenData.avg).toFixed(1),
+  };
+}

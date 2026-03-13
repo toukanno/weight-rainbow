@@ -123,6 +123,7 @@ import {
   calcWeightAnniversary,
   calcDailyChangeDist,
   calcGoalStreak,
+  calcThenVsNow,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -827,6 +828,7 @@ function render() {
             ${renderWeightAnniversary()}
             ${renderTrendForecast()}
             ${renderGoalStreak()}
+            ${renderThenVsNow()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -3021,6 +3023,34 @@ function renderGoalStreak() {
         <span>${t("gstreak.dist")}: ${data.currentDist}kg</span>
         <span>${t("gstreak.closest")}: ${data.closestToGoal}kg</span>
       </div>
+    </div>
+  `;
+}
+
+function renderThenVsNow() {
+  const data = calcThenVsNow(state.records, 7);
+  if (!data) return "";
+
+  const diffSign = data.diff > 0 ? "+" : "";
+  const diffCls = data.diff < 0 ? "tvn-loss" : data.diff > 0 ? "tvn-gain" : "";
+
+  return `
+    <div class="tvn-section">
+      <div class="helper">${t("tvn.title")}</div>
+      <div class="tvn-grid">
+        <div class="tvn-col tvn-then">
+          <div class="tvn-period">${t("tvn.then")}</div>
+          <div class="tvn-avg">${data.then.avg}kg</div>
+          <div class="tvn-range">${data.then.min}–${data.then.max}kg</div>
+        </div>
+        <div class="tvn-arrow">${data.diff < 0 ? "📉" : data.diff > 0 ? "📈" : "➡️"}</div>
+        <div class="tvn-col tvn-now">
+          <div class="tvn-period">${t("tvn.now")}</div>
+          <div class="tvn-avg">${data.now.avg}kg</div>
+          <div class="tvn-range">${data.now.min}–${data.now.max}kg</div>
+        </div>
+      </div>
+      <div class="tvn-diff ${diffCls}">${t("tvn.change")}: ${diffSign}${data.diff}kg</div>
     </div>
   `;
 }
