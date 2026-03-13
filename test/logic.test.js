@@ -3320,3 +3320,85 @@ describe("calcMomentumScore", () => {
     expect(result.factors).toContain("volatile");
   });
 });
+
+describe("extractWeightCandidates edge cases", () => {
+  it("extracts from Japanese input with キロ", () => {
+    const result = extractWeightCandidates("体重は65.5キロです");
+    expect(result).toContain(65.5);
+  });
+
+  it("extracts from text with 点 (decimal point)", () => {
+    const result = extractWeightCandidates("70点5");
+    expect(result).toContain(70.5);
+  });
+
+  it("returns empty for no numeric data", () => {
+    expect(extractWeightCandidates("hello world")).toEqual([]);
+  });
+
+  it("filters out-of-range weights", () => {
+    const result = extractWeightCandidates("500kg and 10kg and 65kg");
+    expect(result).toEqual([65]);
+  });
+
+  it("deduplicates identical candidates", () => {
+    const result = extractWeightCandidates("65.0kg 65.0kg");
+    expect(result).toEqual([65]);
+  });
+});
+
+describe("calcDayOfWeekAvg edge cases", () => {
+  it("returns null for fewer than 7 records", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    expect(calcDayOfWeekAvg(records)).toBeNull();
+  });
+
+  it("returns averages for 7+ records", () => {
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + (i % 3),
+    }));
+    const result = calcDayOfWeekAvg(records);
+    expect(result).not.toBeNull();
+    expect(result.avgs.length).toBe(7);
+    expect(result.overallAvg).toBeGreaterThan(0);
+  });
+});
+
+describe("calcDaysSinceLastRecord edge cases", () => {
+  it("returns null for empty records", () => {
+    expect(calcDaysSinceLastRecord([])).toBeNull();
+  });
+
+  it("returns 0 for record today", () => {
+    const today = new Date();
+    const dt = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    expect(calcDaysSinceLastRecord([{ dt, wt: 70 }])).toBe(0);
+  });
+
+  it("returns positive number for past record", () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 5);
+    const dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    expect(calcDaysSinceLastRecord([{ dt, wt: 70 }])).toBe(5);
+  });
+});
+
+describe("pickWeightCandidate edge cases", () => {
+  it("returns null for empty candidates", () => {
+    expect(pickWeightCandidate([])).toBeNull();
+  });
+
+  it("returns first candidate with no fallback", () => {
+    expect(pickWeightCandidate([65, 70, 75])).toBe(65);
+  });
+
+  it("returns closest to fallback weight", () => {
+    expect(pickWeightCandidate([60, 70, 80], 72)).toBe(70);
+  });
+
+  it("handles non-finite fallback as no fallback", () => {
+    expect(pickWeightCandidate([65, 70], NaN)).toBe(65);
+    expect(pickWeightCandidate([65, 70], null)).toBe(65);
+  });
+});

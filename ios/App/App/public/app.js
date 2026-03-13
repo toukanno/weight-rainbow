@@ -2382,7 +2382,12 @@ var translations = {
     "momentum.good": "\u9806\u8ABF",
     "momentum.fair": "\u3082\u3046\u5C11\u3057",
     "momentum.low": "\u7ACB\u3066\u76F4\u3057\u304C\u5FC5\u8981",
-    "momentum.hint": "\u30C8\u30EC\u30F3\u30C9\u30FB\u8A18\u9332\u983B\u5EA6\u30FB\u5B89\u5B9A\u6027\u304B\u3089\u7B97\u51FA"
+    "momentum.hint": "\u30C8\u30EC\u30F3\u30C9\u30FB\u8A18\u9332\u983B\u5EA6\u30FB\u5B89\u5B9A\u6027\u304B\u3089\u7B97\u51FA",
+    "milestone.next.title": "\u6B21\u306E\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3",
+    "milestone.next.roundDown": "{target}kg \u307E\u3067\u3042\u3068 {remaining}kg",
+    "milestone.next.fiveDown": "{target}kg \u307E\u3067\u3042\u3068 {remaining}kg",
+    "milestone.next.bmiZone": "BMI {bmi}\u4EE5\u4E0B\u307E\u3067\u3042\u3068 {remaining}kg\uFF08{target}kg\uFF09",
+    "milestone.next.hint": "\u76F4\u8FD1\u306E\u76EE\u6A19\u5730\u70B9"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2873,7 +2878,12 @@ var translations = {
     "momentum.good": "On track",
     "momentum.fair": "Needs improvement",
     "momentum.low": "Time to refocus",
-    "momentum.hint": "Based on trend, consistency, and stability"
+    "momentum.hint": "Based on trend, consistency, and stability",
+    "milestone.next.title": "Next Milestones",
+    "milestone.next.roundDown": "{remaining}kg to {target}kg",
+    "milestone.next.fiveDown": "{remaining}kg to {target}kg",
+    "milestone.next.bmiZone": "{remaining}kg to BMI {bmi} ({target}kg)",
+    "milestone.next.hint": "Your nearest targets"
   }
 };
 function createTranslator(language) {
