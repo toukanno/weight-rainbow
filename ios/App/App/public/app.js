@@ -1717,6 +1717,32 @@ function calcWeightVelocity(records) {
   if (!week && !month) return null;
   return { week, month };
 }
+function calcWeightVariance(records) {
+  if (records.length < 5) return null;
+  const last14 = records.slice(-14);
+  const weights = last14.map((r) => r.wt);
+  const avg = weights.reduce((s, w) => s + w, 0) / weights.length;
+  if (avg === 0) return null;
+  const variance = weights.reduce((s, w) => s + (w - avg) ** 2, 0) / weights.length;
+  const stdDev = Math.sqrt(variance);
+  const cv = stdDev / avg * 100;
+  const maxSwing = Math.round((Math.max(...weights) - Math.min(...weights)) * 10) / 10;
+  const diffs = [];
+  for (let i = 1; i < weights.length; i++) {
+    diffs.push(Math.abs(weights[i] - weights[i - 1]));
+  }
+  const avgDailySwing = diffs.length ? Math.round(diffs.reduce((s, d) => s + d, 0) / diffs.length * 100) / 100 : 0;
+  const level = cv < 0.5 ? "veryLow" : cv < 1 ? "low" : cv < 2 ? "moderate" : "high";
+  return {
+    cv: Math.round(cv * 100) / 100,
+    stdDev: Math.round(stdDev * 100) / 100,
+    avg: Math.round(avg * 10) / 10,
+    maxSwing,
+    avgDailySwing,
+    count: weights.length,
+    level
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -2166,7 +2192,16 @@ var translations = {
     "velocity.projection": "\u3053\u306E\u30DA\u30FC\u30B9\u3060\u3068\u6708{amount}kg",
     "velocity.losing": "\u6E1B\u5C11\u4E2D",
     "velocity.gaining": "\u5897\u52A0\u4E2D",
-    "velocity.stable": "\u5B89\u5B9A"
+    "velocity.stable": "\u5B89\u5B9A",
+    "variance.title": "\u4F53\u91CD\u5909\u52D5\u5206\u6790",
+    "variance.cv": "\u5909\u52D5\u4FC2\u6570: {cv}%",
+    "variance.swing": "\u6700\u5927\u5909\u52D5\u5E45: {swing}kg",
+    "variance.daily": "\u5E73\u5747\u65E5\u6B21\u5909\u52D5: {avg}kg",
+    "variance.veryLow": "\u975E\u5E38\u306B\u5B89\u5B9A",
+    "variance.low": "\u5B89\u5B9A",
+    "variance.moderate": "\u3084\u3084\u5909\u52D5\u3042\u308A",
+    "variance.high": "\u5909\u52D5\u5927",
+    "variance.hint": "\u76F4\u8FD1{count}\u56DE\u306E\u8A18\u9332\u304B\u3089\u7B97\u51FA"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2614,7 +2649,16 @@ var translations = {
     "velocity.projection": "Projected {amount}kg/month at this pace",
     "velocity.losing": "Losing",
     "velocity.gaining": "Gaining",
-    "velocity.stable": "Stable"
+    "velocity.stable": "Stable",
+    "variance.title": "Weight Fluctuation",
+    "variance.cv": "Coefficient of Variation: {cv}%",
+    "variance.swing": "Max swing: {swing}kg",
+    "variance.daily": "Avg daily change: {avg}kg",
+    "variance.veryLow": "Very stable",
+    "variance.low": "Stable",
+    "variance.moderate": "Moderate fluctuation",
+    "variance.high": "High fluctuation",
+    "variance.hint": "Based on last {count} records"
   }
 };
 function createTranslator(language) {
@@ -23680,6 +23724,7 @@ function render() {
             ${renderBestPeriod()}
             ${renderWeeklyFrequency()}
             ${renderWeightVelocity()}
+            ${renderWeightVariance()}
             ${renderBodyFatStats()}
           </section>
 
@@ -24260,6 +24305,23 @@ function renderWeightVelocity() {
         ${renderPeriod("week", vel.week)}
         ${renderPeriod("month", vel.month)}
       </div>
+    </div>
+  `;
+}
+function renderWeightVariance() {
+  const v = calcWeightVariance(state.records);
+  if (!v) return "";
+  const levelColor = v.level === "veryLow" || v.level === "low" ? "var(--ok, #10b981)" : v.level === "moderate" ? "var(--warn, #f59e0b)" : "var(--error, #ef4444)";
+  return `
+    <div class="variance-section">
+      <div class="helper">${t("variance.title")}</div>
+      <div class="variance-badge" style="color:${levelColor};font-weight:700;">${t("variance." + v.level)}</div>
+      <div class="variance-stats">
+        <span>${t("variance.cv").replace("{cv}", v.cv)}</span>
+        <span>${t("variance.swing").replace("{swing}", v.maxSwing)}</span>
+        <span>${t("variance.daily").replace("{avg}", v.avgDailySwing)}</span>
+      </div>
+      <div class="helper hint-small">${t("variance.hint").replace("{count}", v.count)}</div>
     </div>
   `;
 }
@@ -25881,6 +25943,7 @@ window.addEventListener("resize", () => {
 });
 window.addEventListener("beforeunload", () => {
   if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+  if (reminderTimer) clearInterval(reminderTimer);
 });
 window.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {

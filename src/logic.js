@@ -1114,3 +1114,31 @@ export function calcWeightVelocity(records) {
   if (!week && !month) return null;
   return { week, month };
 }
+
+export function calcWeightVariance(records) {
+  if (records.length < 5) return null;
+  const last14 = records.slice(-14);
+  const weights = last14.map((r) => r.wt);
+  const avg = weights.reduce((s, w) => s + w, 0) / weights.length;
+  if (avg === 0) return null;
+  const variance = weights.reduce((s, w) => s + (w - avg) ** 2, 0) / weights.length;
+  const stdDev = Math.sqrt(variance);
+  const cv = (stdDev / avg) * 100; // coefficient of variation in %
+  const maxSwing = Math.round((Math.max(...weights) - Math.min(...weights)) * 10) / 10;
+  // Daily diffs
+  const diffs = [];
+  for (let i = 1; i < weights.length; i++) {
+    diffs.push(Math.abs(weights[i] - weights[i - 1]));
+  }
+  const avgDailySwing = diffs.length ? Math.round((diffs.reduce((s, d) => s + d, 0) / diffs.length) * 100) / 100 : 0;
+  const level = cv < 0.5 ? "veryLow" : cv < 1.0 ? "low" : cv < 2.0 ? "moderate" : "high";
+  return {
+    cv: Math.round(cv * 100) / 100,
+    stdDev: Math.round(stdDev * 100) / 100,
+    avg: Math.round(avg * 10) / 10,
+    maxSwing,
+    avgDailySwing,
+    count: weights.length,
+    level,
+  };
+}

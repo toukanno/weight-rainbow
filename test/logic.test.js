@@ -58,6 +58,7 @@ import {
   calcBestPeriod,
   calcWeeklyFrequency,
   calcWeightVelocity,
+  calcWeightVariance,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -2644,5 +2645,102 @@ describe("createDefaultSettings edge cases", () => {
     const b = createDefaultSettings();
     a.language = "xx";
     expect(b.language).not.toBe("xx");
+  });
+});
+
+describe("calcWeightVariance", () => {
+  it("returns null for fewer than 5 records", () => {
+    const records = [{ wt: 70 }, { wt: 71 }, { wt: 70.5 }];
+    expect(calcWeightVariance(records)).toBeNull();
+  });
+
+  it("returns veryLow level for constant weight", () => {
+    const records = [{ wt: 70 }, { wt: 70 }, { wt: 70 }, { wt: 70 }, { wt: 70 }];
+    const result = calcWeightVariance(records);
+    expect(result).not.toBeNull();
+    expect(result.cv).toBe(0);
+    expect(result.level).toBe("veryLow");
+    expect(result.maxSwing).toBe(0);
+    expect(result.avgDailySwing).toBe(0);
+  });
+
+  it("calculates variance for fluctuating weights", () => {
+    const records = [
+      { wt: 70 }, { wt: 72 }, { wt: 69 }, { wt: 73 }, { wt: 68 },
+      { wt: 71 }, { wt: 70 },
+    ];
+    const result = calcWeightVariance(records);
+    expect(result).not.toBeNull();
+    expect(result.cv).toBeGreaterThan(0);
+    expect(result.stdDev).toBeGreaterThan(0);
+    expect(result.maxSwing).toBe(5);
+    expect(result.count).toBe(7);
+  });
+
+  it("uses only last 14 records", () => {
+    const records = [];
+    for (let i = 0; i < 20; i++) {
+      records.push({ wt: 70 + (i % 2) });
+    }
+    const result = calcWeightVariance(records);
+    expect(result.count).toBe(14);
+  });
+});
+
+describe("calcWeightVariance", () => {
+  it("returns null for fewer than 5 records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 71 },
+      { dt: "2025-01-03", wt: 70.5 },
+    ];
+    expect(calcWeightVariance(records)).toBeNull();
+  });
+
+  it("returns veryLow level for constant weights", () => {
+    const records = [];
+    for (let i = 0; i < 10; i++) {
+      records.push({ dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 70 });
+    }
+    const result = calcWeightVariance(records);
+    expect(result).not.toBeNull();
+    expect(result.cv).toBe(0);
+    expect(result.maxSwing).toBe(0);
+    expect(result.avgDailySwing).toBe(0);
+    expect(result.level).toBe("veryLow");
+  });
+
+  it("detects high variance for widely varying weights", () => {
+    const records = [];
+    for (let i = 0; i < 10; i++) {
+      records.push({ dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: i % 2 === 0 ? 60 : 75 });
+    }
+    const result = calcWeightVariance(records);
+    expect(result).not.toBeNull();
+    expect(result.level).toBe("high");
+    expect(result.maxSwing).toBe(15);
+  });
+
+  it("uses last 14 records when more available", () => {
+    const records = [];
+    for (let i = 0; i < 20; i++) {
+      records.push({ dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 70 + (i < 6 ? 10 : 0) });
+    }
+    const result = calcWeightVariance(records);
+    expect(result).not.toBeNull();
+    expect(result.count).toBe(14);
+  });
+
+  it("calculates average daily swing", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 71 },
+      { dt: "2025-01-03", wt: 70 },
+      { dt: "2025-01-04", wt: 71 },
+      { dt: "2025-01-05", wt: 70 },
+    ];
+    const result = calcWeightVariance(records);
+    expect(result).not.toBeNull();
+    expect(result.avgDailySwing).toBe(1);
   });
 });

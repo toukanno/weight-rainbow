@@ -60,6 +60,7 @@ import {
   calcBestPeriod,
   calcWeeklyFrequency,
   calcWeightVelocity,
+  calcWeightVariance,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -666,6 +667,7 @@ function render() {
             ${renderBestPeriod()}
             ${renderWeeklyFrequency()}
             ${renderWeightVelocity()}
+            ${renderWeightVariance()}
             ${renderBodyFatStats()}
           </section>
 
@@ -1266,6 +1268,24 @@ function renderWeightVelocity() {
         ${renderPeriod("week", vel.week)}
         ${renderPeriod("month", vel.month)}
       </div>
+    </div>
+  `;
+}
+
+function renderWeightVariance() {
+  const v = calcWeightVariance(state.records);
+  if (!v) return "";
+  const levelColor = v.level === "veryLow" || v.level === "low" ? "var(--ok, #10b981)" : v.level === "moderate" ? "var(--warn, #f59e0b)" : "var(--error, #ef4444)";
+  return `
+    <div class="variance-section">
+      <div class="helper">${t("variance.title")}</div>
+      <div class="variance-badge" style="color:${levelColor};font-weight:700;">${t("variance." + v.level)}</div>
+      <div class="variance-stats">
+        <span>${t("variance.cv").replace("{cv}", v.cv)}</span>
+        <span>${t("variance.swing").replace("{swing}", v.maxSwing)}</span>
+        <span>${t("variance.daily").replace("{avg}", v.avgDailySwing)}</span>
+      </div>
+      <div class="helper hint-small">${t("variance.hint").replace("{count}", v.count)}</div>
     </div>
   `;
 }
@@ -3030,6 +3050,7 @@ window.addEventListener("resize", () => {
 });
 window.addEventListener("beforeunload", () => {
   if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+  if (reminderTimer) clearInterval(reminderTimer);
 });
 window.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
