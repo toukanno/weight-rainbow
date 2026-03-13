@@ -9100,8 +9100,8 @@ describe("calcRecordCompleteness", () => {
 
   it("counts records with body fat", () => {
     const records = [
-      { dt: "2025-01-01", wt: 70, bodyFat: 20 },
-      { dt: "2025-01-02", wt: 69, bodyFat: 19 },
+      { dt: "2025-01-01", wt: 70, bf: 20 },
+      { dt: "2025-01-02", wt: 69, bf: 19 },
       { dt: "2025-01-03", wt: 68 },
     ];
     const result = calcRecordCompleteness(records);
@@ -9124,9 +9124,9 @@ describe("calcRecordCompleteness", () => {
 
   it("returns excellent for fully complete records", () => {
     const records = [
-      { dt: "2025-01-01", wt: 70, bodyFat: 20, note: "#exercise" },
-      { dt: "2025-01-02", wt: 69, bodyFat: 19, note: "Good day" },
-      { dt: "2025-01-03", wt: 68, bodyFat: 18, note: "#diet clean eating" },
+      { dt: "2025-01-01", wt: 70, bf: 20, note: "#exercise" },
+      { dt: "2025-01-02", wt: 69, bf: 19, note: "Good day" },
+      { dt: "2025-01-03", wt: 68, bf: 18, note: "#diet clean eating" },
     ];
     const result = calcRecordCompleteness(records);
     expect(result.level).toBe("excellent");
@@ -9135,8 +9135,8 @@ describe("calcRecordCompleteness", () => {
 
   it("ignores empty notes and zero body fat", () => {
     const records = [
-      { dt: "2025-01-01", wt: 70, bodyFat: 0, note: "" },
-      { dt: "2025-01-02", wt: 69, bodyFat: null, note: "  " },
+      { dt: "2025-01-01", wt: 70, bf: 0, note: "" },
+      { dt: "2025-01-02", wt: 69, bf: null, note: "  " },
       { dt: "2025-01-03", wt: 68 },
     ];
     const result = calcRecordCompleteness(records);

@@ -4019,7 +4019,7 @@ export function calcRecordCompleteness(records) {
   let withTag = 0;
 
   for (const r of records) {
-    if (r.bodyFat != null && r.bodyFat > 0) withBodyFat++;
+    if (r.bf != null && Number(r.bf) > 0) withBodyFat++;
     if (r.note && r.note.trim().length > 0) withNote++;
     if (r.note && /#\w+/.test(r.note)) withTag++;
   }
