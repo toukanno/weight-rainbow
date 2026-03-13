@@ -2292,3 +2292,45 @@ export function calcWeightTrendIndicator(records) {
     dataPoints: sorted.length,
   };
 }
+
+/**
+ * Analyze note tag usage frequency and associated weight changes.
+ * Returns { tags: [{ tag, count, pct, avgChange }], totalTagged, totalRecords }
+ */
+export function calcNoteTagStats(records) {
+  if (records.length < 2) return { tags: [], totalTagged: 0, totalRecords: records.length };
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const tagCounts = {};
+  const tagChanges = {};
+
+  for (let i = 0; i < sorted.length; i++) {
+    const r = sorted[i];
+    if (!r.note) continue;
+    const tags = r.note.split(",").map((s) => s.trim()).filter(Boolean);
+    const prev = i > 0 ? sorted[i - 1] : null;
+    const change = prev ? r.wt - prev.wt : 0;
+    for (const tag of tags) {
+      tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+      if (!tagChanges[tag]) tagChanges[tag] = [];
+      if (prev) tagChanges[tag].push(change);
+    }
+  }
+
+  const totalTagged = Object.values(tagCounts).reduce((s, c) => s + c, 0);
+  const tags = Object.entries(tagCounts)
+    .map(([tag, count]) => {
+      const changes = tagChanges[tag] || [];
+      const avgChange = changes.length > 0
+        ? Math.round((changes.reduce((s, c) => s + c, 0) / changes.length) * 10) / 10
+        : 0;
+      return {
+        tag,
+        count,
+        pct: records.length > 0 ? Math.round((count / records.length) * 100) : 0,
+        avgChange,
+      };
+    })
+    .sort((a, b) => b.count - a.count);
+
+  return { tags, totalTagged, totalRecords: records.length };
+}

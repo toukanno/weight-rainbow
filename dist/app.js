@@ -2668,6 +2668,36 @@ function calcWeightTrendIndicator(records) {
     dataPoints: sorted.length
   };
 }
+function calcNoteTagStats(records) {
+  if (records.length < 2) return { tags: [], totalTagged: 0, totalRecords: records.length };
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const tagCounts = {};
+  const tagChanges = {};
+  for (let i = 0; i < sorted.length; i++) {
+    const r = sorted[i];
+    if (!r.note) continue;
+    const tags2 = r.note.split(",").map((s) => s.trim()).filter(Boolean);
+    const prev = i > 0 ? sorted[i - 1] : null;
+    const change = prev ? r.wt - prev.wt : 0;
+    for (const tag of tags2) {
+      tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+      if (!tagChanges[tag]) tagChanges[tag] = [];
+      if (prev) tagChanges[tag].push(change);
+    }
+  }
+  const totalTagged = Object.values(tagCounts).reduce((s, c) => s + c, 0);
+  const tags = Object.entries(tagCounts).map(([tag, count]) => {
+    const changes = tagChanges[tag] || [];
+    const avgChange = changes.length > 0 ? Math.round(changes.reduce((s, c) => s + c, 0) / changes.length * 10) / 10 : 0;
+    return {
+      tag,
+      count,
+      pct: records.length > 0 ? Math.round(count / records.length * 100) : 0,
+      avgChange
+    };
+  }).sort((a, b) => b.count - a.count);
+  return { tags, totalTagged, totalRecords: records.length };
+}
 
 // src/i18n.js
 var translations = {
@@ -24954,7 +24984,7 @@ function render() {
       if (freq.length === 0) return "";
       return `<div class="quick-notes-row">
                     <span class="quick-notes-label">${t("quickNote.label")}:</span>
-                    ${freq.map((n) => `<button type="button" class="quick-note-chip" data-quick-note="${escapeAttr(n.text)}">${n.text.length > 15 ? n.text.slice(0, 15) + "\u2026" : n.text}</button>`).join("")}
+                    ${freq.map((n) => `<button type="button" class="quick-note-chip" data-quick-note="${escapeAttr(n.text)}">${escapeAttr(n.text.length > 15 ? n.text.slice(0, 15) + "\u2026" : n.text)}</button>`).join("")}
                   </div>`;
     })()}
               </div>
@@ -25134,6 +25164,7 @@ function render() {
                 ${renderBodyComposition()}
                 ${renderShareSummary()}
                 ${renderDuplicateCheck()}
+                ${renderNoteTagStats()}
               </div>
               ` : ""}
             </div>
@@ -26244,7 +26275,7 @@ function renderShareSummary() {
     <div class="share-summary-section">
       <div class="helper">${t("share.title")}</div>
       <pre class="share-summary-text">${text}</pre>
-      <button type="button" class="btn ghost share-summary-btn" data-action="copy-summary" data-text="${text.replace(/"/g, "&quot;")}">${t("share.btn")}</button>
+      <button type="button" class="btn ghost share-summary-btn" data-action="copy-summary" data-text="${escapeAttr(text)}">${t("share.btn")}</button>
     </div>
   `;
 }
@@ -26343,6 +26374,27 @@ function renderTrendIndicator() {
         <div class="trend-msg">${msg}</div>
         <div class="trend-detail">${recentText}</div>
       </div>
+    </div>
+  `;
+}
+function renderNoteTagStats() {
+  const stats = calcNoteTagStats(state.records);
+  if (stats.tags.length === 0) return "";
+  const tagIcons = { exercise: "\u{1F3C3}", diet: "\u{1F957}", cheatday: "\u{1F355}", sick: "\u{1F912}", travel: "\u2708\uFE0F", stress: "\u{1F630}", sleep: "\u{1F634}", alcohol: "\u{1F37A}" };
+  const rows = stats.tags.slice(0, 6).map((t_) => {
+    const icon = tagIcons[t_.tag] || "\u{1F3F7}\uFE0F";
+    const changeSign = t_.avgChange > 0 ? "+" : "";
+    const changeClass = t_.avgChange < 0 ? "tag-stat-down" : t_.avgChange > 0 ? "tag-stat-up" : "";
+    return `<div class="tag-stat-row">
+      <span class="tag-stat-name">${icon} ${t_.tag}</span>
+      <span class="tag-stat-count">${t("tagStats.count").replace("{count}", t_.count).replace("{pct}", t_.pct)}</span>
+      <span class="tag-stat-change ${changeClass}">${changeSign}${t_.avgChange}kg</span>
+    </div>`;
+  }).join("");
+  return `
+    <div class="tag-stats-section">
+      <div class="helper">${t("tagStats.title")}</div>
+      ${rows}
     </div>
   `;
 }

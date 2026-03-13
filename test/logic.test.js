@@ -86,6 +86,7 @@ import {
   calcWeeklyAverages,
   calcMonthlyRecordingMap,
   calcWeightTrendIndicator,
+  calcNoteTagStats,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -6655,5 +6656,58 @@ describe("calcWeightTrendIndicator", () => {
     expect(result).toHaveProperty("previousAvg");
     expect(result).toHaveProperty("dataPoints");
     expect(result.dataPoints).toBe(4);
+  });
+});
+
+describe("calcNoteTagStats", () => {
+  it("returns empty tags for fewer than 2 records", () => {
+    expect(calcNoteTagStats([]).tags).toEqual([]);
+    expect(calcNoteTagStats([{ dt: "2025-01-01", wt: 70, note: "exercise" }]).tags).toEqual([]);
+  });
+
+  it("counts tag frequency correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, note: "exercise" },
+      { dt: "2025-01-02", wt: 69.5, note: "exercise" },
+      { dt: "2025-01-03", wt: 70, note: "diet" },
+      { dt: "2025-01-04", wt: 69, note: "exercise" },
+    ];
+    const result = calcNoteTagStats(records);
+    expect(result.tags[0].tag).toBe("exercise");
+    expect(result.tags[0].count).toBe(3);
+    expect(result.tags[1].tag).toBe("diet");
+    expect(result.tags[1].count).toBe(1);
+  });
+
+  it("handles comma-separated tags", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, note: "exercise, diet" },
+      { dt: "2025-01-02", wt: 69, note: "exercise" },
+    ];
+    const result = calcNoteTagStats(records);
+    expect(result.tags.find((t) => t.tag === "exercise").count).toBe(2);
+    expect(result.tags.find((t) => t.tag === "diet").count).toBe(1);
+  });
+
+  it("calculates average weight change per tag", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, note: "" },
+      { dt: "2025-01-02", wt: 69, note: "exercise" },
+      { dt: "2025-01-03", wt: 68, note: "exercise" },
+    ];
+    const result = calcNoteTagStats(records);
+    const exercise = result.tags.find((t) => t.tag === "exercise");
+    expect(exercise.avgChange).toBe(-1);
+  });
+
+  it("skips records without notes", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, note: "" },
+      { dt: "2025-01-02", wt: 69, note: "" },
+      { dt: "2025-01-03", wt: 68, note: "diet" },
+    ];
+    const result = calcNoteTagStats(records);
+    expect(result.tags).toHaveLength(1);
+    expect(result.tags[0].tag).toBe("diet");
   });
 });

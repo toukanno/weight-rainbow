@@ -89,6 +89,7 @@ import {
   calcWeeklyAverages,
   calcMonthlyRecordingMap,
   calcWeightTrendIndicator,
+  calcNoteTagStats,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -560,7 +561,7 @@ function render() {
                   if (freq.length === 0) return "";
                   return `<div class="quick-notes-row">
                     <span class="quick-notes-label">${t("quickNote.label")}:</span>
-                    ${freq.map((n) => `<button type="button" class="quick-note-chip" data-quick-note="${escapeAttr(n.text)}">${n.text.length > 15 ? n.text.slice(0, 15) + "…" : n.text}</button>`).join("")}
+                    ${freq.map((n) => `<button type="button" class="quick-note-chip" data-quick-note="${escapeAttr(n.text)}">${escapeAttr(n.text.length > 15 ? n.text.slice(0, 15) + "…" : n.text)}</button>`).join("")}
                   </div>`;
                 })()}
               </div>
@@ -750,6 +751,7 @@ function render() {
                 ${renderBodyComposition()}
                 ${renderShareSummary()}
                 ${renderDuplicateCheck()}
+                ${renderNoteTagStats()}
               </div>
               ` : ""}
             </div>
@@ -1918,7 +1920,7 @@ function renderShareSummary() {
     <div class="share-summary-section">
       <div class="helper">${t("share.title")}</div>
       <pre class="share-summary-text">${text}</pre>
-      <button type="button" class="btn ghost share-summary-btn" data-action="copy-summary" data-text="${text.replace(/"/g, "&quot;")}">${t("share.btn")}</button>
+      <button type="button" class="btn ghost share-summary-btn" data-action="copy-summary" data-text="${escapeAttr(text)}">${t("share.btn")}</button>
     </div>
   `;
 }
@@ -2022,6 +2024,28 @@ function renderTrendIndicator() {
         <div class="trend-msg">${msg}</div>
         <div class="trend-detail">${recentText}</div>
       </div>
+    </div>
+  `;
+}
+
+function renderNoteTagStats() {
+  const stats = calcNoteTagStats(state.records);
+  if (stats.tags.length === 0) return "";
+  const tagIcons = { exercise: "🏃", diet: "🥗", cheatday: "🍕", sick: "🤒", travel: "✈️", stress: "😰", sleep: "😴", alcohol: "🍺" };
+  const rows = stats.tags.slice(0, 6).map((t_) => {
+    const icon = tagIcons[t_.tag] || "🏷️";
+    const changeSign = t_.avgChange > 0 ? "+" : "";
+    const changeClass = t_.avgChange < 0 ? "tag-stat-down" : t_.avgChange > 0 ? "tag-stat-up" : "";
+    return `<div class="tag-stat-row">
+      <span class="tag-stat-name">${icon} ${t_.tag}</span>
+      <span class="tag-stat-count">${t("tagStats.count").replace("{count}", t_.count).replace("{pct}", t_.pct)}</span>
+      <span class="tag-stat-change ${changeClass}">${changeSign}${t_.avgChange}kg</span>
+    </div>`;
+  }).join("");
+  return `
+    <div class="tag-stats-section">
+      <div class="helper">${t("tagStats.title")}</div>
+      ${rows}
     </div>
   `;
 }

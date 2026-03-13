@@ -654,6 +654,10 @@ export const translations = {
     "recCal.sat": "土",
     "trend.stable": "安定しています",
     "trend.recent": "直近3回平均 {avg}kg",
+    "tagStats.title": "タグ使用状況",
+    "tagStats.count": "{count}回（{pct}%）",
+    "tagStats.avgChange": "平均変動 {change}kg",
+    "tagStats.none": "タグ付き記録がありません",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1310,6 +1314,10 @@ export const translations = {
     "recCal.sat": "Sa",
     "trend.stable": "Holding steady",
     "trend.recent": "Last 3 avg: {avg}kg",
+    "tagStats.title": "Tag Usage",
+    "tagStats.count": "{count} times ({pct}%)",
+    "tagStats.avgChange": "Avg change: {change}kg",
+    "tagStats.none": "No tagged entries",
   },
 };
 
