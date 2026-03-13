@@ -2512,7 +2512,7 @@ function renderAICoach() {
     </section>`;
   }
 
-  const gradeColors = { excellent: "var(--ok)", good: "#22c55e", fair: "var(--warn)", needsWork: "#f97316", critical: "var(--error)" };
+  const gradeColors = { excellent: "var(--ok)", good: "var(--ok)", fair: "var(--warn)", needsWork: "var(--warn)", critical: "var(--error)" };
   const gradeColor = gradeColors[report.grade] || "var(--muted)";
   const scoreAngle = (report.score / 100) * 360;
 
@@ -3180,7 +3180,7 @@ function saveRecordWithWeight(weight, source) {
           if (w.type === "outsideRange") return escHtml(t("validate.outsideRange").replace("{min}", w.min).replace("{max}", w.max));
           return "";
         }).filter(Boolean);
-        container.innerHTML = `<div class="validate-warning-box"><p class="validate-warning-title">${escHtml(t("validate.title"))}</p>${msgs.map((m) => `<p class="validate-warning-msg">${m}</p>`).join("")}<button type="button" class="btn ghost validate-confirm" data-action="confirm-save">${escHtml(t("entry.save"))}</button></div>`;
+        container.innerHTML = `<div class="validate-warning-box"><p class="validate-warning-title">${escHtml(t("validate.title"))}</p>${msgs.map((m) => `<p class="validate-warning-msg">${escHtml(m)}</p>`).join("")}<button type="button" class="btn ghost validate-confirm" data-action="confirm-save">${escHtml(t("entry.save"))}</button></div>`;
         container.style.display = "block";
         validationBypass = true;
         return;

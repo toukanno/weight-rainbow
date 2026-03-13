@@ -2683,9 +2683,11 @@
         pointer-events: auto;
         transform: translateY(0);
       }
-      .scroll-top-btn:hover {
-        opacity: 1;
-        transform: translateY(-2px);
+      @media (hover: hover) {
+        .scroll-top-btn:hover {
+          opacity: 1;
+          transform: translateY(-2px);
+        }
       }
       .scroll-top-btn:active {
         transform: translateY(0);
@@ -5038,7 +5040,7 @@
         }
 
         .calendar-wt {
-          font-size: 10px;
+          font-size: 11px;
         }
 
         .summary-tabs {
