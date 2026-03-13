@@ -1484,6 +1484,34 @@ describe("calcStats edge cases", () => {
     expect(stats.maxWeight).toBe(70);
     expect(stats.change).toBe(0);
   });
+
+  it("computes min, max, avg, change for multiple records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72 },
+      { dt: "2025-01-02", wt: 70 },
+      { dt: "2025-01-03", wt: 74 },
+      { dt: "2025-01-04", wt: 71 },
+    ];
+    const stats = calcStats(records);
+    expect(stats.latestWeight).toBe(71);
+    expect(stats.minWeight).toBe(70);
+    expect(stats.maxWeight).toBe(74);
+    expect(stats.change).toBe(-1);
+    expect(stats.avgWeight).toBe(71.8);
+    expect(stats.latestDate).toBe("2025-01-04");
+  });
+
+  it("calculates BMI when height provided", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    const stats = calcStats(records, { heightCm: 175 });
+    expect(stats.latestBMI).toBeCloseTo(22.86, 1);
+  });
+
+  it("returns null BMI without height", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    const stats = calcStats(records);
+    expect(stats.latestBMI).toBeNull();
+  });
 });
 
 describe("parseCSVImport edge cases", () => {

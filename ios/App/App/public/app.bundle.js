@@ -24675,6 +24675,10 @@ async function shareChart() {
   if (!canvas) return;
   try {
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) {
+      setStatus(t("share.error"), "error");
+      return;
+    }
     if (navigator.share && navigator.canShare) {
       const file = new File([blob], "weight-chart.png", { type: "image/png" });
       const shareData = { files: [file] };
@@ -24824,6 +24828,7 @@ function drawChart() {
   context.scale(dpr, dpr);
   const width = rect.width;
   const height = rect.height;
+  if (width < 1 || height < 1) return;
   const cs = getComputedStyle(document.body);
   const isMidnight = state.settings.theme === "midnight";
   let chartRecords = state.records;
@@ -24852,9 +24857,9 @@ function drawChart() {
   const toX = (index) => padX + index / Math.max(chartRecords.length - 1, 1) * (width - padX * 2);
   const toY = (weight) => height - padY - (weight - min) / range * (height - padY * 2);
   const gradient = context.createLinearGradient(0, 0, width, height);
-  gradient.addColorStop(0, cs.getPropertyValue("--accent"));
-  gradient.addColorStop(0.5, cs.getPropertyValue("--accent-2"));
-  gradient.addColorStop(1, cs.getPropertyValue("--accent-3"));
+  gradient.addColorStop(0, cs.getPropertyValue("--accent").trim() || "#ff5f6d");
+  gradient.addColorStop(0.5, cs.getPropertyValue("--accent-2").trim() || "#7c3aed");
+  gradient.addColorStop(1, cs.getPropertyValue("--accent-3").trim() || "#0ea5e9");
   context.strokeStyle = isMidnight ? "rgba(139,146,176,0.14)" : "rgba(120,130,180,0.18)";
   context.lineWidth = 1;
   for (let index = 0; index < 5; index += 1) {
@@ -24908,7 +24913,7 @@ function drawChart() {
   });
   context.stroke();
   const fillGradient = context.createLinearGradient(0, 0, 0, height);
-  fillGradient.addColorStop(0, cs.getPropertyValue("--accent").trim() + "30");
+  fillGradient.addColorStop(0, (cs.getPropertyValue("--accent").trim() || "#ff5f6d") + "30");
   fillGradient.addColorStop(1, "transparent");
   context.fillStyle = fillGradient;
   context.beginPath();
