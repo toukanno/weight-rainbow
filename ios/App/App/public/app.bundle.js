@@ -3645,7 +3645,7 @@ var translations = {
     "camera.cancel": "\u30AD\u30E3\u30F3\u30BB\u30EB",
     "camera.photo": "\u30D5\u30A9\u30C8\u30E9\u30A4\u30D6\u30E9\u30EA",
     "camera.picture": "\u30AB\u30E1\u30E9",
-    "record.dailyLimit": "1\u65E510\u56DE\u307E\u3067\u4F53\u91CD\u3092\u8A18\u9332\u3067\u304D\u307E\u3059\uFF08\u540C\u65E5\u306F\u4E0A\u66F8\u304D\uFF09",
+    "record.dailyLimit": "1\u65E51\u56DE\u8A18\u9332\u3067\u304D\u307E\u3059\uFF08\u540C\u65E5\u306F\u4E0A\u66F8\u304D\uFF09",
     "entry.note": "\u30E1\u30E2",
     "entry.noteHint": "\u98DF\u4E8B\u30FB\u904B\u52D5\u306A\u3069\uFF08100\u6587\u5B57\u307E\u3067\uFF09",
     "rate.title": "\u9031\u9593\u30DA\u30FC\u30B9",
@@ -4054,7 +4054,8 @@ var translations = {
     "scenario.moderate": "\u6A19\u6E96",
     "scenario.aggressive": "\u7A4D\u6975\u7684",
     "scenario.weeks": "{weeks}\u9031\u9593",
-    "scenario.perWeek": "/\u9031"
+    "scenario.perWeek": "/\u9031",
+    "a11y.skipToEntry": "\u5165\u529B\u30D5\u30A9\u30FC\u30E0\u3078\u30B9\u30AD\u30C3\u30D7"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4434,7 +4435,7 @@ var translations = {
     "camera.cancel": "Cancel",
     "camera.photo": "Photo Library",
     "camera.picture": "Camera",
-    "record.dailyLimit": "Up to 10 weight entries per day (same date is overwritten)",
+    "record.dailyLimit": "One entry per day (same date is overwritten)",
     "rate.title": "Weekly Rate",
     "rate.value": "{rate}kg/week",
     "rate.period": "{change}kg over {days} days",
@@ -4841,7 +4842,8 @@ var translations = {
     "scenario.moderate": "Moderate",
     "scenario.aggressive": "Aggressive",
     "scenario.weeks": "{weeks} weeks",
-    "scenario.perWeek": "/wk"
+    "scenario.perWeek": "/wk",
+    "a11y.skipToEntry": "Skip to entry form"
   }
 };
 function createTranslator(language) {
@@ -25639,6 +25641,7 @@ function render() {
     const selectedDate = state.form.date || todayLocal();
     const existingRecord = state.records.find((r) => r.dt === selectedDate);
     app.innerHTML = `
+    <a href="#entrySection" class="skip-link">${t("a11y.skipToEntry")}</a>
     <main class="app-shell">
       <section class="hero">
         <div class="hero-top">
@@ -25755,7 +25758,7 @@ function render() {
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel" id="entrySection">
             <div class="section-header">
               <div>
                 <h2>${t("section.entry")}</h2>

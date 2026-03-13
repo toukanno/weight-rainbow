@@ -375,7 +375,7 @@ export const translations = {
     "camera.cancel": "キャンセル",
     "camera.photo": "フォトライブラリ",
     "camera.picture": "カメラ",
-    "record.dailyLimit": "1日10回まで体重を記録できます（同日は上書き）",
+    "record.dailyLimit": "1日1回記録できます（同日は上書き）",
     "entry.note": "メモ",
     "entry.noteHint": "食事・運動など（100文字まで）",
     "rate.title": "週間ペース",
@@ -772,6 +772,7 @@ export const translations = {
     "scenario.aggressive": "積極的",
     "scenario.weeks": "{weeks}週間",
     "scenario.perWeek": "/週",
+    "a11y.skipToEntry": "入力フォームへスキップ",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1151,7 +1152,7 @@ export const translations = {
     "camera.cancel": "Cancel",
     "camera.photo": "Photo Library",
     "camera.picture": "Camera",
-    "record.dailyLimit": "Up to 10 weight entries per day (same date is overwritten)",
+    "record.dailyLimit": "One entry per day (same date is overwritten)",
     "rate.title": "Weekly Rate",
     "rate.value": "{rate}kg/week",
     "rate.period": "{change}kg over {days} days",
@@ -1546,6 +1547,7 @@ export const translations = {
     "scenario.aggressive": "Aggressive",
     "scenario.weeks": "{weeks} weeks",
     "scenario.perWeek": "/wk",
+    "a11y.skipToEntry": "Skip to entry form",
   },
 };
 
