@@ -526,6 +526,16 @@ export function filterRecords(records, query) {
   });
 }
 
+export function calcSourceBreakdown(records) {
+  if (!records.length) return null;
+  const counts = {};
+  for (const r of records) {
+    const src = r.source || "manual";
+    counts[src] = (counts[src] || 0) + 1;
+  }
+  return counts;
+}
+
 export function filterRecordsByDateRange(records, fromDate, toDate) {
   if (!fromDate && !toDate) return records;
   return records.filter((r) => {

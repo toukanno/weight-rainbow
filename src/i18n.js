@@ -307,6 +307,8 @@ export const translations = {
     "records.from": "開始日",
     "records.to": "終了日",
     "records.clearRange": "クリア",
+    "source.breakdown": "入力方法の内訳",
+    "source.count": "{count}件",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -616,6 +618,8 @@ export const translations = {
     "records.from": "From",
     "records.to": "To",
     "records.clearRange": "Clear",
+    "source.breakdown": "Input Method Breakdown",
+    "source.count": "{count} records",
   },
 };
 

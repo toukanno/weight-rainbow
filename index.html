@@ -718,6 +718,29 @@
         font-weight: 700;
       }
 
+      .source-breakdown {
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+      }
+      .source-breakdown-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .source-chip {
+        font-size: 0.75rem;
+        padding: 3px 10px;
+        border-radius: 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--text);
+      }
+      .source-chip strong {
+        color: var(--accent);
+      }
+
       .record-date-range {
         margin-top: 8px;
       }
@@ -1944,6 +1967,12 @@
 
       body[data-theme="midnight"] .tag-quick {
         background: linear-gradient(135deg, color-mix(in srgb, #fbbf24 18%, #1e2337), color-mix(in srgb, #f87171 14%, #1e2337));
+      }
+
+      body[data-theme="midnight"] .source-chip {
+        background: rgba(30, 35, 55, 0.6);
+        border-color: rgba(139, 146, 176, 0.2);
+        color: #c4c8d8;
       }
 
       body[data-theme="midnight"] .monthly-stats-row {

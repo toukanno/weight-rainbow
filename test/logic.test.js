@@ -28,6 +28,11 @@ import {
   toggleNoteTag,
   NOTE_TAGS,
   filterRecordsByDateRange,
+  calcSourceBreakdown,
+  normalizeNumericInput,
+  pickWeightCandidate,
+  calcAchievements,
+  calcWeightComparison,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -778,5 +783,117 @@ describe("filterRecordsByDateRange", () => {
     expect(result).toHaveLength(2);
     expect(result[0].dt).toBe("2025-01-15");
     expect(result[1].dt).toBe("2025-02-01");
+  });
+});
+
+describe("calcSourceBreakdown", () => {
+  it("returns null for empty records", () => {
+    expect(calcSourceBreakdown([])).toBeNull();
+  });
+
+  it("counts records by source", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, source: "manual" },
+      { dt: "2025-01-02", wt: 69, source: "manual" },
+      { dt: "2025-01-03", wt: 68, source: "voice" },
+      { dt: "2025-01-04", wt: 67, source: "quick" },
+    ];
+    const result = calcSourceBreakdown(records);
+    expect(result).toEqual({ manual: 2, voice: 1, quick: 1 });
+  });
+
+  it("defaults missing source to manual", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    const result = calcSourceBreakdown(records);
+    expect(result).toEqual({ manual: 1 });
+  });
+});
+
+describe("normalizeNumericInput", () => {
+  it("converts full-width digits", () => {
+    expect(normalizeNumericInput("６５．４")).toBe("65.4");
+  });
+
+  it("normalizes various decimal separators", () => {
+    expect(normalizeNumericInput("65，4")).toBe("65.4");
+    expect(normalizeNumericInput("65,4")).toBe("65.4");
+  });
+
+  it("handles null/undefined", () => {
+    expect(normalizeNumericInput(null)).toBe("");
+    expect(normalizeNumericInput(undefined)).toBe("");
+  });
+});
+
+describe("pickWeightCandidate", () => {
+  it("returns null for empty candidates", () => {
+    expect(pickWeightCandidate([])).toBeNull();
+  });
+
+  it("returns first candidate without fallback", () => {
+    expect(pickWeightCandidate([65.5, 70.0])).toBe(65.5);
+  });
+
+  it("picks closest to fallback weight", () => {
+    expect(pickWeightCandidate([55.0, 65.5, 70.0], 64.0)).toBe(65.5);
+  });
+});
+
+describe("calcAchievements", () => {
+  it("returns empty for no records", () => {
+    expect(calcAchievements([], 0, null)).toEqual([]);
+  });
+
+  it("returns record count milestone", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    const achievements = calcAchievements(records, 0, null);
+    expect(achievements.some((a) => a.id === "records_1")).toBe(true);
+  });
+
+  it("returns streak milestones", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    const achievements = calcAchievements(records, 7, null);
+    expect(achievements.some((a) => a.id === "streak_7")).toBe(true);
+    expect(achievements.some((a) => a.id === "streak_3")).toBe(true);
+  });
+
+  it("returns weight loss milestones", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-02-01", wt: 72 },
+    ];
+    const achievements = calcAchievements(records, 0, null);
+    expect(achievements.some((a) => a.id === "loss_3")).toBe(true);
+    expect(achievements.some((a) => a.id === "loss_1")).toBe(true);
+  });
+
+  it("returns goal achieved", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-02-01", wt: 65 },
+    ];
+    const achievements = calcAchievements(records, 0, 66);
+    expect(achievements.some((a) => a.id === "goal_achieved")).toBe(true);
+  });
+});
+
+describe("calcWeightComparison", () => {
+  it("returns null with less than 2 records", () => {
+    expect(calcWeightComparison([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns comparison data for sufficient records", () => {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const weekAgo = new Date(now - 8 * 86400000).toISOString().slice(0, 10);
+    const records = [
+      { dt: weekAgo, wt: 72 },
+      { dt: today, wt: 70 },
+    ];
+    const result = calcWeightComparison(records);
+    expect(result).not.toBeNull();
+    if (result?.week) {
+      expect(result.week.diff).toBe(-2);
+    }
   });
 });

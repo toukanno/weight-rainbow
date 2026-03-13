@@ -595,6 +595,7 @@ function render() {
                 </div>
               </div>`}
             </div>
+            ${renderSourceBreakdown()}
             <div class="export-grid">
               <button type="button" class="btn secondary" data-action="export-excel">📊 ${t("export.excel")}</button>
               <button type="button" class="btn secondary" data-action="export-csv">📄 ${t("export.csv")}</button>
@@ -923,6 +924,25 @@ function renderRecord(record, prevRecord, badge) {
         ${record.note ? `<div class="helper record-note">📝 ${formatNote(record.note)}</div>` : ""}
       </div>
       <button type="button" class="record-delete" data-delete-date="${escapeAttr(record.dt)}" aria-label="${t("records.delete")} ${escapeAttr(record.dt)} ${record.wt.toFixed(1)}kg">${t("records.delete")}</button>
+    </div>
+  `;
+}
+
+function renderSourceBreakdown() {
+  const breakdown = calcSourceBreakdown(state.records);
+  if (!breakdown) return "";
+  const sourceIcons = { manual: "✏️", voice: "🎤", photo: "📷", quick: "⚡" };
+  const entries = Object.entries(breakdown).sort((a, b) => b[1] - a[1]);
+  return `
+    <div class="source-breakdown">
+      <div class="helper">${t("source.breakdown")}</div>
+      <div class="source-breakdown-row">
+        ${entries.map(([src, count]) => {
+          const icon = sourceIcons[src] || "📊";
+          const pct = Math.round((count / state.records.length) * 100);
+          return `<span class="source-chip"><span class="source-icon">${icon}</span> ${t("entry.source." + src)} <strong>${count}</strong> (${pct}%)</span>`;
+        }).join("")}
+      </div>
     </div>
   `;
 }
