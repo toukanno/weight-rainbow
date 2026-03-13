@@ -1512,6 +1512,39 @@
         border-bottom: none;
       }
 
+      .regression-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .regression-main {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 6px;
+      }
+      .regression-dir { font-size: 1rem; }
+      .regression-rate { font-size: 0.82rem; color: var(--text); }
+      .regression-r2 { margin-top: 8px; }
+      .regression-r2-bar-track {
+        height: 6px;
+        border-radius: 3px;
+        background: color-mix(in srgb, var(--text) 15%, transparent);
+        overflow: hidden;
+      }
+      .regression-r2-bar-fill {
+        height: 100%;
+        border-radius: 3px;
+        transition: width 0.3s ease;
+      }
+      .regression-r2-info {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.78rem;
+        color: var(--text);
+        margin-top: 4px;
+      }
+
       .analytics-toggle-section {
         margin-top: 14px;
         padding-top: 12px;

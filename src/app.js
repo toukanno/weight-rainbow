@@ -71,6 +71,7 @@ import {
   calcWeightDistribution,
   calcDayOfWeekChange,
   calcPersonalRecords,
+  calcWeightRegression,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -174,8 +175,12 @@ if (window.matchMedia) {
 }
 
 function loadState() {
+  const rawRecords = safeParse(STORAGE_KEYS.records, []);
+  const records = Array.isArray(rawRecords)
+    ? rawRecords.filter((r) => r && r.dt && Number.isFinite(r.wt))
+    : [];
   return {
-    records: safeParse(STORAGE_KEYS.records, []),
+    records,
     profile: { ...createDefaultProfile(), ...safeParse(STORAGE_KEYS.profile, {}) },
     settings: { ...createDefaultSettings(), ...safeParse(STORAGE_KEYS.settings, {}) },
     form: {
@@ -696,6 +701,7 @@ function render() {
                 ${renderWeightDistribution()}
                 ${renderDayOfWeekChange()}
                 ${renderPersonalRecords()}
+                ${renderWeightRegression()}
               </div>
               ` : ""}
             </div>
@@ -1527,6 +1533,33 @@ function renderPersonalRecords() {
       <div class="helper">${t("pr.title")}</div>
       ${items.join("")}
       <div class="helper hint-small">${t("pr.hint")}</div>
+    </div>
+  `;
+}
+
+function renderWeightRegression() {
+  const reg = calcWeightRegression(state.records);
+  if (!reg) return "";
+  const dirColor = reg.direction === "losing" ? "var(--ok, #10b981)" : reg.direction === "gaining" ? "var(--warn, #f59e0b)" : "var(--text)";
+  const fitColor = reg.fit === "strong" ? "var(--ok, #10b981)" : reg.fit === "moderate" ? "var(--warn, #f59e0b)" : "var(--text)";
+  const r2Pct = Math.round(reg.r2 * 100);
+  return `
+    <div class="regression-section">
+      <div class="helper">${t("regression.title")}</div>
+      <div class="regression-main">
+        <span class="regression-dir" style="color:${dirColor};font-weight:700;">${t("regression." + reg.direction)}</span>
+        <span class="regression-rate">${t("regression.rate").replace("{rate}", reg.weeklyRate)}</span>
+      </div>
+      <div class="regression-r2">
+        <div class="regression-r2-bar-track">
+          <div class="regression-r2-bar-fill" style="width:${r2Pct}%;background:${fitColor};"></div>
+        </div>
+        <div class="regression-r2-info">
+          <span>${t("regression.r2").replace("{r2}", reg.r2)}</span>
+          <span style="color:${fitColor};">${t("regression." + reg.fit)}</span>
+        </div>
+      </div>
+      <div class="helper hint-small">${t("regression.hint")}</div>
     </div>
   `;
 }

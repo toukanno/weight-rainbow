@@ -68,6 +68,7 @@ import {
   calcWeightDistribution,
   calcDayOfWeekChange,
   calcPersonalRecords,
+  calcWeightRegression,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -4475,5 +4476,147 @@ describe("validateProfile edge cases", () => {
   it("rejects age above max", () => {
     const result = validateProfile({ name: "", heightCm: "", age: "121", gender: "" });
     expect(result.valid).toBe(false);
+  });
+});
+
+describe("calcWeightRegression", () => {
+  it("returns null with fewer than 5 records", () => {
+    const records = Array.from({ length: 3 }, (_, i) => ({ dt: `2025-01-${String(i + 1).padStart(2, "0")}`, wt: 70 }));
+    expect(calcWeightRegression(records)).toBeNull();
+  });
+
+  it("detects losing trend for decreasing weights", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 75 - i * 0.5,
+    }));
+    const result = calcWeightRegression(records);
+    expect(result).not.toBeNull();
+    expect(result.direction).toBe("losing");
+    expect(result.slope).toBeLessThan(0);
+    expect(result.weeklyRate).toBeLessThan(0);
+  });
+
+  it("returns high R² for perfectly linear data", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 80 - i * 0.3,
+    }));
+    const result = calcWeightRegression(records);
+    expect(result).not.toBeNull();
+    expect(result.r2).toBeGreaterThan(0.95);
+    expect(result.fit).toBe("strong");
+  });
+
+  it("detects gaining trend", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i * 0.4,
+    }));
+    const result = calcWeightRegression(records);
+    expect(result).not.toBeNull();
+    expect(result.direction).toBe("gaining");
+  });
+});
+
+describe("buildRecord edge cases", () => {
+  it("truncates note to 100 characters", () => {
+    const longNote = "x".repeat(150);
+    const record = buildRecord({ date: "2025-01-01", weight: 70, profile: { heightCm: 170 }, source: "manual", note: longNote });
+    expect(record.note.length).toBe(100);
+  });
+
+  it("handles null note gracefully", () => {
+    const record = buildRecord({ date: "2025-01-01", weight: 70, profile: { heightCm: 170 }, source: "manual", note: null });
+    expect(record.note).toBe("");
+  });
+
+  it("calculates BMI when height provided", () => {
+    const record = buildRecord({ date: "2025-01-01", weight: 70, profile: { heightCm: 170 }, source: "manual" });
+    expect(record.bmi).toBeCloseTo(24.2, 1);
+  });
+
+  it("sets bmi null when no height", () => {
+    const record = buildRecord({ date: "2025-01-01", weight: 70, profile: { heightCm: "" }, source: "manual" });
+    expect(record.bmi).toBeNull();
+  });
+});
+
+describe("exportRecordsToCSV edge cases", () => {
+  it("produces valid CSV with header", () => {
+    const records = [{ dt: "2025-01-01", wt: 70, bmi: 24.2, bf: null, source: "manual", note: "" }];
+    const csv = exportRecordsToCSV(records);
+    const lines = csv.split("\n");
+    expect(lines.length).toBe(2);
+    expect(lines[0]).toContain(",");
+  });
+
+  it("escapes commas in note", () => {
+    const records = [{ dt: "2025-01-01", wt: 70, bmi: null, bf: null, source: "manual", note: "hello, world" }];
+    const csv = exportRecordsToCSV(records);
+    expect(csv).toContain('"hello, world"');
+  });
+
+  it("handles empty records", () => {
+    const csv = exportRecordsToCSV([]);
+    const lines = csv.split("\n");
+    expect(lines.length).toBe(1);
+  });
+});
+
+describe("csvEscape edge cases", () => {
+  it("wraps strings with commas in quotes", () => {
+    expect(csvEscape("a,b")).toBe('"a,b"');
+  });
+
+  it("escapes double quotes", () => {
+    expect(csvEscape('say "hello"')).toBe('"say ""hello"""');
+  });
+
+  it("handles numbers", () => {
+    expect(csvEscape(42)).toBe("42");
+  });
+
+  it("handles null/undefined", () => {
+    expect(csvEscape(null)).toBe("");
+    expect(csvEscape(undefined)).toBe("");
+  });
+});
+
+describe("calcLongestStreak edge cases", () => {
+  it("returns 0 for empty records", () => {
+    expect(calcLongestStreak([])).toBe(0);
+  });
+
+  it("returns 1 for single record", () => {
+    expect(calcLongestStreak([{ dt: "2025-01-01", wt: 70 }])).toBe(1);
+  });
+
+  it("counts consecutive days", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70 },
+      { dt: "2025-01-03", wt: 70 },
+      { dt: "2025-01-05", wt: 70 },
+      { dt: "2025-01-06", wt: 70 },
+    ];
+    expect(calcLongestStreak(records)).toBe(3);
+  });
+});
+
+describe("calcSourceBreakdown edge cases", () => {
+  it("returns null for empty records", () => {
+    expect(calcSourceBreakdown([])).toBeNull();
+  });
+
+  it("counts sources correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, source: "manual" },
+      { dt: "2025-01-02", wt: 69, source: "manual" },
+      { dt: "2025-01-03", wt: 68, source: "voice" },
+    ];
+    const result = calcSourceBreakdown(records);
+    expect(result.manual).toBe(2);
+    expect(result.voice).toBe(1);
   });
 });

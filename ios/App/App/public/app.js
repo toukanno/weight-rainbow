@@ -2047,6 +2047,40 @@ function calcPersonalRecords(records) {
     latestDate: records[records.length - 1].dt
   };
 }
+function calcWeightRegression(records) {
+  if (records.length < 5) return null;
+  const startDate = /* @__PURE__ */ new Date(records[0].dt + "T00:00:00");
+  const points = records.map((r) => ({
+    x: (/* @__PURE__ */ new Date(r.dt + "T00:00:00") - startDate) / 864e5,
+    y: r.wt
+  }));
+  const n = points.length;
+  const sumX = points.reduce((s, p) => s + p.x, 0);
+  const sumY = points.reduce((s, p) => s + p.y, 0);
+  const sumXY = points.reduce((s, p) => s + p.x * p.y, 0);
+  const sumX2 = points.reduce((s, p) => s + p.x * p.x, 0);
+  const denom = n * sumX2 - sumX * sumX;
+  if (denom === 0) return null;
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  const meanY = sumY / n;
+  const ssTotal = points.reduce((s, p) => s + (p.y - meanY) ** 2, 0);
+  const ssResidual = points.reduce((s, p) => s + (p.y - (slope * p.x + intercept)) ** 2, 0);
+  const r2 = ssTotal > 0 ? Math.round((1 - ssResidual / ssTotal) * 1e3) / 1e3 : 0;
+  const totalDays = points[points.length - 1].x;
+  const weeklyRate = Math.round(slope * 7 * 100) / 100;
+  const direction = slope < -0.01 ? "losing" : slope > 0.01 ? "gaining" : "maintaining";
+  const fit = r2 >= 0.7 ? "strong" : r2 >= 0.3 ? "moderate" : "weak";
+  return {
+    slope: Math.round(slope * 1e3) / 1e3,
+    intercept: Math.round(intercept * 10) / 10,
+    r2,
+    weeklyRate,
+    direction,
+    fit,
+    totalDays: Math.round(totalDays)
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -2576,7 +2610,17 @@ var translations = {
     "pr.best7": "\u6700\u826F7\u65E5\u9593: {change}kg\uFF08{from}\u301C\uFF09",
     "pr.totalChange": "\u521D\u56DE\u304B\u3089\u306E\u5909\u5316: {change}kg",
     "pr.totalRecords": "\u7DCF\u8A18\u9332\u6570: {count}\u4EF6",
-    "pr.hint": "\u3042\u306A\u305F\u306E\u8A18\u9332\u306E\u30CF\u30A4\u30E9\u30A4\u30C8"
+    "pr.hint": "\u3042\u306A\u305F\u306E\u8A18\u9332\u306E\u30CF\u30A4\u30E9\u30A4\u30C8",
+    "regression.title": "\u4F53\u91CD\u30C8\u30EC\u30F3\u30C9\u56DE\u5E30\u5206\u6790",
+    "regression.rate": "\u9031\u9593\u5909\u5316\u7387: {rate}kg/\u9031",
+    "regression.r2": "\u6C7A\u5B9A\u4FC2\u6570 R\xB2: {r2}",
+    "regression.losing": "\u6E1B\u5C11\u50BE\u5411",
+    "regression.gaining": "\u5897\u52A0\u50BE\u5411",
+    "regression.maintaining": "\u7DAD\u6301\u50BE\u5411",
+    "regression.strong": "\u4E00\u8CAB\u3057\u305F\u50BE\u5411",
+    "regression.moderate": "\u3084\u3084\u5909\u52D5\u3042\u308A",
+    "regression.weak": "\u3070\u3089\u3064\u304D\u304C\u5927\u304D\u3044",
+    "regression.hint": "\u5168\u8A18\u9332\u3092\u901A\u3058\u305F\u4F53\u91CD\u306E\u4E00\u8CAB\u6027\u3092\u5206\u6790"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3104,7 +3148,17 @@ var translations = {
     "pr.best7": "Best 7 days: {change}kg (from {from})",
     "pr.totalChange": "Total change: {change}kg",
     "pr.totalRecords": "Total records: {count}",
-    "pr.hint": "Your record highlights"
+    "pr.hint": "Your record highlights",
+    "regression.title": "Weight Trend Regression",
+    "regression.rate": "Weekly rate: {rate}kg/week",
+    "regression.r2": "R\xB2 score: {r2}",
+    "regression.losing": "Losing trend",
+    "regression.gaining": "Gaining trend",
+    "regression.maintaining": "Maintaining",
+    "regression.strong": "Consistent trend",
+    "regression.moderate": "Some variation",
+    "regression.weak": "High variability",
+    "regression.hint": "Analyzes consistency of your weight trend over all records"
   }
 };
 function createTranslator(language) {
@@ -23707,8 +23761,10 @@ if (window.matchMedia) {
   applySystemTheme();
 }
 function loadState() {
+  const rawRecords = safeParse(STORAGE_KEYS.records, []);
+  const records = Array.isArray(rawRecords) ? rawRecords.filter((r) => r && r.dt && Number.isFinite(r.wt)) : [];
   return {
-    records: safeParse(STORAGE_KEYS.records, []),
+    records,
     profile: { ...createDefaultProfile(), ...safeParse(STORAGE_KEYS.profile, {}) },
     settings: { ...createDefaultSettings(), ...safeParse(STORAGE_KEYS.settings, {}) },
     form: {
@@ -24189,6 +24245,7 @@ function render() {
                 ${renderWeightDistribution()}
                 ${renderDayOfWeekChange()}
                 ${renderPersonalRecords()}
+                ${renderWeightRegression()}
               </div>
               ` : ""}
             </div>
@@ -24988,6 +25045,32 @@ function renderPersonalRecords() {
       <div class="helper">${t("pr.title")}</div>
       ${items.join("")}
       <div class="helper hint-small">${t("pr.hint")}</div>
+    </div>
+  `;
+}
+function renderWeightRegression() {
+  const reg = calcWeightRegression(state.records);
+  if (!reg) return "";
+  const dirColor = reg.direction === "losing" ? "var(--ok, #10b981)" : reg.direction === "gaining" ? "var(--warn, #f59e0b)" : "var(--text)";
+  const fitColor = reg.fit === "strong" ? "var(--ok, #10b981)" : reg.fit === "moderate" ? "var(--warn, #f59e0b)" : "var(--text)";
+  const r2Pct = Math.round(reg.r2 * 100);
+  return `
+    <div class="regression-section">
+      <div class="helper">${t("regression.title")}</div>
+      <div class="regression-main">
+        <span class="regression-dir" style="color:${dirColor};font-weight:700;">${t("regression." + reg.direction)}</span>
+        <span class="regression-rate">${t("regression.rate").replace("{rate}", reg.weeklyRate)}</span>
+      </div>
+      <div class="regression-r2">
+        <div class="regression-r2-bar-track">
+          <div class="regression-r2-bar-fill" style="width:${r2Pct}%;background:${fitColor};"></div>
+        </div>
+        <div class="regression-r2-info">
+          <span>${t("regression.r2").replace("{r2}", reg.r2)}</span>
+          <span style="color:${fitColor};">${t("regression." + reg.fit)}</span>
+        </div>
+      </div>
+      <div class="helper hint-small">${t("regression.hint")}</div>
     </div>
   `;
 }
