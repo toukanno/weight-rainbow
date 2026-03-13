@@ -25,6 +25,16 @@ export const HEIGHT_RANGE = { min: 80, max: 250 };
 export const AGE_RANGE = { min: 1, max: 120 };
 export const BODY_FAT_RANGE = { min: 1, max: 70 };
 
+function localDateStr(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function daysAgoStr(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return localDateStr(d);
+}
+
 export function normalizeNumericInput(value) {
   return String(value ?? "")
     .trim()
@@ -238,7 +248,7 @@ export function calcWeightComparison(records) {
   const result = {};
 
   const findRecordNearDate = (targetDate) => {
-    const target = targetDate.toISOString().slice(0, 10);
+    const target = localDateStr(targetDate);
     // Find closest record on or before target date
     let closest = null;
     for (const r of records) {
@@ -267,8 +277,10 @@ export function calcWeightComparison(records) {
 
 export function calcDailyDiff(records) {
   if (records.length < 2) return null;
-  const today = new Date().toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const today = localDateStr();
+  const yd = new Date();
+  yd.setDate(yd.getDate() - 1);
+  const yesterday = localDateStr(yd);
   const todayRecord = records.find((r) => r.dt === today);
   const yesterdayRecord = records.find((r) => r.dt === yesterday);
   if (!todayRecord || !yesterdayRecord) return null;
@@ -296,7 +308,7 @@ export function calcStreak(records) {
   for (let i = 0; i < 365; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = localDateStr(d);
     if (dates.has(dateStr)) {
       streak++;
     } else {
@@ -310,7 +322,7 @@ export function calcStreak(records) {
 
 export function calcWeightTrend(records, days = 7) {
   if (records.length < 2) return null;
-  const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const cutoff = daysAgoStr(days);
   const recent = records.filter((r) => r.dt >= cutoff);
   if (recent.length < 2) return null;
   const first = recent[0].wt;
@@ -327,7 +339,7 @@ export function calcGoalPrediction(records, goalWeight) {
   if (latestWeight <= goalWeight) return { achieved: true, days: 0 };
 
   // Use last 14 days of data to calculate average daily change
-  const cutoff = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+  const cutoff = daysAgoStr(14);
   const recent = records.filter((r) => r.dt >= cutoff);
   if (recent.length < 2) return { achieved: false, insufficient: true };
 
@@ -340,12 +352,14 @@ export function calcGoalPrediction(records, goalWeight) {
 
   const remaining = latestWeight - goalWeight;
   const days = Math.ceil(remaining / Math.abs(dailyChange));
-  const predictedDate = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+  const pd = new Date();
+  pd.setDate(pd.getDate() + days);
+  const predictedDate = localDateStr(pd);
   return { achieved: false, days, predictedDate };
 }
 
 export function calcPeriodSummary(records, days) {
-  const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const cutoff = daysAgoStr(days);
   const filtered = records.filter((r) => r.dt >= cutoff);
   if (!filtered.length) return null;
   const weights = filtered.map((r) => r.wt);
@@ -487,8 +501,8 @@ export function calcInsight(records) {
   thisWeekStart.setDate(now.getDate() - now.getDay());
   const lastWeekStart = new Date(thisWeekStart);
   lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-  const thisWeekStr = thisWeekStart.toISOString().slice(0, 10);
-  const lastWeekStr = lastWeekStart.toISOString().slice(0, 10);
+  const thisWeekStr = localDateStr(thisWeekStart);
+  const lastWeekStr = localDateStr(lastWeekStart);
 
   const thisWeek = records.filter((r) => r.dt >= thisWeekStr);
   const lastWeek = records.filter((r) => r.dt >= lastWeekStr && r.dt < thisWeekStr);
@@ -555,7 +569,7 @@ export function calcSourceBreakdown(records) {
 
 export function calcWeightStability(records, days = 7) {
   if (records.length < 3) return null;
-  const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const cutoff = daysAgoStr(days);
   const recent = records.filter((r) => r.dt >= cutoff);
   if (recent.length < 3) return null;
   const weights = recent.map((r) => r.wt);
@@ -679,6 +693,36 @@ export function calcBodyFatStats(records) {
   const change = Math.round((latest - first) * 10) / 10;
 
   return { latest, first, min, max, avg, change, count: withBF.length };
+}
+
+export function calcDaysSinceLastRecord(records) {
+  if (!records.length) return null;
+  const lastDate = records[records.length - 1].dt;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const last = new Date(lastDate + "T00:00:00");
+  const diffMs = today - last;
+  return Math.max(0, Math.floor(diffMs / 86400000));
+}
+
+export function calcLongestStreak(records) {
+  if (!records.length) return 0;
+  const dates = new Set(records.map((r) => r.dt));
+  const sorted = [...dates].sort();
+  let longest = 1;
+  let current = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(sorted[i - 1] + "T00:00:00");
+    const curr = new Date(sorted[i] + "T00:00:00");
+    const diffDays = (curr - prev) / 86400000;
+    if (diffDays === 1) {
+      current++;
+      if (current > longest) longest = current;
+    } else {
+      current = 1;
+    }
+  }
+  return longest;
 }
 
 export function exportRecordsToCSV(records) {

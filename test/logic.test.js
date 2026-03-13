@@ -39,6 +39,8 @@ import {
   exportRecordsToCSV,
   parseCSVImport,
   calcBodyFatStats,
+  calcDaysSinceLastRecord,
+  calcLongestStreak,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -1257,5 +1259,57 @@ describe("calcBodyFatStats", () => {
     const result = calcBodyFatStats(records);
     expect(result.count).toBe(2);
     expect(result.avg).toBe(21);
+  });
+});
+
+describe("calcDaysSinceLastRecord", () => {
+  it("returns null for empty records", () => {
+    expect(calcDaysSinceLastRecord([])).toBeNull();
+  });
+
+  it("returns 0 for record today", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const records = [{ dt: today, wt: 70 }];
+    expect(calcDaysSinceLastRecord(records)).toBe(0);
+  });
+
+  it("returns 1 for record yesterday", () => {
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const records = [{ dt: yesterday, wt: 70 }];
+    expect(calcDaysSinceLastRecord(records)).toBe(1);
+  });
+});
+
+describe("calcLongestStreak", () => {
+  it("returns 0 for empty records", () => {
+    expect(calcLongestStreak([])).toBe(0);
+  });
+
+  it("returns 1 for single record", () => {
+    expect(calcLongestStreak([{ dt: "2025-01-01", wt: 70 }])).toBe(1);
+  });
+
+  it("calculates longest streak correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70 },
+      { dt: "2025-01-03", wt: 70 },
+      // gap
+      { dt: "2025-01-10", wt: 70 },
+      { dt: "2025-01-11", wt: 70 },
+    ];
+    expect(calcLongestStreak(records)).toBe(3);
+  });
+
+  it("finds streak even if not at start", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      // gap
+      { dt: "2025-01-10", wt: 70 },
+      { dt: "2025-01-11", wt: 70 },
+      { dt: "2025-01-12", wt: 70 },
+      { dt: "2025-01-13", wt: 70 },
+    ];
+    expect(calcLongestStreak(records)).toBe(4);
   });
 });

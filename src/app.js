@@ -41,6 +41,8 @@ import {
   exportRecordsToCSV,
   parseCSVImport,
   calcBodyFatStats,
+  calcDaysSinceLastRecord,
+  calcLongestStreak,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -145,7 +147,7 @@ function loadState() {
     settings: { ...createDefaultSettings(), ...safeParse(STORAGE_KEYS.settings, {}) },
     form: {
       weight: "",
-      date: new Date().toISOString().slice(0, 10),
+      date: todayLocal(),
       imageName: "",
       pickerInt: 65,
       pickerDec: 0,
@@ -224,6 +226,11 @@ function updateLanguage(language) {
   render();
 }
 
+function todayLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function formatWeight(weight) {
   return `${Number(weight).toFixed(1)}kg`;
 }
@@ -282,10 +289,12 @@ function render() {
   const motivation = getMotivationalMessage(streak, trend, state.records, goalProgress);
   const achievements = calcAchievements(state.records, streak, goalWeight);
   const insight = calcInsight(state.records);
+  const daysSinceLast = calcDaysSinceLastRecord(state.records);
+  const longestStreak = calcLongestStreak(state.records);
   const previewWeightResult = validateWeight(state.form.weight);
   const currentBMI = previewWeightResult.valid && state.profile.heightCm
     ? buildRecord({
-        date: state.form.date || new Date().toISOString().slice(0, 10),
+        date: state.form.date || todayLocal(),
         weight: previewWeightResult.weight,
         profile: state.profile,
         source: activeEntryMode,
@@ -310,6 +319,11 @@ function render() {
               ${streak > 0 ? `<span class="streak-badge${streak >= 7 ? " rainbow" : ""}" title="${t("streak.title")}">${streak >= 7 ? "🌈" : "🔥"} ${streak}${t("streak.days")} ${streak >= 7 ? t("streak.fire") : ""}</span>` : ""}
               ${trend ? `<span class="trend-indicator ${trend}">${trend === "down" ? "📉" : trend === "up" ? "📈" : "➡️"} ${t("trend." + trend)}</span>` : ""}
             </div>
+            ${daysSinceLast !== null ? `<div class="freshness-indicator${daysSinceLast === 0 ? " fresh" : daysSinceLast >= 3 ? " stale" : ""}">
+              ${daysSinceLast === 0 ? t("freshness.today") : daysSinceLast === 1 ? t("freshness.yesterday") : t("freshness.days").replace("{days}", daysSinceLast)}
+              ${daysSinceLast >= 1 ? ` <span class="freshness-nudge">${t("freshness.nudge")}</span>` : ""}
+            </div>` : ""}
+            ${longestStreak >= 3 && longestStreak > streak ? `<div class="helper hint-small">${t("streak.longest").replace("{days}", longestStreak)}</div>` : ""}
             ${motivation ? `<p class="motivation-msg">${motivation}</p>` : ""}
             ${achievements.length ? `<div class="achievement-row">${achievements.map((a) => `<span class="achievement-badge ${a.tier}" title="${t("achievement." + a.id)}" aria-label="${escapeAttr(t("achievement." + a.id))}">${a.icon}</span>`).join("")}</div>` : ""}
           </div>
@@ -1226,8 +1240,13 @@ function bindEvents() {
   app.querySelectorAll("[data-date-shortcut]").forEach((button) => {
     button.addEventListener("click", () => {
       const key = button.dataset.dateShortcut;
-      const d = key === "yesterday" ? new Date(Date.now() - 86400000) : new Date();
-      state.form.date = d.toISOString().slice(0, 10);
+      if (key === "yesterday") {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        state.form.date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      } else {
+        state.form.date = todayLocal();
+      }
       render();
     });
   });
@@ -1443,7 +1462,7 @@ function saveRecordWithWeight(weight, source) {
   }
 
   const record = buildRecord({
-    date: state.form.date || new Date().toISOString().slice(0, 10),
+    date: state.form.date || todayLocal(),
     weight: weightResult.weight,
     profile: profileForRecord,
     source,
@@ -2017,7 +2036,7 @@ function resetData() {
   state.records = [];
   state.form = {
     weight: "",
-    date: new Date().toISOString().slice(0, 10),
+    date: todayLocal(),
     imageName: "",
     pickerInt: 65,
     pickerDec: 0,
@@ -2068,7 +2087,9 @@ function drawChart() {
   let chartRecords = state.records;
   if (chartPeriod !== "all") {
     const days = parseInt(chartPeriod, 10);
-    const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    const cutoff = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     chartRecords = state.records.filter((r) => r.dt >= cutoff);
   }
 
@@ -2240,7 +2261,7 @@ function drawChart() {
   }
 
   // Today marker
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayLocal();
   const todayIdx = chartRecords.findIndex((r) => r.dt === todayStr);
   if (todayIdx >= 0) {
     const tx = toX(todayIdx);
@@ -2422,7 +2443,7 @@ function initReminder() {
 
   reminderTimer = setInterval(() => {
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
+    const todayStr = todayLocal();
     const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
     const targetTime = state.settings.reminderTime || "21:00";
 
