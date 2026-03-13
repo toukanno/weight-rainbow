@@ -3753,6 +3753,8 @@ function undoLastSave() {
   if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
   persist();
   setStatus(t("undo.done"));
+  render();
+  drawChart();
 }
 
 async function preprocessImageForOCR(source) {
@@ -4934,6 +4936,7 @@ async function googleRestore() {
     try { bd = await cr.json(); } catch { throw new Error("drive_error"); }
     if (!bd.records?.length) { setStatus(t("google.noData"), "error"); return; }
     const validBackupRecords = bd.records.filter((r) => r.dt && Number.isFinite(r.wt));
+    if (!validBackupRecords.length) { setStatus(t("google.noData"), "error"); return; }
     if (!window.confirm(t("google.restoreConfirm") + ` (${validBackupRecords.length} ${t("chart.records")})`)) return;
     const prevRecords = [...state.records];
     const prevSettings = { ...state.settings };
