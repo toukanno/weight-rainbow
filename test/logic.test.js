@@ -47,6 +47,7 @@ import {
   calcBMIDistribution,
   calcWeightPercentile,
   calcMovingAverages,
+  calcGoalMilestones,
 } from "../src/logic.js";
 
 describe("validateWeight", () => {
@@ -1900,5 +1901,45 @@ describe("calcBodyFatStats edge cases", () => {
     expect(stats).not.toBeNull();
     expect(stats.change).toBe(0);
     expect(stats.latest).toBe(20.0);
+  });
+});
+
+describe("calcGoalMilestones", () => {
+  it("returns null for empty records", () => {
+    expect(calcGoalMilestones([], 60)).toBeNull();
+  });
+
+  it("returns null when goal is not finite", () => {
+    expect(calcGoalMilestones([{ dt: "2025-01-01", wt: 70 }], NaN)).toBeNull();
+  });
+
+  it("returns null when goal is above start weight", () => {
+    expect(calcGoalMilestones([{ dt: "2025-01-01", wt: 60 }], 70)).toBeNull();
+  });
+
+  it("calculates milestones correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 80 },
+      { dt: "2025-01-10", wt: 72 },
+    ];
+    const milestones = calcGoalMilestones(records, 60);
+    expect(milestones).toHaveLength(4);
+    expect(milestones[0].pct).toBe(25);
+    expect(milestones[0].targetWeight).toBe(75);
+    expect(milestones[0].reached).toBe(true);
+    expect(milestones[1].pct).toBe(50);
+    expect(milestones[1].targetWeight).toBe(70);
+    expect(milestones[1].reached).toBe(false);
+    expect(milestones[3].pct).toBe(100);
+    expect(milestones[3].targetWeight).toBe(60);
+  });
+
+  it("marks all as reached when goal achieved", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 80 },
+      { dt: "2025-02-01", wt: 58 },
+    ];
+    const milestones = calcGoalMilestones(records, 60);
+    expect(milestones.every((m) => m.reached)).toBe(true);
   });
 });

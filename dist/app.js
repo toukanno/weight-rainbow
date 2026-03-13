@@ -1008,6 +1008,19 @@ function calcGoalProgress(records, goalWeight) {
   const remaining = Math.round((latestWeight - goalWeight) * 10) / 10;
   return { percent, remaining };
 }
+function calcGoalMilestones(records, goalWeight) {
+  if (!records.length || !Number.isFinite(goalWeight)) return null;
+  const firstWeight = records[0].wt;
+  const latestWeight = records[records.length - 1].wt;
+  const totalToLose = firstWeight - goalWeight;
+  if (totalToLose <= 0) return null;
+  const checkpoints = [25, 50, 75, 100];
+  return checkpoints.map((pct) => {
+    const targetWeight = firstWeight - totalToLose * pct / 100;
+    const reached = latestWeight <= targetWeight;
+    return { pct, targetWeight: Math.round(targetWeight * 10) / 10, reached };
+  });
+}
 function calcStreak(records) {
   if (!records.length) return 0;
   const dates = new Set(records.map((r) => r.dt));
@@ -1685,6 +1698,8 @@ var translations = {
     "ma.aligned": "\u77ED\u671F\u30FB\u9577\u671F\u30C8\u30EC\u30F3\u30C9\u304C\u307B\u307C\u4E00\u81F4\u3057\u3066\u3044\u307E\u3059",
     "ma.crossDown": "\u{1F4C9} \u6E1B\u5C11\u30B7\u30B0\u30CA\u30EB: \u77ED\u671F\u5E73\u5747\u304C\u9577\u671F\u5E73\u5747\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F",
     "ma.crossUp": "\u{1F4C8} \u5897\u52A0\u30B7\u30B0\u30CA\u30EB: \u77ED\u671F\u5E73\u5747\u304C\u9577\u671F\u5E73\u5747\u3092\u4E0A\u56DE\u308A\u307E\u3057\u305F",
+    "goal.milestone": "{pct}% \u9054\u6210",
+    "goal.milestoneTarget": "\u76EE\u6A19: {weight}kg",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
     "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01\uFF08-{diff}kg\uFF09",
     "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
@@ -2069,6 +2084,8 @@ var translations = {
     "ma.aligned": "Short and long-term trends are aligned",
     "ma.crossDown": "\u{1F4C9} Decrease signal: short-term crossed below long-term",
     "ma.crossUp": "\u{1F4C8} Increase signal: short-term crossed above long-term",
+    "goal.milestone": "{pct}% reached",
+    "goal.milestoneTarget": "Target: {weight}kg",
     "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
@@ -22980,6 +22997,7 @@ function render() {
     const goalWeight = Number(state.settings.goalWeight);
     const goalProgress = calcGoalProgress(state.records, goalWeight);
     const goalPrediction = calcGoalPrediction(state.records, goalWeight);
+    const goalMilestones = calcGoalMilestones(state.records, goalWeight);
     const periodDays = summaryPeriod === "week" ? 7 : 30;
     const periodSummary = calcPeriodSummary(state.records, periodDays);
     const streak = calcStreak(state.records);
@@ -23061,11 +23079,13 @@ function render() {
             ${goalProgress ? `<div class="progress-percent">${goalProgress.percent}%</div>
                 <div class="progress-bar-track" role="progressbar" aria-valuenow="${goalProgress.percent}" aria-valuemin="0" aria-valuemax="100" aria-label="${t("goal.title")}">
                   <div class="progress-bar-fill" style="width: ${goalProgress.percent}%"></div>
+                  ${goalMilestones ? goalMilestones.filter((m) => m.pct < 100).map((m) => `<div class="goal-milestone-marker${m.reached ? " reached" : ""}" style="left:${m.pct}%" title="${t("goal.milestone").replace("{pct}", m.pct)}"></div>`).join("") : ""}
                 </div>
                 <div class="progress-text">
                   <span>${t("goal.progress")}</span>
                   <span>${goalProgress.remaining <= 0 ? t("goal.achieved") : `${t("goal.remaining")}: ${goalProgress.remaining.toFixed(1)}kg`}</span>
                 </div>
+                ${goalMilestones ? `<div class="goal-milestones">${goalMilestones.map((m) => `<span class="goal-ms${m.reached ? " reached" : ""}">${m.reached ? "\u2705" : "\u2B1C"} ${t("goal.milestone").replace("{pct}", m.pct)} <span class="hint-small">(${m.targetWeight}kg)</span></span>`).join("")}</div>` : ""}
                 ${goalPrediction ? `<div class="prediction-text">${t("goal.prediction")}: ${goalPrediction.achieved ? t("goal.predictionAchieved") : goalPrediction.insufficient ? t("goal.predictionInsufficient") : goalPrediction.noTrend ? t("goal.predictionNoTrend") : `${t("goal.predictionDays").replace("{days}", goalPrediction.days)} (${goalPrediction.predictedDate})`}</div>` : ""}` : `<div class="diff-value zero">--</div>
                 <div class="diff-detail">${t("goal.notSet")}</div>`}
           </div>
