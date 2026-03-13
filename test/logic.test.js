@@ -93,6 +93,7 @@ import {
   calcRecordMilestone,
   generateAICoachReport,
   calcDashboardSummary,
+  getRecentEntries,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -7234,5 +7235,47 @@ describe("calcDashboardSummary", () => {
     ];
     const result = calcDashboardSummary(records, 170);
     expect(result.streak).toBe(2);
+  });
+});
+
+describe("getRecentEntries", () => {
+  it("returns empty array for no records", () => {
+    expect(getRecentEntries([])).toEqual([]);
+  });
+
+  it("returns entries newest first", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, source: "manual" },
+      { dt: "2025-01-03", wt: 69, source: "voice" },
+      { dt: "2025-01-02", wt: 70.5, source: "photo" },
+    ];
+    const result = getRecentEntries(records, 3);
+    expect(result[0].dt).toBe("2025-01-03");
+    expect(result[1].dt).toBe("2025-01-02");
+    expect(result[2].dt).toBe("2025-01-01");
+  });
+
+  it("calculates change from previous entry", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, source: "manual" },
+      { dt: "2025-01-02", wt: 69, source: "manual" },
+    ];
+    const result = getRecentEntries(records, 2);
+    expect(result[0].change).toBe(-1);
+    expect(result[1].change).toBeNull();
+  });
+
+  it("limits to requested count", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i,
+      source: "manual",
+    }));
+    expect(getRecentEntries(records, 3)).toHaveLength(3);
+  });
+
+  it("preserves source field", () => {
+    const records = [{ dt: "2025-01-01", wt: 70, source: "voice" }];
+    expect(getRecentEntries(records, 1)[0].source).toBe("voice");
   });
 });

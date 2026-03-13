@@ -112,6 +112,7 @@ export const translations = {
     "status.listening": "聞き取り中",
     "status.storageError": "端末内保存に失敗しました。ブラウザの保存設定を確認してください。",
     "status.photoReady": "写真を読み込みました。候補を確認してください。",
+    "status.photoAnalyzing": "写真を解析中…",
     "status.photoNoDetection": "写真から数値を検出できませんでした。手入力で体重を設定してください。",
     "status.voiceError": "音声入力を開始できませんでした。マイク権限を確認してください。",
     "status.voiceNoSpeech": "音声が検出されませんでした。もう一度お試しください。",
@@ -727,6 +728,7 @@ export const translations = {
     "dash.streak": "連続記録",
     "dash.days": "{n}日",
     "dash.noRecord": "未記録",
+    "recent.title": "直近の記録",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -843,6 +845,7 @@ export const translations = {
     "status.listening": "Listening",
     "status.storageError": "Saving on this device failed. Check browser storage settings.",
     "status.photoReady": "Photo loaded. Review detected candidates.",
+    "status.photoAnalyzing": "Analyzing photo…",
     "status.photoNoDetection": "No weight detected from photo. Please enter the value manually.",
     "status.voiceError": "Unable to start voice input. Check microphone permission.",
     "status.voiceNoSpeech": "No speech detected. Please try again.",
@@ -1456,6 +1459,7 @@ export const translations = {
     "dash.streak": "Streak",
     "dash.days": "{n} days",
     "dash.noRecord": "No record",
+    "recent.title": "Recent Entries",
   },
 };
 

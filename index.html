@@ -2407,6 +2407,39 @@
       .dash-up .dash-value { color: var(--accent-2); }
       .dash-down .dash-value { color: var(--accent-3); }
 
+      .recent-entries {
+        margin: 10px 0;
+        padding: 12px 16px;
+        background: var(--surface);
+        border-radius: 14px;
+        border: 1px solid var(--border);
+      }
+      .recent-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 0;
+        font-size: 0.85rem;
+        border-bottom: 1px solid color-mix(in srgb, var(--border) 25%, transparent);
+      }
+      .recent-row:last-child { border-bottom: none; }
+      .recent-date {
+        color: var(--muted);
+        min-width: 45px;
+      }
+      .recent-wt {
+        font-weight: 600;
+        flex: 1;
+      }
+      .recent-change {
+        font-size: 0.8rem;
+        font-weight: 500;
+        min-width: 45px;
+        text-align: right;
+      }
+      .recent-change.down { color: var(--accent-3); }
+      .recent-change.up { color: var(--accent-2); }
+
       .mpr-section {
         margin-top: 14px;
       }
@@ -3352,6 +3385,25 @@
 
       @keyframes spin {
         to { transform: rotate(360deg); }
+      }
+
+      .btn.loading {
+        opacity: 0.7;
+        pointer-events: none;
+        position: relative;
+      }
+
+      .btn.loading::after {
+        content: "";
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        margin-left: 6px;
+        border: 2px solid currentColor;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        vertical-align: middle;
       }
 
       /* Trend indicator */

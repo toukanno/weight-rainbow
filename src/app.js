@@ -627,7 +627,7 @@ function render() {
                   <input id="photoInput" type="file" accept="image/*" capture="environment" class="hidden" />`}
                 </div>
                 ${imagePreviewUrl ? `
-                  <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" data-action="zoom-photo" />
+                  <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" data-action="zoom-photo" role="button" tabindex="0" />
                   <p class="helper hint-small" style="margin-top: 4px; text-align: center;">${t("photo.zoomHint")}</p>
                   ${!supportsTextDetection && !detectedWeights.length ? `<p class="helper" style="margin-top: 8px; text-align: center;">${t("photo.manualHint")}</p>` : ""}
                 ` : ""}
@@ -651,7 +651,7 @@ function render() {
                   <div class="helper hint-small desktop-only">⌘+Enter</div>
                 </div>
               </div>
-              <div class="validate-warnings" style="display:none"></div>
+              <div class="validate-warnings" role="alert" style="display:none"></div>
             </div>
 
             <div class="status ${statusKind === "error" ? "warn" : ""}" role="status" aria-live="polite">
@@ -2634,7 +2634,9 @@ function bindEvents() {
   app.querySelector('[data-action="google-backup"]')?.addEventListener("click", googleBackup);
   app.querySelector('[data-action="google-restore"]')?.addEventListener("click", googleRestore);
   app.querySelector('[data-action="undo"]')?.addEventListener("click", undoLastSave);
-  app.querySelector('[data-action="zoom-photo"]')?.addEventListener("click", handlePhotoZoom);
+  const zoomEl = app.querySelector('[data-action="zoom-photo"]');
+  zoomEl?.addEventListener("click", handlePhotoZoom);
+  zoomEl?.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handlePhotoZoom(); } });
   app.querySelector('[data-action="cal-prev"]')?.addEventListener("click", () => {
     calendarMonth--;
     if (calendarMonth < 0) { calendarMonth = 11; calendarYear--; }
@@ -3077,6 +3079,11 @@ async function handlePhotoSelection(event) {
   state.form.imageName = file.name;
   detectedWeights = [];
 
+  const photoBtn = app.querySelector('[data-action="pick-native-photo"]') || app.querySelector('label[for="photoInput"]');
+  if (photoBtn) photoBtn.classList.add("loading");
+  setStatus(t("status.photoAnalyzing"));
+  render();
+
   const candidates = await detectWeightsFromImage(file);
   detectedWeights = candidates;
   const picked = pickWeightCandidate(candidates, state.records.at(-1)?.wt ?? null);
@@ -3097,6 +3104,8 @@ async function handlePhotoSelection(event) {
 }
 
 async function pickNativePhoto() {
+  const photoBtn = app.querySelector('[data-action="pick-native-photo"]');
+  if (photoBtn) photoBtn.classList.add("loading");
   try {
     const permissions = await Camera.checkPermissions();
     if (permissions.photos === "denied" || permissions.camera === "denied") {
@@ -3144,9 +3153,11 @@ async function pickNativePhoto() {
     setStatus(detectedWeights.length ? t("status.photoReady") : t("status.photoNoDetection"));
   } catch {
     setStatus(t("status.permissionDenied"), "error");
+    if (photoBtn) photoBtn.classList.remove("loading");
     return;
   }
 
+  if (photoBtn) photoBtn.classList.remove("loading");
   render();
 }
 

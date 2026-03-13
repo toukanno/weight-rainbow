@@ -2972,6 +2972,19 @@ function calcDashboardSummary(records, heightCm) {
   }
   return { weight: latest.wt, change, bmi, streak, date: latest.dt };
 }
+function getRecentEntries(records, count = 5) {
+  if (records.length === 0) return [];
+  const sorted = [...records].sort((a, b) => b.dt.localeCompare(a.dt));
+  return sorted.slice(0, count).map((r, i) => {
+    const prev = sorted[i + 1];
+    return {
+      dt: r.dt,
+      wt: r.wt,
+      change: prev ? Math.round((r.wt - prev.wt) * 10) / 10 : null,
+      source: r.source || "manual"
+    };
+  });
+}
 
 // src/i18n.js
 var translations = {
@@ -3088,6 +3101,7 @@ var translations = {
     "status.listening": "\u805E\u304D\u53D6\u308A\u4E2D",
     "status.storageError": "\u7AEF\u672B\u5185\u4FDD\u5B58\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002\u30D6\u30E9\u30A6\u30B6\u306E\u4FDD\u5B58\u8A2D\u5B9A\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "status.photoReady": "\u5199\u771F\u3092\u8AAD\u307F\u8FBC\u307F\u307E\u3057\u305F\u3002\u5019\u88DC\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
+    "status.photoAnalyzing": "\u5199\u771F\u3092\u89E3\u6790\u4E2D\u2026",
     "status.photoNoDetection": "\u5199\u771F\u304B\u3089\u6570\u5024\u3092\u691C\u51FA\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u624B\u5165\u529B\u3067\u4F53\u91CD\u3092\u8A2D\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "status.voiceError": "\u97F3\u58F0\u5165\u529B\u3092\u958B\u59CB\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u30DE\u30A4\u30AF\u6A29\u9650\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "status.voiceNoSpeech": "\u97F3\u58F0\u304C\u691C\u51FA\u3055\u308C\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u3082\u3046\u4E00\u5EA6\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002",
@@ -3715,7 +3729,8 @@ var translations = {
     "dash.bmi": "BMI",
     "dash.streak": "\u9023\u7D9A\u8A18\u9332",
     "dash.days": "{n}\u65E5",
-    "dash.noRecord": "\u672A\u8A18\u9332"
+    "dash.noRecord": "\u672A\u8A18\u9332",
+    "recent.title": "\u76F4\u8FD1\u306E\u8A18\u9332"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3832,6 +3847,7 @@ var translations = {
     "status.listening": "Listening",
     "status.storageError": "Saving on this device failed. Check browser storage settings.",
     "status.photoReady": "Photo loaded. Review detected candidates.",
+    "status.photoAnalyzing": "Analyzing photo\u2026",
     "status.photoNoDetection": "No weight detected from photo. Please enter the value manually.",
     "status.voiceError": "Unable to start voice input. Check microphone permission.",
     "status.voiceNoSpeech": "No speech detected. Please try again.",
@@ -4457,7 +4473,8 @@ var translations = {
     "dash.bmi": "BMI",
     "dash.streak": "Streak",
     "dash.days": "{n} days",
-    "dash.noRecord": "No record"
+    "dash.noRecord": "No record",
+    "recent.title": "Recent Entries"
   }
 };
 function createTranslator(language) {
@@ -25452,7 +25469,7 @@ function render() {
                   <input id="photoInput" type="file" accept="image/*" capture="environment" class="hidden" />`}
                 </div>
                 ${imagePreviewUrl ? `
-                  <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" data-action="zoom-photo" />
+                  <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" data-action="zoom-photo" role="button" tabindex="0" />
                   <p class="helper hint-small" style="margin-top: 4px; text-align: center;">${t("photo.zoomHint")}</p>
                   ${!supportsTextDetection && !detectedWeights.length ? `<p class="helper" style="margin-top: 8px; text-align: center;">${t("photo.manualHint")}</p>` : ""}
                 ` : ""}
@@ -25484,6 +25501,8 @@ function render() {
               ${lastUndoState ? `<button type="button" class="undo-btn" data-action="undo">${t("undo.button")}</button>` : ""}
             </div>
           </section>
+
+          ${renderRecentEntries()}
 
           <section class="panel">
             <div class="section-header">
@@ -26861,6 +26880,22 @@ function renderIdealWeight() {
     </div>
   `;
 }
+function renderRecentEntries() {
+  const entries = getRecentEntries(state.records, 5);
+  if (entries.length === 0) return "";
+  const sourceIcons = { manual: "\u270F\uFE0F", voice: "\u{1F3A4}", photo: "\u{1F4F7}", quick: "\u26A1", import: "\u{1F4E5}" };
+  const rows = entries.map((e) => {
+    const icon = sourceIcons[e.source] || "\u270F\uFE0F";
+    const changeStr = e.change !== null ? `<span class="recent-change ${e.change < 0 ? "down" : e.change > 0 ? "up" : ""}">${e.change > 0 ? "+" : ""}${e.change.toFixed(1)}</span>` : "";
+    return `<div class="recent-row">${icon} <span class="recent-date">${e.dt.slice(5).replace("-", "/")}</span><span class="recent-wt">${e.wt.toFixed(1)}kg</span>${changeStr}</div>`;
+  }).join("");
+  return `
+    <div class="recent-entries">
+      <div class="helper">${t("recent.title")}</div>
+      ${rows}
+    </div>
+  `;
+}
 function renderDashboard() {
   const dash = calcDashboardSummary(state.records, Number(state.profile.heightCm));
   if (!dash) return "";
@@ -27737,6 +27772,10 @@ async function handlePhotoSelection(event) {
   imagePreviewUrl = URL.createObjectURL(file);
   state.form.imageName = file.name;
   detectedWeights = [];
+  const photoBtn = app.querySelector('[data-action="pick-native-photo"]') || app.querySelector('label[for="photoInput"]');
+  if (photoBtn) photoBtn.classList.add("loading");
+  setStatus(t("status.photoAnalyzing"));
+  render();
   const candidates = await detectWeightsFromImage(file);
   detectedWeights = candidates;
   const picked = pickWeightCandidate(candidates, state.records.at(-1)?.wt ?? null);
@@ -27755,6 +27794,8 @@ async function handlePhotoSelection(event) {
   render();
 }
 async function pickNativePhoto() {
+  const photoBtn = app.querySelector('[data-action="pick-native-photo"]');
+  if (photoBtn) photoBtn.classList.add("loading");
   try {
     const permissions = await Camera2.checkPermissions();
     if (permissions.photos === "denied" || permissions.camera === "denied") {
@@ -27798,8 +27839,10 @@ async function pickNativePhoto() {
     setStatus(detectedWeights.length ? t("status.photoReady") : t("status.photoNoDetection"));
   } catch {
     setStatus(t("status.permissionDenied"), "error");
+    if (photoBtn) photoBtn.classList.remove("loading");
     return;
   }
+  if (photoBtn) photoBtn.classList.remove("loading");
   render();
 }
 async function toggleVoiceInput() {
