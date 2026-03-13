@@ -3308,3 +3308,51 @@ export function calcWeightRangeSummary(records) {
 
   return { periods };
 }
+
+/**
+ * Calculate the current trend streak — consecutive records where weight
+ * keeps moving in the same direction compared to the previous record.
+ * Returns { direction, count, totalChange, startDate, endDate }
+ * direction: "down" | "up" | "flat" | null
+ */
+export function calcTrendStreak(records) {
+  if (!records || records.length < 2) {
+    return { direction: null, count: 0, totalChange: 0, startDate: null, endDate: null };
+  }
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  let count = 1;
+  let dir = null;
+
+  // Walk backwards from the end
+  for (let i = sorted.length - 1; i > 0; i--) {
+    const diff = sorted[i].wt - sorted[i - 1].wt;
+    const thisDir = diff < -0.05 ? "down" : diff > 0.05 ? "up" : "flat";
+
+    if (dir === null) {
+      dir = thisDir;
+      count = 1;
+      continue;
+    }
+
+    if (thisDir === dir) {
+      count++;
+    } else {
+      break;
+    }
+  }
+
+  if (dir === null) dir = "flat";
+
+  const endIdx = sorted.length - 1;
+  const startIdx = Math.max(0, endIdx - count);
+  const totalChange = +(sorted[endIdx].wt - sorted[startIdx].wt).toFixed(2);
+
+  return {
+    direction: dir,
+    count,
+    totalChange,
+    startDate: sorted[startIdx].dt,
+    endDate: sorted[endIdx].dt,
+  };
+}

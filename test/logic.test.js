@@ -108,6 +108,7 @@ import {
   calcPredictionAccuracy,
   calcConsistencyScore,
   calcWeightRangeSummary,
+  calcTrendStreak,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,

@@ -815,6 +815,12 @@ export const translations = {
     "wrange.30d": "30日",
     "wrange.90d": "90日",
     "wrange.all": "全期間",
+    "tstreak.title": "トレンド連続記録",
+    "tstreak.down": "📉 {count}回連続で減少中",
+    "tstreak.up": "📈 {count}回連続で増加中",
+    "tstreak.flat": "➡️ {count}回連続で横ばい",
+    "tstreak.change": "変動",
+    "tstreak.period": "期間",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1632,6 +1638,12 @@ export const translations = {
     "wrange.30d": "30d",
     "wrange.90d": "90d",
     "wrange.all": "All",
+    "tstreak.title": "Trend Streak",
+    "tstreak.down": "📉 {count} consecutive drops",
+    "tstreak.up": "📈 {count} consecutive rises",
+    "tstreak.flat": "➡️ {count} consecutive flat",
+    "tstreak.change": "Change",
+    "tstreak.period": "Period",
   },
 };
 

@@ -3447,6 +3447,39 @@ function calcWeightRangeSummary(records) {
   ].filter(Boolean);
   return { periods };
 }
+function calcTrendStreak(records) {
+  if (!records || records.length < 2) {
+    return { direction: null, count: 0, totalChange: 0, startDate: null, endDate: null };
+  }
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  let count = 1;
+  let dir = null;
+  for (let i = sorted.length - 1; i > 0; i--) {
+    const diff = sorted[i].wt - sorted[i - 1].wt;
+    const thisDir = diff < -0.05 ? "down" : diff > 0.05 ? "up" : "flat";
+    if (dir === null) {
+      dir = thisDir;
+      count = 1;
+      continue;
+    }
+    if (thisDir === dir) {
+      count++;
+    } else {
+      break;
+    }
+  }
+  if (dir === null) dir = "flat";
+  const endIdx = sorted.length - 1;
+  const startIdx = Math.max(0, endIdx - count);
+  const totalChange = +(sorted[endIdx].wt - sorted[startIdx].wt).toFixed(2);
+  return {
+    direction: dir,
+    count,
+    totalChange,
+    startDate: sorted[startIdx].dt,
+    endDate: sorted[endIdx].dt
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -4278,7 +4311,13 @@ var translations = {
     "wrange.7d": "7\u65E5",
     "wrange.30d": "30\u65E5",
     "wrange.90d": "90\u65E5",
-    "wrange.all": "\u5168\u671F\u9593"
+    "wrange.all": "\u5168\u671F\u9593",
+    "tstreak.title": "\u30C8\u30EC\u30F3\u30C9\u9023\u7D9A\u8A18\u9332",
+    "tstreak.down": "\u{1F4C9} {count}\u56DE\u9023\u7D9A\u3067\u6E1B\u5C11\u4E2D",
+    "tstreak.up": "\u{1F4C8} {count}\u56DE\u9023\u7D9A\u3067\u5897\u52A0\u4E2D",
+    "tstreak.flat": "\u27A1\uFE0F {count}\u56DE\u9023\u7D9A\u3067\u6A2A\u3070\u3044",
+    "tstreak.change": "\u5909\u52D5",
+    "tstreak.period": "\u671F\u9593"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5108,7 +5147,13 @@ var translations = {
     "wrange.7d": "7d",
     "wrange.30d": "30d",
     "wrange.90d": "90d",
-    "wrange.all": "All"
+    "wrange.all": "All",
+    "tstreak.title": "Trend Streak",
+    "tstreak.down": "\u{1F4C9} {count} consecutive drops",
+    "tstreak.up": "\u{1F4C8} {count} consecutive rises",
+    "tstreak.flat": "\u27A1\uFE0F {count} consecutive flat",
+    "tstreak.change": "Change",
+    "tstreak.period": "Period"
   }
 };
 function createTranslator(language) {
@@ -26251,6 +26296,7 @@ function render() {
             ${renderStreakCalendar()}
             ${renderConsistencyScore()}
             ${renderWeightRangeSummary()}
+            ${renderTrendStreak()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -27896,6 +27942,23 @@ function renderWeightRangeSummary() {
     </div>
   `;
 }
+function renderTrendStreak() {
+  const data = calcTrendStreak(state.records);
+  if (!data.direction || data.count < 2) return "";
+  const msgKey = `tstreak.${data.direction}`;
+  const msg = t(msgKey).replace("{count}", data.count);
+  const cls = data.direction === "down" ? "ts-down" : data.direction === "up" ? "ts-up" : "ts-flat";
+  const changeSign = data.totalChange > 0 ? "+" : "";
+  return `
+    <div class="ts-section ${cls}">
+      <div class="ts-msg">${msg}</div>
+      <div class="ts-detail">
+        <span>${t("tstreak.change")}: <strong>${changeSign}${data.totalChange.toFixed(1)}kg</strong></span>
+        <span>${t("tstreak.period")}: ${data.startDate.slice(5).replace("-", "/")} \u2192 ${data.endDate.slice(5).replace("-", "/")}</span>
+      </div>
+    </div>
+  `;
+}
 function renderRecentEntries() {
   const entries = getRecentEntries(state.records, 5);
   if (entries.length === 0) return "";
@@ -28522,19 +28585,31 @@ function bindEvents() {
 function handleFieldInput(event) {
   const { name, value } = event.target;
   if (["name", "heightCm", "age", "gender"].includes(name)) {
+    if (name === "heightCm" && value !== "") {
+      const h = Number(value);
+      if (!Number.isFinite(h) || h < 50 || h > 300) return;
+    }
+    if (name === "age" && value !== "") {
+      const a = Number(value);
+      if (!Number.isFinite(a) || a < 1 || a > 150 || !Number.isInteger(a)) return;
+    }
     state.profile = { ...state.profile, [name]: value };
     persist();
     if (name === "heightCm") render();
     return;
   }
   if (name === "pickerInt") {
-    state.form.pickerInt = parseInt(value, 10);
+    const v = parseInt(value, 10);
+    if (!Number.isFinite(v)) return;
+    state.form.pickerInt = v;
     state.form.weight = `${state.form.pickerInt}.${state.form.pickerDec}`;
     scheduleRender();
     return;
   }
   if (name === "pickerDec") {
-    state.form.pickerDec = parseInt(value, 10);
+    const v = parseInt(value, 10);
+    if (!Number.isFinite(v)) return;
+    state.form.pickerDec = v;
     state.form.weight = `${state.form.pickerInt}.${state.form.pickerDec}`;
     scheduleRender();
     return;

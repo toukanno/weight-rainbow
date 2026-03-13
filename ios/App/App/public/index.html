@@ -2951,6 +2951,27 @@
       }
       .wr-vals { min-width: 80px; text-align: right; font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
 
+      .ts-section {
+        margin-top: 14px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        border-left: 4px solid var(--muted);
+      }
+      .ts-down { border-left-color: var(--ok); background: color-mix(in srgb, var(--ok) 8%, transparent); }
+      .ts-up { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+      .ts-flat { border-left-color: var(--accent-3); background: color-mix(in srgb, var(--accent-3) 8%, transparent); }
+      .ts-msg { font-size: 1rem; font-weight: 700; }
+      .ts-down .ts-msg { color: var(--ok); }
+      .ts-up .ts-msg { color: var(--danger); }
+      .ts-flat .ts-msg { color: var(--accent-3); }
+      .ts-detail {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.82rem;
+        color: var(--sub);
+        margin-top: 4px;
+      }
+
       .success-section {
         margin-top: 14px;
         text-align: center;

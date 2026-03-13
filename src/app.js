@@ -111,6 +111,7 @@ import {
   calcPredictionAccuracy,
   calcConsistencyScore,
   calcWeightRangeSummary,
+  calcTrendStreak,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -797,6 +798,7 @@ function render() {
             ${renderStreakCalendar()}
             ${renderConsistencyScore()}
             ${renderWeightRangeSummary()}
+            ${renderTrendStreak()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -2552,6 +2554,26 @@ function renderWeightRangeSummary() {
   `;
 }
 
+function renderTrendStreak() {
+  const data = calcTrendStreak(state.records);
+  if (!data.direction || data.count < 2) return "";
+
+  const msgKey = `tstreak.${data.direction}`;
+  const msg = t(msgKey).replace("{count}", data.count);
+  const cls = data.direction === "down" ? "ts-down" : data.direction === "up" ? "ts-up" : "ts-flat";
+  const changeSign = data.totalChange > 0 ? "+" : "";
+
+  return `
+    <div class="ts-section ${cls}">
+      <div class="ts-msg">${msg}</div>
+      <div class="ts-detail">
+        <span>${t("tstreak.change")}: <strong>${changeSign}${data.totalChange.toFixed(1)}kg</strong></span>
+        <span>${t("tstreak.period")}: ${data.startDate.slice(5).replace("-", "/")} → ${data.endDate.slice(5).replace("-", "/")}</span>
+      </div>
+    </div>
+  `;
+}
+
 function renderRecentEntries() {
   const entries = getRecentEntries(state.records, 5);
   if (entries.length === 0) return "";
@@ -3201,6 +3223,14 @@ function handleFieldInput(event) {
   const { name, value } = event.target;
 
   if (["name", "heightCm", "age", "gender"].includes(name)) {
+    if (name === "heightCm" && value !== "") {
+      const h = Number(value);
+      if (!Number.isFinite(h) || h < 50 || h > 300) return;
+    }
+    if (name === "age" && value !== "") {
+      const a = Number(value);
+      if (!Number.isFinite(a) || a < 1 || a > 150 || !Number.isInteger(a)) return;
+    }
     state.profile = { ...state.profile, [name]: value };
     persist();
     if (name === "heightCm") render();
@@ -3208,14 +3238,18 @@ function handleFieldInput(event) {
   }
 
   if (name === "pickerInt") {
-    state.form.pickerInt = parseInt(value, 10);
+    const v = parseInt(value, 10);
+    if (!Number.isFinite(v)) return;
+    state.form.pickerInt = v;
     state.form.weight = `${state.form.pickerInt}.${state.form.pickerDec}`;
     scheduleRender();
     return;
   }
 
   if (name === "pickerDec") {
-    state.form.pickerDec = parseInt(value, 10);
+    const v = parseInt(value, 10);
+    if (!Number.isFinite(v)) return;
+    state.form.pickerDec = v;
     state.form.weight = `${state.form.pickerInt}.${state.form.pickerDec}`;
     scheduleRender();
     return;
