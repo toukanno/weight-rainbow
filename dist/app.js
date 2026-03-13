@@ -1861,6 +1861,7 @@ var translations = {
     "google.restore": "Google Drive\u304B\u3089\u5FA9\u5143",
     "google.backupDone": "Google Drive\u306B\u30D0\u30C3\u30AF\u30A2\u30C3\u30D7\u3057\u307E\u3057\u305F",
     "google.restoreDone": "Google Drive\u304B\u3089\u5FA9\u5143\u3057\u307E\u3057\u305F",
+    "google.restoreConfirm": "Google Drive\u304B\u3089\u30C7\u30FC\u30BF\u3092\u5FA9\u5143\u3057\u307E\u3059\u304B\uFF1F\u65E2\u5B58\u306E\u30C7\u30FC\u30BF\u3068\u30DE\u30FC\u30B8\u3055\u308C\u307E\u3059\u3002",
     "google.error": "Google\u9023\u643A\u3067\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F",
     "google.noData": "\u30D0\u30C3\u30AF\u30A2\u30C3\u30D7\u30C7\u30FC\u30BF\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093",
     "google.title": "Google\u9023\u643A",
@@ -2265,6 +2266,7 @@ var translations = {
     "google.restore": "Restore from Google Drive",
     "google.backupDone": "Backed up to Google Drive",
     "google.restoreDone": "Restored from Google Drive",
+    "google.restoreConfirm": "Restore data from Google Drive? It will be merged with your existing data.",
     "google.error": "Google sync error",
     "google.noData": "No backup data found",
     "google.title": "Google Sync",
@@ -25446,8 +25448,10 @@ async function googleRestore() {
       setStatus(t("google.noData"), "error");
       return;
     }
+    if (!window.confirm(t("google.restoreConfirm"))) return;
     let m = [...state.records];
     for (const r of bd.records) {
+      if (!r.dt || !Number.isFinite(r.wt)) continue;
       m = upsertRecord(m, { ...r, bmi: r.bmi ?? null, bf: r.bf ?? null, note: r.note ?? "", source: r.source || "manual", imageName: "" });
     }
     state.records = trimRecords(m, MAX_RECORDS);

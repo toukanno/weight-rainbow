@@ -53,6 +53,7 @@ import {
   calcGoalMilestones,
   calcRecordingTimeStats,
   calcConsistencyStreak,
+  calcDataHealth,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -705,6 +706,7 @@ function render() {
             </div>
             ${renderSourceBreakdown()}
             ${renderRecordingTime()}
+            ${renderDataHealth()}
             <div class="export-grid">
               <button type="button" class="btn secondary" data-action="export-excel">📊 ${t("export.excel")}</button>
               <button type="button" class="btn secondary" data-action="export-csv">📄 ${t("export.csv")}</button>
@@ -1082,6 +1084,32 @@ function renderSourceBreakdown() {
           const pct = Math.round((count / state.records.length) * 100);
           return `<span class="source-chip"><span class="source-icon">${icon}</span> ${t("entry.source." + src)} <strong>${count}</strong> (${pct}%)</span>`;
         }).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderDataHealth() {
+  const health = calcDataHealth(state.records);
+  if (!health) return "";
+  const level = health.score >= 80 ? "high" : health.score >= 50 ? "medium" : "low";
+  const issueHtml = health.issues.length === 0
+    ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("health.perfect")}</div>`
+    : health.issues.slice(0, 3).map((issue) => {
+      if (issue.type === "gap") return `<div class="health-issue">📅 ${t("health.gap").replace("{days}", issue.days).replace("{from}", issue.from).replace("{to}", issue.to)}</div>`;
+      if (issue.type === "outlier") return `<div class="health-issue">📊 ${t("health.outlier").replace("{date}", issue.date).replace("{weight}", issue.weight).replace("{expected}", issue.expected)}</div>`;
+      if (issue.type === "noBMI") return `<div class="health-issue">📏 ${t("health.noBMI")}</div>`;
+      return "";
+    }).join("");
+  return `
+    <div class="health-section">
+      <div class="helper">${t("health.title")}</div>
+      <div class="health-display">
+        <div class="health-score ${level}">${health.score}</div>
+        <div class="health-details">
+          <div class="helper hint-small">${t("health.score").replace("{score}", health.score)}</div>
+          ${issueHtml}
+        </div>
       </div>
     </div>
   `;
@@ -2778,8 +2806,10 @@ async function googleRestore() {
     if (!cr.ok) throw new Error("drive_error");
     const bd = await cr.json();
     if (!bd.records?.length) { setStatus(t("google.noData"), "error"); return; }
+    if (!window.confirm(t("google.restoreConfirm"))) return;
     let m = [...state.records];
     for (const r of bd.records) {
+      if (!r.dt || !Number.isFinite(r.wt)) continue;
       m = upsertRecord(m, { ...r, bmi: r.bmi ?? null, bf: r.bf ?? null, note: r.note ?? "", source: r.source || "manual", imageName: "" });
     }
     state.records = trimRecords(m, MAX_RECORDS);
