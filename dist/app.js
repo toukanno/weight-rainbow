@@ -2229,7 +2229,8 @@ function calcWeightConfidence(records) {
       margin: Math.round(margin * 10) / 10
     };
   });
-  const r2 = 1 - residualSq / ys.reduce((a, y) => a + (y - sumY / n) ** 2, 0);
+  const ssTotal = ys.reduce((a, y) => a + (y - sumY / n) ** 2, 0);
+  const r2 = ssTotal > 0 ? 1 - residualSq / ssTotal : 0;
   let confidence = "low";
   if (r2 > 0.7 && n >= 14) confidence = "high";
   else if (r2 > 0.4 && n >= 7) confidence = "medium";
@@ -2871,7 +2872,13 @@ var translations = {
     "progress.gaining": "\u5897\u52A0\u50BE\u5411\u3067\u3059",
     "progress.stable": "\u5B89\u5B9A\u3057\u3066\u3044\u307E\u3059",
     "progress.moreStable": "\u5B89\u5B9A\u5EA6\u304C\u5411\u4E0A\u3057\u3066\u3044\u307E\u3059",
-    "progress.lessStable": "\u5909\u52D5\u304C\u5927\u304D\u304F\u306A\u3063\u3066\u3044\u307E\u3059"
+    "progress.lessStable": "\u5909\u52D5\u304C\u5927\u304D\u304F\u306A\u3063\u3066\u3044\u307E\u3059",
+    "timeline.title": "\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3",
+    "timeline.low": "\u6700\u4F4E\u4F53\u91CD\u66F4\u65B0: {wt}kg",
+    "timeline.mark": "{mark}kg\u3092\u7A81\u7834",
+    "timeline.bmi.normal": "BMI\u6A19\u6E96\u30BE\u30FC\u30F3\u306B\u5230\u9054",
+    "timeline.bmi.change": "BMI\u30BE\u30FC\u30F3\u5909\u66F4: {from} \u2192 {to}",
+    "timeline.hint": "\u76F4\u8FD1{count}\u4EF6\u306E\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3458,7 +3465,13 @@ var translations = {
     "progress.gaining": "Gaining",
     "progress.stable": "Stable",
     "progress.moreStable": "Stability improved",
-    "progress.lessStable": "More variable recently"
+    "progress.lessStable": "More variable recently",
+    "timeline.title": "Milestones",
+    "timeline.low": "New all-time low: {wt}kg",
+    "timeline.mark": "Broke through {mark}kg",
+    "timeline.bmi.normal": "Reached normal BMI zone",
+    "timeline.bmi.change": "BMI zone: {from} \u2192 {to}",
+    "timeline.hint": "Last {count} milestones"
   }
 };
 function createTranslator(language) {
@@ -26872,7 +26885,7 @@ function drawChart() {
     canvas._tooltipTimer = setTimeout(() => {
       const tip = document.getElementById("chartTooltip");
       if (tip) tip.style.display = "none";
-    }, 2e3);
+    }, 3500);
   };
   canvas.addEventListener("touchmove", canvas._chartTouchHandler, { passive: false });
   canvas.addEventListener("touchend", canvas._chartTouchEndHandler);

@@ -77,6 +77,7 @@ import {
   calcStreakRewards,
   calcWeightConfidence,
   calcProgressSummary,
+  calcMilestoneTimeline,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -3223,7 +3224,7 @@ function drawChart() {
     canvas._tooltipTimer = setTimeout(() => {
       const tip = document.getElementById("chartTooltip");
       if (tip) tip.style.display = "none";
-    }, 2000);
+    }, 3500);
   };
   canvas.addEventListener("touchmove", canvas._chartTouchHandler, { passive: false });
   canvas.addEventListener("touchend", canvas._chartTouchEndHandler);

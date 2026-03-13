@@ -5487,3 +5487,48 @@ describe("calcWeightDistribution expanded", () => {
     expect(result.modeBucket).toBeGreaterThanOrEqual(0);
   });
 });
+
+// ── csvEscape ──
+describe("csvEscape", () => {
+  it("returns plain values unchanged", () => {
+    expect(csvEscape("hello")).toBe("hello");
+    expect(csvEscape(42)).toBe("42");
+  });
+  it("wraps values containing commas in quotes", () => {
+    expect(csvEscape("hello,world")).toBe('"hello,world"');
+  });
+  it("escapes double quotes by doubling them", () => {
+    expect(csvEscape('say "hi"')).toBe('"say ""hi"""');
+  });
+  it("handles newlines", () => {
+    expect(csvEscape("line1\nline2")).toBe('"line1\nline2"');
+  });
+  it("handles null and undefined", () => {
+    expect(csvEscape(null)).toBe("");
+    expect(csvEscape(undefined)).toBe("");
+  });
+});
+
+// ── exportRecordsToCSV ──
+describe("exportRecordsToCSV", () => {
+  it("returns empty string for empty records", () => {
+    expect(exportRecordsToCSV([])).toBe("");
+  });
+  it("includes header row", () => {
+    const csv = exportRecordsToCSV([{ dt: "2024-01-01", wt: 70, bmi: 22.5, bf: 15, source: "manual", note: "" }]);
+    const lines = csv.split("\n");
+    expect(lines[0]).toBe("date,weight,bmi,bodyFat,source,note");
+  });
+  it("correctly formats record data", () => {
+    const csv = exportRecordsToCSV([{ dt: "2024-01-01", wt: 70.5, bmi: null, source: "voice", note: "test" }]);
+    const lines = csv.split("\n");
+    expect(lines[1]).toContain("2024-01-01");
+    expect(lines[1]).toContain("70.5");
+    expect(lines[1]).toContain("voice");
+    expect(lines[1]).toContain("test");
+  });
+  it("escapes notes with commas", () => {
+    const csv = exportRecordsToCSV([{ dt: "2024-01-01", wt: 70, note: "a,b" }]);
+    expect(csv).toContain('"a,b"');
+  });
+});

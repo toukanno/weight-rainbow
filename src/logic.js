@@ -1647,3 +1647,181 @@ export function calcStreakRewards(records) {
 
   return { streak, level, earned, next, nextRemaining, totalRecords: records.length };
 }
+
+/**
+ * Calculates weight prediction with confidence intervals.
+ * Uses recent trend + variance to show optimistic/pessimistic/expected weight at target dates.
+ */
+export function calcWeightConfidence(records) {
+  if (records.length < 7) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-30); // Use last 30 records for trend
+  if (recent.length < 7) return null;
+
+  // Calculate daily rate via linear regression on recent data
+  const firstDate = new Date(recent[0].dt);
+  const xs = recent.map((r) => (new Date(r.dt) - firstDate) / 86400000);
+  const ys = recent.map((r) => r.wt);
+  const n = xs.length;
+  const sumX = xs.reduce((a, b) => a + b, 0);
+  const sumY = ys.reduce((a, b) => a + b, 0);
+  const sumXY = xs.reduce((a, x, i) => a + x * ys[i], 0);
+  const sumX2 = xs.reduce((a, x) => a + x * x, 0);
+  const denom = n * sumX2 - sumX * sumX;
+  if (denom === 0) return null;
+
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+
+  // Calculate standard deviation of residuals
+  const residuals = xs.map((x, i) => ys[i] - (intercept + slope * x));
+  const residualSq = residuals.reduce((a, r) => a + r * r, 0);
+  const stdDev = Math.sqrt(residualSq / (n - 2));
+
+  // Current weight and predictions
+  const latest = recent[recent.length - 1].wt;
+  const lastDay = xs[xs.length - 1];
+
+  // Forecast at 7, 14, 30 days from last record
+  const forecasts = [7, 14, 30].map((days) => {
+    const futureX = lastDay + days;
+    const predicted = intercept + slope * futureX;
+    const margin = stdDev * 1.96; // 95% confidence
+    return {
+      days,
+      predicted: Math.round(predicted * 10) / 10,
+      low: Math.round((predicted - margin) * 10) / 10,
+      high: Math.round((predicted + margin) * 10) / 10,
+      margin: Math.round(margin * 10) / 10,
+    };
+  });
+
+  // Confidence level based on R² and data density
+  const ssTotal = ys.reduce((a, y) => a + (y - sumY / n) ** 2, 0);
+  const r2 = ssTotal > 0 ? 1 - residualSq / ssTotal : 0;
+  let confidence = "low";
+  if (r2 > 0.7 && n >= 14) confidence = "high";
+  else if (r2 > 0.4 && n >= 7) confidence = "medium";
+
+  return {
+    dailyRate: Math.round(slope * 100) / 100,
+    weeklyRate: Math.round(slope * 7 * 100) / 100,
+    stdDev: Math.round(stdDev * 100) / 100,
+    confidence,
+    r2: Math.round(r2 * 100) / 100,
+    forecasts,
+    latest,
+    dataPoints: n,
+  };
+}
+
+/**
+ * Calculates a weight progress summary comparing two periods.
+ * Compares first half vs second half of records for improvement detection.
+ */
+export function calcProgressSummary(records) {
+  if (records.length < 4) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const mid = Math.floor(sorted.length / 2);
+  const firstHalf = sorted.slice(0, mid);
+  const secondHalf = sorted.slice(mid);
+
+  const avg = (arr) => Math.round((arr.reduce((s, r) => s + r.wt, 0) / arr.length) * 10) / 10;
+  const stdDev = (arr) => {
+    const mean = arr.reduce((s, r) => s + r.wt, 0) / arr.length;
+    return Math.round(Math.sqrt(arr.reduce((s, r) => s + (r.wt - mean) ** 2, 0) / arr.length) * 100) / 100;
+  };
+
+  const firstAvg = avg(firstHalf);
+  const secondAvg = avg(secondHalf);
+  const change = Math.round((secondAvg - firstAvg) * 10) / 10;
+  const firstStd = stdDev(firstHalf);
+  const secondStd = stdDev(secondHalf);
+
+  // Stability improvement: lower std dev in second half = more stable
+  const moreStable = secondStd < firstStd;
+
+  // Total journey
+  const firstWt = sorted[0].wt;
+  const lastWt = sorted[sorted.length - 1].wt;
+  const totalChange = Math.round((lastWt - firstWt) * 10) / 10;
+  const totalDays = Math.max(1, Math.round((new Date(sorted[sorted.length - 1].dt) - new Date(sorted[0].dt)) / 86400000));
+
+  // Direction assessment
+  let trend = "stable";
+  if (change < -0.5) trend = "improving";
+  else if (change > 0.5) trend = "gaining";
+
+  return {
+    firstHalfAvg: firstAvg,
+    secondHalfAvg: secondAvg,
+    change,
+    trend,
+    moreStable,
+    firstStd,
+    secondStd,
+    totalChange,
+    totalDays,
+    firstDate: sorted[0].dt,
+    lastDate: sorted[sorted.length - 1].dt,
+    recordCount: sorted.length,
+  };
+}
+
+/**
+ * Builds a timeline of significant weight milestones.
+ * Detects: 5kg marks crossed, all-time lows, BMI zone transitions.
+ */
+export function calcMilestoneTimeline(records) {
+  if (records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const events = [];
+  let allTimeLow = sorted[0].wt;
+  let prevBmiZone = null;
+
+  for (let i = 0; i < sorted.length; i++) {
+    const r = sorted[i];
+    const prev = i > 0 ? sorted[i - 1] : null;
+
+    // All-time low
+    if (r.wt < allTimeLow) {
+      allTimeLow = r.wt;
+      events.push({ type: "low", date: r.dt, weight: r.wt });
+    }
+
+    // 5kg mark crossed
+    if (prev) {
+      const prevMark = Math.ceil(prev.wt / 5) * 5;
+      const curMark = Math.ceil(r.wt / 5) * 5;
+      if (curMark < prevMark) {
+        // Crossed below a 5kg boundary (e.g. dropped below 70)
+        events.push({ type: "mark", date: r.dt, weight: r.wt, mark: prevMark });
+      }
+    }
+
+    // BMI zone transition
+    if (r.bmi != null) {
+      const zone = r.bmi < 18.5 ? "under" : r.bmi < 25 ? "normal" : r.bmi < 30 ? "over" : "obese";
+      if (prevBmiZone && zone !== prevBmiZone) {
+        events.push({ type: "bmi", date: r.dt, weight: r.wt, from: prevBmiZone, to: zone });
+      }
+      prevBmiZone = zone;
+    }
+  }
+
+  // Deduplicate: keep max 1 all-time-low per month, keep all marks and bmi transitions
+  const dedupLows = new Map();
+  const filtered = [];
+  for (const e of events) {
+    if (e.type === "low") {
+      const month = e.date.slice(0, 7);
+      dedupLows.set(month, e); // keep latest low per month
+    } else {
+      filtered.push(e);
+    }
+  }
+  filtered.push(...dedupLows.values());
+  filtered.sort((a, b) => a.date.localeCompare(b.date));
+
+  return { events: filtered.slice(-10), total: filtered.length };
+}
