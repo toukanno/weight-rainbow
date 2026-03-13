@@ -606,7 +606,7 @@ function render() {
                 </div>
                 <div class="field">
                   <label for="recordDate">${t("entry.date")}</label>
-                  <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" max="${todayLocal()}" />
+                  <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" min="2000-01-01" max="${todayLocal()}" />
                   <div class="date-shortcuts">
                     <button type="button" class="date-shortcut" data-date-shortcut="today">${t("diff.today")}</button>
                     <button type="button" class="date-shortcut" data-date-shortcut="yesterday">${t("diff.yesterday")}</button>
@@ -4939,7 +4939,7 @@ if (GOOGLE_CLIENT_ID) {
 function handlePhotoZoom() {
   if (!imagePreviewUrl) return;
   const ov = document.createElement("div");
-  ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
+  ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;cursor:zoom-out;animation:fadeIn 0.2s ease-out";
   ov.setAttribute("role", "dialog");
   ov.setAttribute("aria-label", t("photo.zoomHint"));
   const im = document.createElement("img");
@@ -5007,11 +5007,16 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
-// Scroll-to-top button visibility
+// Scroll-to-top button visibility (throttled)
+let scrollTicking = false;
 window.addEventListener("scroll", () => {
-  const btn = document.getElementById("scrollTopBtn");
-  if (btn) {
-    btn.classList.toggle("visible", window.scrollY > 400);
+  if (!scrollTicking) {
+    scrollTicking = true;
+    requestAnimationFrame(() => {
+      const btn = document.getElementById("scrollTopBtn");
+      if (btn) btn.classList.toggle("visible", window.scrollY > 400);
+      scrollTicking = false;
+    });
   }
 }, { passive: true });
 
