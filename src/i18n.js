@@ -729,6 +729,8 @@ export const translations = {
     "dash.days": "{n}日",
     "dash.noRecord": "未記録",
     "recent.title": "直近の記録",
+    "monthAvg.title": "月別平均体重",
+    "monthAvg.noData": "データなし",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -1460,6 +1462,8 @@ export const translations = {
     "dash.days": "{n} days",
     "dash.noRecord": "No record",
     "recent.title": "Recent Entries",
+    "monthAvg.title": "Monthly Averages",
+    "monthAvg.noData": "No data",
   },
 };
 

@@ -94,6 +94,7 @@ import {
   generateAICoachReport,
   calcDashboardSummary,
   getRecentEntries,
+  calcMonthlyAverages,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -7277,5 +7278,61 @@ describe("getRecentEntries", () => {
   it("preserves source field", () => {
     const records = [{ dt: "2025-01-01", wt: 70, source: "voice" }];
     expect(getRecentEntries(records, 1)[0].source).toBe("voice");
+  });
+
+  it("defaults source to manual when missing", () => {
+    const records = [{ dt: "2025-01-01", wt: 70 }];
+    expect(getRecentEntries(records, 1)[0].source).toBe("manual");
+  });
+
+  it("handles single record (change is null)", () => {
+    const records = [{ dt: "2025-01-01", wt: 70, source: "manual" }];
+    const result = getRecentEntries(records, 1);
+    expect(result).toHaveLength(1);
+    expect(result[0].change).toBeNull();
+  });
+});
+
+describe("calcMonthlyAverages", () => {
+  it("returns empty array for no records", () => {
+    expect(calcMonthlyAverages([])).toEqual([]);
+  });
+
+  it("returns correct number of months", () => {
+    const records = [{ dt: "2025-01-15", wt: 70 }];
+    const result = calcMonthlyAverages(records, 3);
+    expect(result).toHaveLength(3);
+  });
+
+  it("calculates correct average for a month", () => {
+    const now = new Date();
+    const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const records = [
+      { dt: `${prefix}-01`, wt: 70 },
+      { dt: `${prefix}-15`, wt: 72 },
+    ];
+    const result = calcMonthlyAverages(records, 1);
+    expect(result[0].avg).toBe(71);
+    expect(result[0].count).toBe(2);
+    expect(result[0].min).toBe(70);
+    expect(result[0].max).toBe(72);
+  });
+
+  it("returns null avg for months with no data", () => {
+    const records = [{ dt: "2020-01-01", wt: 70 }];
+    const result = calcMonthlyAverages(records, 1);
+    // Current month likely has no 2020 data
+    expect(result[0].count).toBe(0);
+    expect(result[0].avg).toBeNull();
+  });
+
+  it("handles single record in a month", () => {
+    const now = new Date();
+    const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const records = [{ dt: `${prefix}-10`, wt: 65.5 }];
+    const result = calcMonthlyAverages(records, 1);
+    expect(result[0].avg).toBe(65.5);
+    expect(result[0].min).toBe(65.5);
+    expect(result[0].max).toBe(65.5);
   });
 });

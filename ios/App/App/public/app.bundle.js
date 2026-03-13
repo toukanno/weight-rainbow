@@ -3730,7 +3730,9 @@ var translations = {
     "dash.streak": "\u9023\u7D9A\u8A18\u9332",
     "dash.days": "{n}\u65E5",
     "dash.noRecord": "\u672A\u8A18\u9332",
-    "recent.title": "\u76F4\u8FD1\u306E\u8A18\u9332"
+    "recent.title": "\u76F4\u8FD1\u306E\u8A18\u9332",
+    "monthAvg.title": "\u6708\u5225\u5E73\u5747\u4F53\u91CD",
+    "monthAvg.noData": "\u30C7\u30FC\u30BF\u306A\u3057"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4474,7 +4476,9 @@ var translations = {
     "dash.streak": "Streak",
     "dash.days": "{n} days",
     "dash.noRecord": "No record",
-    "recent.title": "Recent Entries"
+    "recent.title": "Recent Entries",
+    "monthAvg.title": "Monthly Averages",
+    "monthAvg.noData": "No data"
   }
 };
 function createTranslator(language) {
@@ -25493,7 +25497,7 @@ function render() {
                   <div class="helper hint-small desktop-only">\u2318+Enter</div>
                 </div>
               </div>
-              <div class="validate-warnings" style="display:none"></div>
+              <div class="validate-warnings" role="alert" style="display:none"></div>
             </div>
 
             <div class="status ${statusKind === "error" ? "warn" : ""}" role="status" aria-live="polite">
@@ -27378,7 +27382,14 @@ function bindEvents() {
   app.querySelector('[data-action="google-backup"]')?.addEventListener("click", googleBackup);
   app.querySelector('[data-action="google-restore"]')?.addEventListener("click", googleRestore);
   app.querySelector('[data-action="undo"]')?.addEventListener("click", undoLastSave);
-  app.querySelector('[data-action="zoom-photo"]')?.addEventListener("click", handlePhotoZoom);
+  const zoomEl = app.querySelector('[data-action="zoom-photo"]');
+  zoomEl?.addEventListener("click", handlePhotoZoom);
+  zoomEl?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handlePhotoZoom();
+    }
+  });
   app.querySelector('[data-action="cal-prev"]')?.addEventListener("click", () => {
     calendarMonth--;
     if (calendarMonth < 0) {

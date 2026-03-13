@@ -2712,3 +2712,36 @@ export function getRecentEntries(records, count = 5) {
     };
   });
 }
+
+/**
+ * Calculate monthly average weights for the last N months.
+ * Returns [{ year, month, label, avg, count, min, max }] oldest→newest.
+ */
+export function calcMonthlyAverages(records, numMonths = 6) {
+  if (records.length === 0) return [];
+  const now = new Date();
+  const months = [];
+  for (let i = numMonths - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const y = d.getFullYear();
+    const m = d.getMonth();
+    const prefix = `${y}-${String(m + 1).padStart(2, "0")}`;
+    const inMonth = records.filter((r) => r.dt.startsWith(prefix));
+    if (inMonth.length === 0) {
+      months.push({ year: y, month: m, label: prefix, avg: null, count: 0, min: null, max: null });
+    } else {
+      const weights = inMonth.map((r) => r.wt);
+      const sum = weights.reduce((s, w) => s + w, 0);
+      months.push({
+        year: y,
+        month: m,
+        label: prefix,
+        avg: Math.round((sum / weights.length) * 10) / 10,
+        count: weights.length,
+        min: Math.round(Math.min(...weights) * 10) / 10,
+        max: Math.round(Math.max(...weights) * 10) / 10,
+      });
+    }
+  }
+  return months;
+}

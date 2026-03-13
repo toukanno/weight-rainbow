@@ -3730,7 +3730,9 @@ var translations = {
     "dash.streak": "\u9023\u7D9A\u8A18\u9332",
     "dash.days": "{n}\u65E5",
     "dash.noRecord": "\u672A\u8A18\u9332",
-    "recent.title": "\u76F4\u8FD1\u306E\u8A18\u9332"
+    "recent.title": "\u76F4\u8FD1\u306E\u8A18\u9332",
+    "monthAvg.title": "\u6708\u5225\u5E73\u5747\u4F53\u91CD",
+    "monthAvg.noData": "\u30C7\u30FC\u30BF\u306A\u3057"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -4474,7 +4476,9 @@ var translations = {
     "dash.streak": "Streak",
     "dash.days": "{n} days",
     "dash.noRecord": "No record",
-    "recent.title": "Recent Entries"
+    "recent.title": "Recent Entries",
+    "monthAvg.title": "Monthly Averages",
+    "monthAvg.noData": "No data"
   }
 };
 function createTranslator(language) {

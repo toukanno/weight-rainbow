@@ -97,6 +97,7 @@ import {
   generateAICoachReport,
   calcDashboardSummary,
   getRecentEntries,
+  calcMonthlyAverages,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -788,6 +789,9 @@ function render() {
 
           <!-- Monthly Stats Panel -->
           ${renderMonthlyStats()}
+
+          <!-- Monthly Averages Chart -->
+          ${renderMonthlyAverages()}
 
           <!-- Calendar Panel -->
           <section class="panel">
@@ -2109,6 +2113,36 @@ function renderIdealWeight() {
       <div class="helper hint-small">${currentText} — ${zoneLabel}</div>
       <div class="helper hint-small">${rangeText}</div>
       <div class="helper hint-small">${centerText}</div>
+    </div>
+  `;
+}
+
+function renderMonthlyAverages() {
+  const months = calcMonthlyAverages(state.records, 6);
+  const withData = months.filter((m) => m.avg !== null);
+  if (withData.length < 2) return "";
+  const allAvgs = withData.map((m) => m.avg);
+  const minAvg = Math.min(...allAvgs);
+  const maxAvg = Math.max(...allAvgs);
+  const range = maxAvg - minAvg || 1;
+  const bars = months.map((m, i) => {
+    if (m.avg === null) {
+      return `<div class="mavg-bar-wrap"><div class="mavg-bar empty"></div><div class="mavg-label">${m.label.slice(5)}月</div></div>`;
+    }
+    const pct = Math.max(10, ((m.avg - minAvg) / range) * 80 + 10);
+    const prev = i > 0 ? months[i - 1] : null;
+    const cls = prev && prev.avg !== null ? (m.avg < prev.avg ? "down" : m.avg > prev.avg ? "up" : "") : "";
+    return `<div class="mavg-bar-wrap">
+      <div class="mavg-value">${m.avg.toFixed(1)}</div>
+      <div class="mavg-bar ${cls}" style="height:${pct}%"></div>
+      <div class="mavg-label">${m.label.slice(5)}月</div>
+      <div class="mavg-count">${m.count}</div>
+    </div>`;
+  }).join("");
+  return `
+    <div class="mavg-section">
+      <div class="helper">${t("monthAvg.title")}</div>
+      <div class="mavg-chart">${bars}</div>
     </div>
   `;
 }

@@ -2440,6 +2440,57 @@
       .recent-change.down { color: var(--accent-3); }
       .recent-change.up { color: var(--accent-2); }
 
+      .mavg-section {
+        margin-top: 14px;
+      }
+      .mavg-chart {
+        display: flex;
+        align-items: flex-end;
+        gap: 6px;
+        height: 120px;
+        margin-top: 8px;
+        padding: 8px 4px 0;
+      }
+      .mavg-bar-wrap {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        height: 100%;
+        justify-content: flex-end;
+      }
+      .mavg-value {
+        font-size: 0.65rem;
+        color: var(--muted);
+        margin-bottom: 2px;
+      }
+      .mavg-bar {
+        width: 100%;
+        max-width: 36px;
+        border-radius: 4px 4px 0 0;
+        background: color-mix(in srgb, var(--accent-3) 50%, var(--accent-2) 50%);
+        transition: height 0.3s ease;
+      }
+      .mavg-bar.down {
+        background: var(--accent-3);
+      }
+      .mavg-bar.up {
+        background: var(--accent-2);
+      }
+      .mavg-bar.empty {
+        background: var(--border);
+        height: 4px !important;
+      }
+      .mavg-label {
+        font-size: 0.7rem;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+      .mavg-count {
+        font-size: 0.6rem;
+        color: color-mix(in srgb, var(--muted) 60%, transparent);
+      }
+
       .mpr-section {
         margin-top: 14px;
       }
