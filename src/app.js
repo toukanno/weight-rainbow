@@ -868,6 +868,7 @@ function render() {
             ${renderStreakBadges()}
             ${renderWeightTrendArrow()}
             ${renderWeeklyReportCard()}
+            ${renderGoalMilestones()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -3691,6 +3692,34 @@ function renderNoteWordFrequency() {
     <div class="nwf-section">
       <div class="helper">${t("nwf.title")} <span class="nwf-count">(${data.totalNotes} ${t("nwf.notes")})</span></div>
       <div class="nwf-cloud">${tags}</div>
+    </div>
+  `;
+}
+
+function renderGoalMilestones() {
+  const goal = Number(state.settings.goalWeight);
+  const data = calcGoalMilestones(state.records, goal);
+  if (!data) return "";
+
+  const steps = data.milestones.map((m) => `
+    <div class="gm-step ${m.reached ? "gm-done" : ""}">
+      <div class="gm-dot"></div>
+      <div class="gm-pct">${m.pct}%</div>
+      <div class="gm-wt">${m.targetWt}kg</div>
+    </div>
+  `).join("");
+
+  return `
+    <div class="gm-section">
+      <div class="helper">${t("gm.title")}</div>
+      <div class="gm-track">
+        <div class="gm-line"></div>
+        ${steps}
+      </div>
+      <div class="gm-range">
+        <span>${t("gm.start")}: ${data.startWt}kg</span>
+        <span>${t("gm.goal")}: ${data.goalWt}kg</span>
+      </div>
     </div>
   `;
 }

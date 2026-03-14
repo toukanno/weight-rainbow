@@ -4458,6 +4458,17 @@
       .nwf-cloud { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 6px; padding: 8px; background: color-mix(in srgb, var(--accent) 5%, transparent); border-radius: 8px; }
       .nwf-word { color: var(--accent); font-weight: 500; cursor: default; transition: opacity 0.2s; }
 
+      .gm-section { margin-top: 12px; }
+      .gm-track { display: flex; justify-content: space-between; align-items: center; position: relative; padding: 16px 0 4px; }
+      .gm-line { position: absolute; top: 22px; left: 8px; right: 8px; height: 3px; background: color-mix(in srgb, var(--muted) 20%, transparent); border-radius: 2px; }
+      .gm-step { text-align: center; position: relative; z-index: 1; flex: 1; }
+      .gm-dot { width: 14px; height: 14px; border-radius: 50%; background: color-mix(in srgb, var(--muted) 25%, transparent); border: 2px solid var(--surface); margin: 0 auto 4px; transition: background 0.3s; }
+      .gm-done .gm-dot { background: var(--ok); }
+      .gm-pct { font-size: 0.7rem; font-weight: 600; }
+      .gm-done .gm-pct { color: var(--ok); }
+      .gm-wt { font-size: 0.65rem; color: var(--muted); }
+      .gm-range { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--muted); margin-top: 4px; }
+
       .date-shortcut {
         padding: 6px 12px;
         min-height: 44px;

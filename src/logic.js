@@ -5054,3 +5054,4 @@ export function calcNoteWordFrequency(records, topN = 10) {
     totalWords: Object.values(freq).reduce((s, c) => s + c, 0),
   };
 }
+

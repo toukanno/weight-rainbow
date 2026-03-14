@@ -1071,6 +1071,11 @@ export const translations = {
     "nwf.title": "ノート頻出ワード",
     "nwf.notes": "件のノート",
     "nwf.times": "回",
+    "gm.title": "目標マイルストーン",
+    "gm.reached": "達成",
+    "gm.remaining": "未達",
+    "gm.start": "開始",
+    "gm.goal": "目標",
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -2144,6 +2149,11 @@ export const translations = {
     "nwf.title": "Note Keywords",
     "nwf.notes": "notes",
     "nwf.times": "×",
+    "gm.title": "Goal Milestones",
+    "gm.reached": "Reached",
+    "gm.remaining": "Remaining",
+    "gm.start": "Start",
+    "gm.goal": "Goal",
   },
 };
 
