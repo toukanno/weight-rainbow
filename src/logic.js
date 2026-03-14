@@ -4131,3 +4131,176 @@ export function calcWeightSmoothness(records) {
 
   return { score, avgDailyNoise, trendSlope, rating };
 }
+
+/**
+ * Break down weight stats by recent months.
+ * Returns { months: [{ yearMonth, avg, min, max, count, change }] }
+ * change is difference in avg from previous month (null for first month).
+ */
+export function calcPeriodBreakdown(records, numMonths = 3) {
+  if (!records || records.length < 2) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+
+  // Group by year-month
+  const groups = new Map();
+  for (const r of sorted) {
+    const ym = r.dt.slice(0, 7);
+    if (!groups.has(ym)) groups.set(ym, []);
+    groups.get(ym).push(r.wt);
+  }
+
+  // Get last N months
+  const allMonths = [...groups.keys()].sort();
+  const recentMonths = allMonths.slice(-numMonths);
+  if (recentMonths.length === 0) return null;
+
+  const months = [];
+  let prevAvg = null;
+
+  // Include the month before the first recent month for change calculation
+  const firstIdx = allMonths.indexOf(recentMonths[0]);
+  if (firstIdx > 0) {
+    const prevWeights = groups.get(allMonths[firstIdx - 1]);
+    prevAvg = +(prevWeights.reduce((s, w) => s + w, 0) / prevWeights.length).toFixed(1);
+  }
+
+  for (const ym of recentMonths) {
+    const weights = groups.get(ym);
+    const avg = +(weights.reduce((s, w) => s + w, 0) / weights.length).toFixed(1);
+    const min = +Math.min(...weights).toFixed(1);
+    const max = +Math.max(...weights).toFixed(1);
+    const change = prevAvg !== null ? +(avg - prevAvg).toFixed(1) : null;
+    months.push({ yearMonth: ym, avg, min, max, count: weights.length, change });
+    prevAvg = avg;
+  }
+
+  return { months };
+}
+
+/**
+ * Calculate a motivation level based on recent activity and progress.
+ * Considers: recording streak, weight trend, and consistency.
+ * Returns { level (1-5), streakDays, trendDirection, isImproving }
+ * level 1 = needs encouragement, 5 = doing great
+ */
+export function calcMotivationLevel(records) {
+  if (!records || records.length < 2) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+
+  // Calculate streak (consecutive recent days)
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  let streakDays = 0;
+  const dateSet = new Set(sorted.map((r) => r.dt));
+  for (let d = 0; d < 60; d++) {
+    const checkDate = new Date(today);
+    checkDate.setDate(checkDate.getDate() - d);
+    const ds = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, "0")}-${String(checkDate.getDate()).padStart(2, "0")}`;
+    if (dateSet.has(ds)) {
+      streakDays++;
+    } else if (d > 0) {
+      break;
+    }
+  }
+
+  // Check trend direction (last 7 entries)
+  const recent = sorted.slice(-7);
+  let trendDirection = "stable";
+  if (recent.length >= 3) {
+    const firstHalf = recent.slice(0, Math.floor(recent.length / 2));
+    const secondHalf = recent.slice(Math.floor(recent.length / 2));
+    const avgFirst = firstHalf.reduce((s, r) => s + r.wt, 0) / firstHalf.length;
+    const avgSecond = secondHalf.reduce((s, r) => s + r.wt, 0) / secondHalf.length;
+    const diff = avgSecond - avgFirst;
+    if (diff < -0.2) trendDirection = "losing";
+    else if (diff > 0.2) trendDirection = "gaining";
+  }
+
+  // Check consistency (records in last 7 days)
+  const last7dates = new Set();
+  for (let d = 0; d < 7; d++) {
+    const checkDate = new Date(today);
+    checkDate.setDate(checkDate.getDate() - d);
+    const ds = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, "0")}-${String(checkDate.getDate()).padStart(2, "0")}`;
+    if (dateSet.has(ds)) last7dates.add(ds);
+  }
+  const weeklyConsistency = last7dates.size;
+
+  // Calculate level
+  let level = 1;
+  if (streakDays >= 7) level += 2;
+  else if (streakDays >= 3) level += 1;
+  if (weeklyConsistency >= 5) level += 1;
+  if (trendDirection === "losing" || trendDirection === "stable") level += 1;
+  level = Math.min(5, Math.max(1, level));
+
+  const isImproving = trendDirection === "losing";
+
+  return { level, streakDays, trendDirection, isImproving };
+}
+
+/**
+ * Calculate a confidence band for the user's "true weight" based on recent variance.
+ * Uses the last 7–14 readings to compute a mean and standard deviation,
+ * then returns a band (mean ± 1 SD) showing the likely true weight range.
+ * Returns { mean, low, high, stdDev, readings, bandwidth }
+ */
+export function calcWeightBand(records) {
+  if (!records || records.length < 5) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-14);
+  if (recent.length < 5) return null;
+
+  const weights = recent.map((r) => r.wt);
+  const n = weights.length;
+  const mean = +(weights.reduce((s, w) => s + w, 0) / n).toFixed(1);
+
+  const variance = weights.reduce((s, w) => s + (w - mean) ** 2, 0) / n;
+  const stdDev = +Math.sqrt(variance).toFixed(2);
+
+  const low = +(mean - stdDev).toFixed(1);
+  const high = +(mean + stdDev).toFixed(1);
+  const bandwidth = +(high - low).toFixed(1);
+
+  return { mean, low, high, stdDev, readings: n, bandwidth };
+}
+
+/**
+ * Find the best (lowest average) day of the week for weigh-ins.
+ * Returns { days: [{ day (0-6), avg, count, diffFromBest }], bestDay, worstDay }
+ * day: 0=Sun, 1=Mon, ... 6=Sat
+ */
+export function calcBestWeighDay(records) {
+  if (!records || records.length < 14) return null;
+
+  const dayTotals = Array.from({ length: 7 }, () => ({ sum: 0, count: 0 }));
+
+  for (const r of records) {
+    const d = new Date(r.dt + "T00:00:00");
+    const dow = d.getDay();
+    dayTotals[dow].sum += r.wt;
+    dayTotals[dow].count++;
+  }
+
+  const days = dayTotals.map((d, i) => ({
+    day: i,
+    avg: d.count > 0 ? +(d.sum / d.count).toFixed(1) : null,
+    count: d.count,
+  })).filter((d) => d.avg !== null);
+
+  if (days.length < 3) return null;
+
+  const minAvg = Math.min(...days.map((d) => d.avg));
+  const maxAvg = Math.max(...days.map((d) => d.avg));
+  const bestDay = days.find((d) => d.avg === minAvg).day;
+  const worstDay = days.find((d) => d.avg === maxAvg).day;
+
+  for (const d of days) {
+    d.diffFromBest = +(d.avg - minAvg).toFixed(1);
+  }
+
+  return { days, bestDay, worstDay };
+}

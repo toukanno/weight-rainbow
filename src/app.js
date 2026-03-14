@@ -128,6 +128,10 @@ import {
   calcRecordCompleteness,
   calcWeightPace,
   calcWeightSmoothness,
+  calcPeriodBreakdown,
+  calcMotivationLevel,
+  calcWeightBand,
+  calcBestWeighDay,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -839,6 +843,9 @@ function render() {
             ${renderGoalStreak()}
             ${renderThenVsNow()}
             ${renderWeightPace()}
+            ${renderPeriodBreakdown()}
+            ${renderMotivation()}
+            ${renderWeightBand()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -880,6 +887,7 @@ function render() {
                 ${renderDailyChangeDist()}
                 ${renderRecordCompleteness()}
                 ${renderWeightSmoothness()}
+                ${renderBestWeighDay()}
               </div>
               ` : ""}
             </div>
@@ -3127,6 +3135,104 @@ function renderWeightSmoothness() {
       </div>
       <div class="wsm-bar-track"><div class="wsm-bar-fill" style="width:${data.score}%;background:${color}"></div></div>
       ${data.score < 70 ? `<div class="wsm-tip">${t("wsm.tip")}</div>` : ""}
+    </div>
+  `;
+}
+
+function renderPeriodBreakdown() {
+  const data = calcPeriodBreakdown(state.records, 3);
+  if (!data || data.months.length === 0) return "";
+
+  const rows = data.months.map((m) => {
+    const changeStr = m.change !== null
+      ? `<span class="pbd-change ${m.change < 0 ? "pbd-loss" : m.change > 0 ? "pbd-gain" : ""}">${m.change > 0 ? "+" : ""}${m.change}kg</span>`
+      : `<span class="pbd-change">—</span>`;
+    return `<tr>
+      <td class="pbd-month">${m.yearMonth}</td>
+      <td class="pbd-avg">${m.avg}kg</td>
+      <td class="pbd-range-cell">${m.min}–${m.max}</td>
+      <td class="pbd-cnt">${m.count}</td>
+      <td>${changeStr}</td>
+    </tr>`;
+  }).join("");
+
+  return `
+    <div class="pbd-section">
+      <div class="helper">${t("pbd.title")}</div>
+      <table class="pbd-table">
+        <thead><tr>
+          <th></th><th>${t("pbd.avg")}</th><th>${t("pbd.range")}</th><th>${t("pbd.count")}</th><th>${t("pbd.change")}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderMotivation() {
+  const data = calcMotivationLevel(state.records);
+  if (!data) return "";
+
+  const stars = "★".repeat(data.level) + "☆".repeat(5 - data.level);
+  const color = data.level >= 4 ? "var(--ok)" : data.level >= 3 ? "var(--accent-3)" : data.level >= 2 ? "var(--warn)" : "var(--muted)";
+  const msg = t("motiv.level" + data.level);
+  const trendMsg = t("motiv.trend." + data.trendDirection);
+
+  return `
+    <div class="mot-section">
+      <div class="helper">${t("motiv.title")}</div>
+      <div class="mot-stars" style="color:${color}">${stars}</div>
+      <div class="mot-msg" style="color:${color}">${msg}</div>
+      <div class="mot-details">
+        ${data.streakDays > 0 ? `<span class="mot-streak">${t("motiv.streak").replace("{days}", String(data.streakDays))}</span>` : ""}
+        <span class="mot-trend">${trendMsg}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderWeightBand() {
+  const data = calcWeightBand(state.records);
+  if (!data) return "";
+
+  return `
+    <div class="wb-section">
+      <div class="helper">${t("wband.title")}</div>
+      <div class="wb-visual">
+        <div class="wb-band">
+          <span class="wb-lo">${data.low}kg</span>
+          <span class="wb-mean">${data.mean}kg</span>
+          <span class="wb-hi">${data.high}kg</span>
+        </div>
+        <div class="wb-bar"><div class="wb-bar-center"></div></div>
+      </div>
+      <div class="wb-info">${t("wband.spread")}: ±${data.stdDev}kg</div>
+      ${data.bandwidth > 1.0 ? `<div class="wb-tip">${t("wband.tip")}</div>` : ""}
+    </div>
+  `;
+}
+
+function renderBestWeighDay() {
+  const data = calcBestWeighDay(state.records);
+  if (!data) return "";
+
+  const maxDiff = Math.max(...data.days.map((d) => d.diffFromBest), 0.1);
+  const bars = data.days.map((d) => {
+    const pct = Math.round((d.diffFromBest / maxDiff) * 100);
+    const isBest = d.day === data.bestDay;
+    const cls = isBest ? "bwd-bar-best" : "";
+    return `<div class="bwd-row">
+      <span class="bwd-day">${t("bwd.days." + d.day)}</span>
+      <div class="bwd-bar-track"><div class="bwd-bar-fill ${cls}" style="width:${isBest ? 0 : pct}%"></div></div>
+      <span class="bwd-avg">${d.avg}kg</span>
+    </div>`;
+  }).join("");
+
+  return `
+    <div class="bwd-section">
+      <div class="helper">${t("bwd.title")}</div>
+      ${bars}
+      <div class="bwd-best-label">${t("bwd.best")}: ${t("bwd.days." + data.bestDay)}</div>
     </div>
   `;
 }

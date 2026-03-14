@@ -1358,7 +1358,10 @@ function parseCSVImport(csvText) {
     const bmi = row[2]?.trim() ? Number(row[2]) : null;
     const bf = row[3]?.trim() ? Number(row[3]) : null;
     const note = row[5]?.trim() || "";
-    records.push({ dt, wt, bmi: Number.isFinite(bmi) ? bmi : null, bf: Number.isFinite(bf) ? bf : null, source: "import", note: note.slice(0, 100), createdAt: (/* @__PURE__ */ new Date()).toISOString() });
+    const VALID_SOURCES = ["manual", "voice", "photo", "quick", "import"];
+    const rawSource = row[4]?.trim().toLowerCase() || "";
+    const source = VALID_SOURCES.includes(rawSource) ? rawSource : "import";
+    records.push({ dt, wt, bmi: Number.isFinite(bmi) ? bmi : null, bf: Number.isFinite(bf) ? bf : null, source, note: note.slice(0, 100), createdAt: (/* @__PURE__ */ new Date()).toISOString() });
   }
   return { records, errors };
 }
@@ -3943,6 +3946,204 @@ function calcQuickWeightPresets(records) {
   }
   return [...presets.values()].sort((a, b) => a.weight - b.weight);
 }
+function calcRecordCompleteness(records) {
+  if (!records || records.length === 0) return null;
+  let withBodyFat = 0;
+  let withNote = 0;
+  let withTag = 0;
+  for (const r of records) {
+    if (r.bf != null && Number(r.bf) > 0) withBodyFat++;
+    if (r.note && r.note.trim().length > 0) withNote++;
+    if (r.note && /#\w+/.test(r.note)) withTag++;
+  }
+  const total = records.length;
+  const bodyFatPct = Math.round(withBodyFat / total * 100);
+  const notePct = Math.round(withNote / total * 100);
+  const tagPct = Math.round(withTag / total * 100);
+  const completePct = Math.round((withBodyFat + withNote) / (total * 2) * 100);
+  let level;
+  if (completePct >= 75) level = "excellent";
+  else if (completePct >= 50) level = "good";
+  else if (completePct >= 25) level = "fair";
+  else level = "basic";
+  return { total, withBodyFat, withNote, withTag, completePct, bodyFatPct, notePct, tagPct, level };
+}
+function calcWeightPace(records, goalWeight) {
+  if (!records || records.length < 7 || !goalWeight || goalWeight <= 0) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-14);
+  if (recent.length < 7) return null;
+  const first = recent[0];
+  const last = recent[recent.length - 1];
+  const daysDiff = Math.max(1, Math.round((/* @__PURE__ */ new Date(last.dt + "T00:00:00") - /* @__PURE__ */ new Date(first.dt + "T00:00:00")) / 864e5));
+  const totalChange = last.wt - first.wt;
+  const weeklyRate = +(totalChange / daysDiff * 7).toFixed(2);
+  const currentWt = last.wt;
+  const direction = currentWt > goalWeight ? "lose" : currentWt < goalWeight ? "gain" : "achieved";
+  if (direction === "achieved") {
+    return { weeklyRate, direction, pace: "maintaining", healthyMin: 0, healthyMax: 0 };
+  }
+  let healthyMin, healthyMax, pace;
+  if (direction === "lose") {
+    healthyMin = -1;
+    healthyMax = -0.5;
+    if (weeklyRate < healthyMin) pace = "too_fast";
+    else if (weeklyRate >= healthyMin && weeklyRate <= healthyMax) pace = "healthy";
+    else pace = "too_slow";
+  } else {
+    healthyMin = 0.25;
+    healthyMax = 0.5;
+    if (weeklyRate > healthyMax) pace = "too_fast";
+    else if (weeklyRate < 0.1) pace = "too_slow";
+    else if (weeklyRate >= healthyMin) pace = "healthy";
+    else pace = "too_slow";
+  }
+  return { weeklyRate, direction, pace, healthyMin, healthyMax };
+}
+function calcWeightSmoothness(records) {
+  if (!records || records.length < 7) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-30);
+  if (recent.length < 7) return null;
+  const n = recent.length;
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+  for (let i = 0; i < n; i++) {
+    sumX += i;
+    sumY += recent[i].wt;
+    sumXY += i * recent[i].wt;
+    sumX2 += i * i;
+  }
+  const trendSlope = +((n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX)).toFixed(4);
+  const intercept = (sumY - trendSlope * sumX) / n;
+  let totalNoise = 0;
+  for (let i = 0; i < n; i++) {
+    const expected = intercept + trendSlope * i;
+    totalNoise += Math.abs(recent[i].wt - expected);
+  }
+  const avgDailyNoise = +(totalNoise / n).toFixed(3);
+  const score = Math.max(0, Math.min(100, Math.round(100 - avgDailyNoise / 0.6 * 100)));
+  let rating;
+  if (score >= 90) rating = "very_smooth";
+  else if (score >= 70) rating = "smooth";
+  else if (score >= 50) rating = "normal";
+  else if (score >= 30) rating = "noisy";
+  else rating = "erratic";
+  return { score, avgDailyNoise, trendSlope, rating };
+}
+function calcPeriodBreakdown(records, numMonths = 3) {
+  if (!records || records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const groups = /* @__PURE__ */ new Map();
+  for (const r of sorted) {
+    const ym = r.dt.slice(0, 7);
+    if (!groups.has(ym)) groups.set(ym, []);
+    groups.get(ym).push(r.wt);
+  }
+  const allMonths = [...groups.keys()].sort();
+  const recentMonths = allMonths.slice(-numMonths);
+  if (recentMonths.length === 0) return null;
+  const months2 = [];
+  let prevAvg = null;
+  const firstIdx = allMonths.indexOf(recentMonths[0]);
+  if (firstIdx > 0) {
+    const prevWeights = groups.get(allMonths[firstIdx - 1]);
+    prevAvg = +(prevWeights.reduce((s, w) => s + w, 0) / prevWeights.length).toFixed(1);
+  }
+  for (const ym of recentMonths) {
+    const weights = groups.get(ym);
+    const avg = +(weights.reduce((s, w) => s + w, 0) / weights.length).toFixed(1);
+    const min = +Math.min(...weights).toFixed(1);
+    const max = +Math.max(...weights).toFixed(1);
+    const change = prevAvg !== null ? +(avg - prevAvg).toFixed(1) : null;
+    months2.push({ yearMonth: ym, avg, min, max, count: weights.length, change });
+    prevAvg = avg;
+  }
+  return { months: months2 };
+}
+function calcMotivationLevel(records) {
+  if (!records || records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const today = /* @__PURE__ */ new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  let streakDays = 0;
+  const dateSet = new Set(sorted.map((r) => r.dt));
+  for (let d = 0; d < 60; d++) {
+    const checkDate = new Date(today);
+    checkDate.setDate(checkDate.getDate() - d);
+    const ds = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, "0")}-${String(checkDate.getDate()).padStart(2, "0")}`;
+    if (dateSet.has(ds)) {
+      streakDays++;
+    } else if (d > 0) {
+      break;
+    }
+  }
+  const recent = sorted.slice(-7);
+  let trendDirection = "stable";
+  if (recent.length >= 3) {
+    const firstHalf = recent.slice(0, Math.floor(recent.length / 2));
+    const secondHalf = recent.slice(Math.floor(recent.length / 2));
+    const avgFirst = firstHalf.reduce((s, r) => s + r.wt, 0) / firstHalf.length;
+    const avgSecond = secondHalf.reduce((s, r) => s + r.wt, 0) / secondHalf.length;
+    const diff = avgSecond - avgFirst;
+    if (diff < -0.2) trendDirection = "losing";
+    else if (diff > 0.2) trendDirection = "gaining";
+  }
+  const last7dates = /* @__PURE__ */ new Set();
+  for (let d = 0; d < 7; d++) {
+    const checkDate = new Date(today);
+    checkDate.setDate(checkDate.getDate() - d);
+    const ds = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, "0")}-${String(checkDate.getDate()).padStart(2, "0")}`;
+    if (dateSet.has(ds)) last7dates.add(ds);
+  }
+  const weeklyConsistency = last7dates.size;
+  let level = 1;
+  if (streakDays >= 7) level += 2;
+  else if (streakDays >= 3) level += 1;
+  if (weeklyConsistency >= 5) level += 1;
+  if (trendDirection === "losing" || trendDirection === "stable") level += 1;
+  level = Math.min(5, Math.max(1, level));
+  const isImproving = trendDirection === "losing";
+  return { level, streakDays, trendDirection, isImproving };
+}
+function calcWeightBand(records) {
+  if (!records || records.length < 5) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-14);
+  if (recent.length < 5) return null;
+  const weights = recent.map((r) => r.wt);
+  const n = weights.length;
+  const mean = +(weights.reduce((s, w) => s + w, 0) / n).toFixed(1);
+  const variance = weights.reduce((s, w) => s + (w - mean) ** 2, 0) / n;
+  const stdDev = +Math.sqrt(variance).toFixed(2);
+  const low = +(mean - stdDev).toFixed(1);
+  const high = +(mean + stdDev).toFixed(1);
+  const bandwidth = +(high - low).toFixed(1);
+  return { mean, low, high, stdDev, readings: n, bandwidth };
+}
+function calcBestWeighDay(records) {
+  if (!records || records.length < 14) return null;
+  const dayTotals = Array.from({ length: 7 }, () => ({ sum: 0, count: 0 }));
+  for (const r of records) {
+    const d = /* @__PURE__ */ new Date(r.dt + "T00:00:00");
+    const dow = d.getDay();
+    dayTotals[dow].sum += r.wt;
+    dayTotals[dow].count++;
+  }
+  const days2 = dayTotals.map((d, i) => ({
+    day: i,
+    avg: d.count > 0 ? +(d.sum / d.count).toFixed(1) : null,
+    count: d.count
+  })).filter((d) => d.avg !== null);
+  if (days2.length < 3) return null;
+  const minAvg = Math.min(...days2.map((d) => d.avg));
+  const maxAvg = Math.max(...days2.map((d) => d.avg));
+  const bestDay = days2.find((d) => d.avg === minAvg).day;
+  const worstDay = days2.find((d) => d.avg === maxAvg).day;
+  for (const d of days2) {
+    d.diffFromBest = +(d.avg - minAvg).toFixed(1);
+  }
+  return { days: days2, bestDay, worstDay };
+}
 
 // src/i18n.js
 var translations = {
@@ -4882,7 +5083,63 @@ var translations = {
     "tvn.change": "\u5909\u5316",
     "preset.last": "\u524D\u56DE",
     "preset.avg3": "3\u65E5\u5E73\u5747",
-    "preset.trend": "\u4E88\u6E2C"
+    "preset.trend": "\u4E88\u6E2C",
+    "rcomp.title": "\u8A18\u9332\u306E\u5145\u5B9F\u5EA6",
+    "rcomp.total": "\u7DCF\u8A18\u9332\u6570",
+    "rcomp.bodyFat": "\u4F53\u8102\u80AA\u7387\u3042\u308A",
+    "rcomp.note": "\u30E1\u30E2\u3042\u308A",
+    "rcomp.tag": "\u30BF\u30B0\u3042\u308A",
+    "rcomp.level.excellent": "\u7D20\u6674\u3089\u3057\u3044\uFF01",
+    "rcomp.level.good": "\u826F\u3044\u8A18\u9332\u3067\u3059",
+    "rcomp.level.fair": "\u307E\u305A\u307E\u305A",
+    "rcomp.level.basic": "\u3082\u3063\u3068\u8A73\u3057\u304F\u8A18\u9332\u3057\u3088\u3046",
+    "rcomp.tip": "\u4F53\u8102\u80AA\u7387\u3084\u30E1\u30E2\u3092\u8FFD\u52A0\u3059\u308B\u3068\u3001\u3088\u308A\u8A73\u7D30\u306A\u5206\u6790\u304C\u3067\u304D\u307E\u3059",
+    "wpace.title": "\u5909\u5316\u30DA\u30FC\u30B9",
+    "wpace.weekly": "\u9031",
+    "wpace.healthy": "\u5065\u5EB7\u7684\u306A\u30DA\u30FC\u30B9",
+    "wpace.too_fast": "\u901F\u3059\u304E",
+    "wpace.healthy_pace": "\u5065\u5EB7\u7684",
+    "wpace.too_slow": "\u3086\u3063\u304F\u308A",
+    "wpace.maintaining": "\u7DAD\u6301\u4E2D",
+    "wpace.range": "\u63A8\u5968: {min}\u301C{max} kg/\u9031",
+    "wsm.title": "\u6E2C\u5B9A\u306E\u5B89\u5B9A\u5EA6",
+    "wsm.score": "\u30B9\u30B3\u30A2",
+    "wsm.noise": "\u5E73\u5747\u30CE\u30A4\u30BA",
+    "wsm.very_smooth": "\u975E\u5E38\u306B\u5B89\u5B9A",
+    "wsm.smooth": "\u5B89\u5B9A",
+    "wsm.normal": "\u666E\u901A",
+    "wsm.noisy": "\u3070\u3089\u3064\u304D\u3042\u308A",
+    "wsm.erratic": "\u4E0D\u5B89\u5B9A",
+    "wsm.tip": "\u6BCE\u65E5\u540C\u3058\u6761\u4EF6\u3067\u6E2C\u5B9A\u3059\u308B\u3068\u30B9\u30B3\u30A2\u304C\u4E0A\u304C\u308A\u307E\u3059",
+    "pbd.title": "\u6708\u5225\u30B5\u30DE\u30EA\u30FC",
+    "pbd.avg": "\u5E73\u5747",
+    "pbd.range": "\u7BC4\u56F2",
+    "pbd.count": "\u8A18\u9332\u6570",
+    "pbd.change": "\u524D\u6708\u6BD4",
+    "motiv.title": "\u30E2\u30C1\u30D9\u30FC\u30B7\u30E7\u30F3",
+    "motiv.streak": "{days}\u65E5\u9023\u7D9A\u8A18\u9332\u4E2D",
+    "motiv.level1": "\u307E\u305A\u8A18\u9332\u3092\u59CB\u3081\u307E\u3057\u3087\u3046\uFF01",
+    "motiv.level2": "\u3044\u3044\u8ABF\u5B50\u3001\u7D9A\u3051\u307E\u3057\u3087\u3046",
+    "motiv.level3": "\u9806\u8ABF\u306B\u9032\u3093\u3067\u3044\u307E\u3059",
+    "motiv.level4": "\u7D20\u6674\u3089\u3057\u3044\u7D99\u7D9A\u529B\uFF01",
+    "motiv.level5": "\u5B8C\u74A7\uFF01\u6700\u9AD8\u306E\u72B6\u614B\u3067\u3059",
+    "motiv.trend.losing": "\u4F53\u91CD\u304C\u6E1B\u5C11\u50BE\u5411",
+    "motiv.trend.gaining": "\u4F53\u91CD\u304C\u5897\u52A0\u50BE\u5411",
+    "motiv.trend.stable": "\u4F53\u91CD\u304C\u5B89\u5B9A\u3057\u3066\u3044\u307E\u3059",
+    "wband.title": "\u4F53\u91CD\u306E\u4FE1\u983C\u533A\u9593",
+    "wband.range": "\u63A8\u5B9A\u7BC4\u56F2",
+    "wband.mean": "\u5E73\u5747",
+    "wband.spread": "\u3070\u3089\u3064\u304D",
+    "wband.tip": "\u65E5\u3005\u306E\u5909\u52D5\u306F\u6B63\u5E38\u3067\u3059\u3002\u3053\u306E\u7BC4\u56F2\u5185\u306F\u8AA4\u5DEE\u306E\u7BC4\u56F2\u3067\u3059",
+    "bwd.title": "\u66DC\u65E5\u5225\u30D1\u30BF\u30FC\u30F3",
+    "bwd.best": "\u6700\u8EFD\u91CF\u65E5",
+    "bwd.days.0": "\u65E5",
+    "bwd.days.1": "\u6708",
+    "bwd.days.2": "\u706B",
+    "bwd.days.3": "\u6C34",
+    "bwd.days.4": "\u6728",
+    "bwd.days.5": "\u91D1",
+    "bwd.days.6": "\u571F"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5820,7 +6077,63 @@ var translations = {
     "tvn.change": "Change",
     "preset.last": "Last",
     "preset.avg3": "3-day avg",
-    "preset.trend": "Predicted"
+    "preset.trend": "Predicted",
+    "rcomp.title": "Record Completeness",
+    "rcomp.total": "Total Records",
+    "rcomp.bodyFat": "With Body Fat",
+    "rcomp.note": "With Notes",
+    "rcomp.tag": "With Tags",
+    "rcomp.level.excellent": "Excellent!",
+    "rcomp.level.good": "Good records",
+    "rcomp.level.fair": "Fair",
+    "rcomp.level.basic": "Try adding more details",
+    "rcomp.tip": "Adding body fat and notes enables richer analysis",
+    "wpace.title": "Change Pace",
+    "wpace.weekly": "week",
+    "wpace.healthy": "Healthy Pace",
+    "wpace.too_fast": "Too Fast",
+    "wpace.healthy_pace": "Healthy",
+    "wpace.too_slow": "Slow",
+    "wpace.maintaining": "Maintaining",
+    "wpace.range": "Recommended: {min}\u2013{max} kg/week",
+    "wsm.title": "Measurement Stability",
+    "wsm.score": "Score",
+    "wsm.noise": "Avg Noise",
+    "wsm.very_smooth": "Very Stable",
+    "wsm.smooth": "Stable",
+    "wsm.normal": "Normal",
+    "wsm.noisy": "Noisy",
+    "wsm.erratic": "Erratic",
+    "wsm.tip": "Weigh at the same time and conditions to improve your score",
+    "pbd.title": "Monthly Summary",
+    "pbd.avg": "Avg",
+    "pbd.range": "Range",
+    "pbd.count": "Records",
+    "pbd.change": "vs Prev",
+    "motiv.title": "Motivation",
+    "motiv.streak": "{days}-day streak",
+    "motiv.level1": "Start recording today!",
+    "motiv.level2": "Good start, keep going",
+    "motiv.level3": "Making steady progress",
+    "motiv.level4": "Great consistency!",
+    "motiv.level5": "Perfect! You're on fire",
+    "motiv.trend.losing": "Weight trending down",
+    "motiv.trend.gaining": "Weight trending up",
+    "motiv.trend.stable": "Weight is stable",
+    "wband.title": "Weight Confidence Band",
+    "wband.range": "Estimated Range",
+    "wband.mean": "Mean",
+    "wband.spread": "Spread",
+    "wband.tip": "Daily fluctuations are normal. Readings within this band are within noise",
+    "bwd.title": "Day-of-Week Pattern",
+    "bwd.best": "Lightest Day",
+    "bwd.days.0": "Sun",
+    "bwd.days.1": "Mon",
+    "bwd.days.2": "Tue",
+    "bwd.days.3": "Wed",
+    "bwd.days.4": "Thu",
+    "bwd.days.5": "Fri",
+    "bwd.days.6": "Sat"
   }
 };
 function createTranslator(language) {
@@ -26987,6 +27300,10 @@ function render() {
             ${renderTrendForecast()}
             ${renderGoalStreak()}
             ${renderThenVsNow()}
+            ${renderWeightPace()}
+            ${renderPeriodBreakdown()}
+            ${renderMotivation()}
+            ${renderWeightBand()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -27026,6 +27343,9 @@ function render() {
                 ${renderMovingAvgCrossover()}
                 ${renderPredictionAccuracy()}
                 ${renderDailyChangeDist()}
+                ${renderRecordCompleteness()}
+                ${renderWeightSmoothness()}
+                ${renderBestWeighDay()}
               </div>
               ` : ""}
             </div>
@@ -29038,6 +29358,146 @@ function renderThenVsNow() {
         </div>
       </div>
       <div class="tvn-diff ${diffCls}">${t("tvn.change")}: ${diffSign}${data.diff}kg</div>
+    </div>
+  `;
+}
+function renderRecordCompleteness() {
+  const data = calcRecordCompleteness(state.records);
+  if (!data || data.total < 3) return "";
+  const barColor = data.level === "excellent" ? "var(--ok)" : data.level === "good" ? "var(--accent-3)" : data.level === "fair" ? "var(--warn)" : "var(--muted)";
+  return `
+    <div class="rc-section">
+      <div class="helper">${t("rcomp.title")}</div>
+      <div class="rc-level" style="color:${barColor}">${t("rcomp.level." + data.level)}</div>
+      <div class="rc-bars">
+        <div class="rc-bar-row"><span class="rc-bar-label">${t("rcomp.bodyFat")}</span><div class="rc-bar-track"><div class="rc-bar-fill" style="width:${data.bodyFatPct}%;background:${barColor}"></div></div><span class="rc-bar-val">${data.bodyFatPct}%</span></div>
+        <div class="rc-bar-row"><span class="rc-bar-label">${t("rcomp.note")}</span><div class="rc-bar-track"><div class="rc-bar-fill" style="width:${data.notePct}%;background:${barColor}"></div></div><span class="rc-bar-val">${data.notePct}%</span></div>
+        <div class="rc-bar-row"><span class="rc-bar-label">${t("rcomp.tag")}</span><div class="rc-bar-track"><div class="rc-bar-fill" style="width:${data.tagPct}%;background:${barColor}"></div></div><span class="rc-bar-val">${data.tagPct}%</span></div>
+      </div>
+      ${data.level !== "excellent" ? `<div class="rc-tip">${t("rcomp.tip")}</div>` : ""}
+    </div>
+  `;
+}
+function renderWeightPace() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const data = calcWeightPace(state.records, goalWeight);
+  if (!data) return "";
+  const paceColor = data.pace === "healthy" ? "var(--ok)" : data.pace === "too_fast" ? "var(--error)" : data.pace === "too_slow" ? "var(--warn)" : "var(--muted)";
+  const paceLabel = data.pace === "healthy" ? t("wpace.healthy_pace") : data.pace === "too_fast" ? t("wpace.too_fast") : data.pace === "too_slow" ? t("wpace.too_slow") : t("wpace.maintaining");
+  const sign = data.weeklyRate > 0 ? "+" : "";
+  return `
+    <div class="wp-section">
+      <div class="helper">${t("wpace.title")}</div>
+      <div class="wp-meter">
+        <div class="wp-rate" style="color:${paceColor}">${sign}${data.weeklyRate} kg/${t("wpace.weekly")}</div>
+        <div class="wp-badge" style="background:color-mix(in srgb, ${paceColor} 15%, transparent);color:${paceColor}">${paceLabel}</div>
+      </div>
+      ${data.pace !== "maintaining" ? `<div class="wp-range">${t("wpace.range").replace("{min}", String(data.healthyMin)).replace("{max}", String(data.healthyMax))}</div>` : ""}
+    </div>
+  `;
+}
+function renderWeightSmoothness() {
+  const data = calcWeightSmoothness(state.records);
+  if (!data) return "";
+  const color = data.score >= 70 ? "var(--ok)" : data.score >= 50 ? "var(--warn)" : "var(--error)";
+  const ratingLabel = t("wsm." + data.rating);
+  return `
+    <div class="wsm-section">
+      <div class="helper">${t("wsm.title")}</div>
+      <div class="wsm-meter">
+        <div class="wsm-score" style="color:${color}">${data.score}</div>
+        <div class="wsm-details">
+          <div class="wsm-rating" style="color:${color}">${ratingLabel}</div>
+          <div class="wsm-noise">${t("wsm.noise")}: \xB1${data.avgDailyNoise}kg</div>
+        </div>
+      </div>
+      <div class="wsm-bar-track"><div class="wsm-bar-fill" style="width:${data.score}%;background:${color}"></div></div>
+      ${data.score < 70 ? `<div class="wsm-tip">${t("wsm.tip")}</div>` : ""}
+    </div>
+  `;
+}
+function renderPeriodBreakdown() {
+  const data = calcPeriodBreakdown(state.records, 3);
+  if (!data || data.months.length === 0) return "";
+  const rows = data.months.map((m) => {
+    const changeStr = m.change !== null ? `<span class="pbd-change ${m.change < 0 ? "pbd-loss" : m.change > 0 ? "pbd-gain" : ""}">${m.change > 0 ? "+" : ""}${m.change}kg</span>` : `<span class="pbd-change">\u2014</span>`;
+    return `<tr>
+      <td class="pbd-month">${m.yearMonth}</td>
+      <td class="pbd-avg">${m.avg}kg</td>
+      <td class="pbd-range-cell">${m.min}\u2013${m.max}</td>
+      <td class="pbd-cnt">${m.count}</td>
+      <td>${changeStr}</td>
+    </tr>`;
+  }).join("");
+  return `
+    <div class="pbd-section">
+      <div class="helper">${t("pbd.title")}</div>
+      <table class="pbd-table">
+        <thead><tr>
+          <th></th><th>${t("pbd.avg")}</th><th>${t("pbd.range")}</th><th>${t("pbd.count")}</th><th>${t("pbd.change")}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+function renderMotivation() {
+  const data = calcMotivationLevel(state.records);
+  if (!data) return "";
+  const stars = "\u2605".repeat(data.level) + "\u2606".repeat(5 - data.level);
+  const color = data.level >= 4 ? "var(--ok)" : data.level >= 3 ? "var(--accent-3)" : data.level >= 2 ? "var(--warn)" : "var(--muted)";
+  const msg = t("motiv.level" + data.level);
+  const trendMsg = t("motiv.trend." + data.trendDirection);
+  return `
+    <div class="mot-section">
+      <div class="helper">${t("motiv.title")}</div>
+      <div class="mot-stars" style="color:${color}">${stars}</div>
+      <div class="mot-msg" style="color:${color}">${msg}</div>
+      <div class="mot-details">
+        ${data.streakDays > 0 ? `<span class="mot-streak">${t("motiv.streak").replace("{days}", String(data.streakDays))}</span>` : ""}
+        <span class="mot-trend">${trendMsg}</span>
+      </div>
+    </div>
+  `;
+}
+function renderWeightBand() {
+  const data = calcWeightBand(state.records);
+  if (!data) return "";
+  return `
+    <div class="wb-section">
+      <div class="helper">${t("wband.title")}</div>
+      <div class="wb-visual">
+        <div class="wb-band">
+          <span class="wb-lo">${data.low}kg</span>
+          <span class="wb-mean">${data.mean}kg</span>
+          <span class="wb-hi">${data.high}kg</span>
+        </div>
+        <div class="wb-bar"><div class="wb-bar-center"></div></div>
+      </div>
+      <div class="wb-info">${t("wband.spread")}: \xB1${data.stdDev}kg</div>
+      ${data.bandwidth > 1 ? `<div class="wb-tip">${t("wband.tip")}</div>` : ""}
+    </div>
+  `;
+}
+function renderBestWeighDay() {
+  const data = calcBestWeighDay(state.records);
+  if (!data) return "";
+  const maxDiff = Math.max(...data.days.map((d) => d.diffFromBest), 0.1);
+  const bars = data.days.map((d) => {
+    const pct = Math.round(d.diffFromBest / maxDiff * 100);
+    const isBest = d.day === data.bestDay;
+    const cls = isBest ? "bwd-bar-best" : "";
+    return `<div class="bwd-row">
+      <span class="bwd-day">${t("bwd.days." + d.day)}</span>
+      <div class="bwd-bar-track"><div class="bwd-bar-fill ${cls}" style="width:${isBest ? 0 : pct}%"></div></div>
+      <span class="bwd-avg">${d.avg}kg</span>
+    </div>`;
+  }).join("");
+  return `
+    <div class="bwd-section">
+      <div class="helper">${t("bwd.title")}</div>
+      ${bars}
+      <div class="bwd-best-label">${t("bwd.best")}: ${t("bwd.days." + data.bestDay)}</div>
     </div>
   `;
 }
