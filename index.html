@@ -3740,7 +3740,7 @@
 
       /* === SmartDiet-style Tab Layout === */
       .tab-layout {
-        padding-bottom: 80px !important;
+        padding-bottom: 118px !important;
       }
 
       .tab-page {
@@ -3751,18 +3751,20 @@
       /* Bottom Tab Bar */
       .bottom-tabs {
         position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
+        left: 14px;
+        right: 14px;
+        bottom: calc(10px + env(safe-area-inset-bottom, 0));
         display: grid;
-        grid-template-columns: repeat(5, 1fr);
+        grid-template-columns: repeat(4, 1fr);
         background: var(--surface-strong);
-        border-top: 1px solid var(--border);
+        border: 1px solid var(--border);
+        border-radius: 28px;
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
+        box-shadow: 0 16px 28px rgba(0, 0, 0, 0.14);
         z-index: 1000;
-        padding: 4px 0;
-        padding-bottom: max(4px, env(safe-area-inset-bottom, 0));
+        padding: 8px;
+        gap: 6px;
       }
 
       .bottom-tab {
@@ -3770,21 +3772,23 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 2px;
-        padding: 8px 4px 6px;
-        min-height: 52px;
+        gap: 4px;
+        padding: 10px 4px 8px;
+        min-height: 58px;
+        border-radius: 20px;
         background: none;
         border: none;
         color: var(--muted);
-        font-size: 10px;
+        font-size: 11px;
         font-weight: 600;
         cursor: pointer;
-        transition: color 0.2s, transform 0.1s;
+        transition: color 0.2s, transform 0.1s, background-color 0.2s;
         -webkit-tap-highlight-color: transparent;
       }
 
       .bottom-tab.active {
-        color: var(--accent);
+        color: var(--text);
+        background: color-mix(in srgb, var(--accent) 22%, transparent);
       }
 
       .bottom-tab:active {
@@ -3797,8 +3801,8 @@
       }
 
       .bottom-tab-svg {
-        width: 22px;
-        height: 22px;
+        width: 21px;
+        height: 21px;
       }
 
       .bottom-tab-label {
