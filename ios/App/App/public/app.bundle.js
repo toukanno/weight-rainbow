@@ -5800,7 +5800,12 @@ var translations = {
     "wrc.days": "\u65E5\u8A18\u9332",
     "nwf.title": "\u30CE\u30FC\u30C8\u983B\u51FA\u30EF\u30FC\u30C9",
     "nwf.notes": "\u4EF6\u306E\u30CE\u30FC\u30C8",
-    "nwf.times": "\u56DE"
+    "nwf.times": "\u56DE",
+    "gm.title": "\u76EE\u6A19\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3",
+    "gm.reached": "\u9054\u6210",
+    "gm.remaining": "\u672A\u9054",
+    "gm.start": "\u958B\u59CB",
+    "gm.goal": "\u76EE\u6A19"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -6886,7 +6891,12 @@ var translations = {
     "wrc.days": "days logged",
     "nwf.title": "Note Keywords",
     "nwf.notes": "notes",
-    "nwf.times": "\xD7"
+    "nwf.times": "\xD7",
+    "gm.title": "Goal Milestones",
+    "gm.reached": "Reached",
+    "gm.remaining": "Remaining",
+    "gm.start": "Start",
+    "gm.goal": "Goal"
   }
 };
 function createTranslator(language) {
@@ -28063,6 +28073,7 @@ function render() {
             ${renderStreakBadges()}
             ${renderWeightTrendArrow()}
             ${renderWeeklyReportCard()}
+            ${renderGoalMilestones()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -29999,7 +30010,7 @@ function renderWeightAnniversary() {
   if (!data || data.trackingDays < 7) return "";
   const changeSign = data.totalChange > 0 ? "+" : "";
   const changeCls = data.totalChange < 0 ? "av-loss" : data.totalChange > 0 ? "av-gain" : "";
-  const milestoneHtml = data.milestones.map((m) => {
+  const milestoneHtml = (data.milestones || []).map((m) => {
     if (!m.reached && data.trackingDays < m.days * 0.8) return "";
     const label = t(`anniv.${m.label}`);
     if (m.reached) {
@@ -30640,6 +30651,32 @@ function renderNoteWordFrequency() {
     <div class="nwf-section">
       <div class="helper">${t("nwf.title")} <span class="nwf-count">(${data.totalNotes} ${t("nwf.notes")})</span></div>
       <div class="nwf-cloud">${tags}</div>
+    </div>
+  `;
+}
+function renderGoalMilestones() {
+  const goal = Number(state.settings.goalWeight);
+  const milestones = calcGoalMilestones(state.records, goal);
+  if (!milestones || !Array.isArray(milestones) || milestones.length === 0) return "";
+  const startWt = state.records.length > 0 ? state.records[0].wt : 0;
+  const steps = milestones.map((m) => `
+    <div class="gm-step ${m.reached ? "gm-done" : ""}">
+      <div class="gm-dot">${m.reached ? "\u2714" : ""}</div>
+      <div class="gm-pct">${m.pct}%</div>
+      <div class="gm-wt">${m.targetWeight}kg</div>
+    </div>
+  `).join("");
+  return `
+    <div class="gm-section">
+      <div class="helper">${t("gm.title")}</div>
+      <div class="gm-track">
+        <div class="gm-line"></div>
+        ${steps}
+      </div>
+      <div class="gm-range">
+        <span>${t("gm.start")}: ${startWt}kg</span>
+        <span>${t("gm.goal")}: ${goal}kg</span>
+      </div>
     </div>
   `;
 }

@@ -2960,7 +2960,7 @@ function renderWeightAnniversary() {
   const changeSign = data.totalChange > 0 ? "+" : "";
   const changeCls = data.totalChange < 0 ? "av-loss" : data.totalChange > 0 ? "av-gain" : "";
 
-  const milestoneHtml = data.milestones.map((m) => {
+  const milestoneHtml = (data.milestones || []).map((m) => {
     if (!m.reached && data.trackingDays < m.days * 0.8) return "";
     const label = t(`anniv.${m.label}`);
     if (m.reached) {
@@ -3698,14 +3698,16 @@ function renderNoteWordFrequency() {
 
 function renderGoalMilestones() {
   const goal = Number(state.settings.goalWeight);
-  const data = calcGoalMilestones(state.records, goal);
-  if (!data) return "";
+  const milestones = calcGoalMilestones(state.records, goal);
+  if (!milestones || !Array.isArray(milestones) || milestones.length === 0) return "";
 
-  const steps = data.milestones.map((m) => `
+  const startWt = state.records.length > 0 ? state.records[0].wt : 0;
+
+  const steps = milestones.map((m) => `
     <div class="gm-step ${m.reached ? "gm-done" : ""}">
-      <div class="gm-dot"></div>
+      <div class="gm-dot">${m.reached ? "✔" : ""}</div>
       <div class="gm-pct">${m.pct}%</div>
-      <div class="gm-wt">${m.targetWt}kg</div>
+      <div class="gm-wt">${m.targetWeight}kg</div>
     </div>
   `).join("");
 
@@ -3717,8 +3719,8 @@ function renderGoalMilestones() {
         ${steps}
       </div>
       <div class="gm-range">
-        <span>${t("gm.start")}: ${data.startWt}kg</span>
-        <span>${t("gm.goal")}: ${data.goalWt}kg</span>
+        <span>${t("gm.start")}: ${startWt}kg</span>
+        <span>${t("gm.goal")}: ${goal}kg</span>
       </div>
     </div>
   `;
