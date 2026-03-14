@@ -4304,3 +4304,753 @@ export function calcBestWeighDay(records) {
 
   return { days, bestDay, worstDay };
 }
+
+/**
+ * Generate sparkline data points for the last N weight readings.
+ * Returns { points: [{ x, y }], min, max, trend, svgPath }
+ * x/y are normalized 0-100 for easy SVG rendering.
+ * trend: "up" | "down" | "flat"
+ */
+export function calcMiniSparkline(records, count = 10) {
+  if (!records || records.length < 3) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-count);
+  if (recent.length < 3) return null;
+
+  const weights = recent.map((r) => r.wt);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  const range = max - min || 1;
+
+  const points = weights.map((w, i) => ({
+    x: Math.round((i / (weights.length - 1)) * 100),
+    y: Math.round(100 - ((w - min) / range) * 100),
+  }));
+
+  const svgPath = "M" + points.map((p) => `${p.x},${p.y}`).join(" L");
+
+  const firstAvg = weights.slice(0, Math.floor(weights.length / 2)).reduce((s, w) => s + w, 0) / Math.floor(weights.length / 2);
+  const lastAvg = weights.slice(Math.floor(weights.length / 2)).reduce((s, w) => s + w, 0) / (weights.length - Math.floor(weights.length / 2));
+  const diff = lastAvg - firstAvg;
+  const trend = diff < -0.2 ? "down" : diff > 0.2 ? "up" : "flat";
+
+  return { points, min: +min.toFixed(1), max: +max.toFixed(1), trend, svgPath };
+}
+
+/**
+ * Generate a summary comparing the latest entry to recent history.
+ * Returns { latest, vsYesterday, vsWeekAvg, allTimeBest, isNewBest }
+ */
+export function calcEntrySummary(records) {
+  if (!records || records.length < 2) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1];
+  const prev = sorted[sorted.length - 2];
+
+  const vsYesterday = +(latest.wt - prev.wt).toFixed(1);
+
+  // Weekly average (last 7 entries excluding latest)
+  const recentExcluding = sorted.slice(-8, -1);
+  const weekAvg = +(recentExcluding.reduce((s, r) => s + r.wt, 0) / recentExcluding.length).toFixed(1);
+  const vsWeekAvg = +(latest.wt - weekAvg).toFixed(1);
+
+  // All-time best (lowest)
+  const allTimeBest = +Math.min(...sorted.map((r) => r.wt)).toFixed(1);
+  const isNewBest = latest.wt <= allTimeBest;
+
+  return {
+    latest: { dt: latest.dt, wt: +latest.wt.toFixed(1) },
+    vsYesterday,
+    vsWeekAvg,
+    allTimeBest,
+    isNewBest,
+  };
+}
+
+/**
+ * Calculate distance to goal weight with progress and ETA.
+ * Returns { current, goal, remaining, progressPct, direction, etaDays }
+ * etaDays: estimated days to reach goal based on recent pace, null if not estimable.
+ */
+export function calcGoalDistance(records, goalWeight) {
+  if (!records || records.length < 2 || !goalWeight || goalWeight <= 0) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const current = sorted[sorted.length - 1].wt;
+  const start = sorted[0].wt;
+  const remaining = +(current - goalWeight).toFixed(1);
+
+  if (Math.abs(remaining) < 0.1) {
+    return { current: +current.toFixed(1), goal: goalWeight, remaining: 0, progressPct: 100, direction: "achieved", etaDays: 0 };
+  }
+
+  const direction = current > goalWeight ? "lose" : "gain";
+  const totalJourney = Math.abs(start - goalWeight);
+  const covered = totalJourney - Math.abs(remaining);
+  const progressPct = totalJourney > 0 ? Math.max(0, Math.min(100, Math.round((covered / totalJourney) * 100))) : 0;
+
+  // Estimate days using last 14 days pace
+  let etaDays = null;
+  const recent = sorted.slice(-14);
+  if (recent.length >= 7) {
+    const daysDiff = Math.max(1, Math.round((new Date(recent[recent.length - 1].dt) - new Date(recent[0].dt)) / 86400000));
+    const dailyRate = (recent[recent.length - 1].wt - recent[0].wt) / daysDiff;
+    if ((direction === "lose" && dailyRate < -0.01) || (direction === "gain" && dailyRate > 0.01)) {
+      etaDays = Math.round(Math.abs(remaining) / Math.abs(dailyRate));
+      if (etaDays > 730) etaDays = null; // Cap at 2 years
+    }
+  }
+
+  return { current: +current.toFixed(1), goal: goalWeight, remaining: +Math.abs(remaining).toFixed(1), progressPct, direction, etaDays };
+}
+
+/**
+ * Analyze recording time patterns by time-of-day slot.
+ * Slots: morning (5-11), afternoon (12-17), evening (18-21), night (22-4).
+ * Returns { slots: [{ name, count, pct, avgWt }], preferredSlot, totalWithTime }
+ */
+export function calcTimeSlotPattern(records) {
+  if (!records || records.length < 5) return null;
+
+  const slots = {
+    morning: { count: 0, totalWt: 0 },
+    afternoon: { count: 0, totalWt: 0 },
+    evening: { count: 0, totalWt: 0 },
+    night: { count: 0, totalWt: 0 },
+  };
+
+  let totalWithTime = 0;
+
+  for (const r of records) {
+    if (!r.time) continue;
+    const hour = parseInt(r.time.split(":")[0], 10);
+    if (isNaN(hour)) continue;
+    totalWithTime++;
+
+    let slot;
+    if (hour >= 5 && hour < 12) slot = "morning";
+    else if (hour >= 12 && hour < 18) slot = "afternoon";
+    else if (hour >= 18 && hour < 22) slot = "evening";
+    else slot = "night";
+
+    slots[slot].count++;
+    slots[slot].totalWt += r.wt;
+  }
+
+  if (totalWithTime < 3) return null;
+
+  const result = Object.entries(slots).map(([name, data]) => ({
+    name,
+    count: data.count,
+    pct: Math.round((data.count / totalWithTime) * 100),
+    avgWt: data.count > 0 ? +(data.totalWt / data.count).toFixed(1) : null,
+  }));
+
+  const preferredSlot = result.reduce((best, s) => s.count > best.count ? s : best, result[0]).name;
+
+  return { slots: result, preferredSlot, totalWithTime };
+}
+
+/**
+ * Calculate streak badges earned based on longest consecutive recording days.
+ * Milestones: 3, 7, 14, 30, 60, 90 days.
+ * Returns { badges: [{ days, earned, icon }], longestStreak, currentStreak }
+ */
+export function calcStreakBadges(records) {
+  if (!records || records.length < 2) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const dateSet = new Set(sorted.map((r) => r.dt));
+  const dates = [...dateSet].sort();
+
+  // Calculate longest streak
+  let longestStreak = 1;
+  let currentRun = 1;
+  for (let i = 1; i < dates.length; i++) {
+    const prev = new Date(dates[i - 1] + "T00:00:00");
+    const curr = new Date(dates[i] + "T00:00:00");
+    const diffDays = Math.round((curr - prev) / 86400000);
+    if (diffDays === 1) {
+      currentRun++;
+      longestStreak = Math.max(longestStreak, currentRun);
+    } else {
+      currentRun = 1;
+    }
+  }
+
+  // Calculate current streak (from most recent date backwards)
+  let currentStreak = 1;
+  for (let i = dates.length - 1; i > 0; i--) {
+    const curr = new Date(dates[i] + "T00:00:00");
+    const prev = new Date(dates[i - 1] + "T00:00:00");
+    const diffDays = Math.round((curr - prev) / 86400000);
+    if (diffDays === 1) {
+      currentStreak++;
+    } else {
+      break;
+    }
+  }
+
+  const milestones = [3, 7, 14, 30, 60, 90];
+  const icons = ["🔥", "⭐", "💪", "🏆", "💎", "👑"];
+
+  const badges = milestones.map((days, i) => ({
+    days,
+    earned: longestStreak >= days,
+    icon: icons[i],
+  }));
+
+  return { badges, longestStreak, currentStreak };
+}
+
+/**
+ * Build a progress timeline of key weight milestones.
+ * Each 1kg milestone crossed from start weight toward goal.
+ * Returns { events: [{ dt, wt, type, label }], totalChange }
+ * type: "start" | "milestone" | "best" | "current"
+ */
+export function calcProgressTimeline(records, goalWeight) {
+  if (!records || records.length < 3) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const startWt = sorted[0].wt;
+  const currentWt = sorted[sorted.length - 1].wt;
+  const events = [];
+
+  events.push({ dt: sorted[0].dt, wt: +startWt.toFixed(1), type: "start" });
+
+  // Track each whole-kg milestone crossed
+  const direction = goalWeight && goalWeight > 0 ? (startWt > goalWeight ? -1 : 1) : (currentWt < startWt ? -1 : 1);
+  const milestonesHit = new Set();
+
+  let bestWt = sorted[0].wt;
+  let bestDt = sorted[0].dt;
+
+  for (const r of sorted.slice(1)) {
+    // Track personal best (lowest)
+    if (r.wt < bestWt) {
+      bestWt = r.wt;
+      bestDt = r.dt;
+    }
+
+    // Check for kg milestones
+    const kgFromStart = Math.floor(Math.abs(r.wt - startWt));
+    if (kgFromStart > 0) {
+      for (let k = 1; k <= kgFromStart && k <= 20; k++) {
+        const mKey = direction === -1 ? -k : k;
+        if (!milestonesHit.has(mKey)) {
+          milestonesHit.add(mKey);
+          const mWt = +(startWt + mKey).toFixed(1);
+          events.push({ dt: r.dt, wt: mWt, type: "milestone" });
+        }
+      }
+    }
+  }
+
+  // Add personal best if different from start/current
+  if (bestWt < startWt && bestWt < currentWt) {
+    events.push({ dt: bestDt, wt: +bestWt.toFixed(1), type: "best" });
+  }
+
+  events.push({ dt: sorted[sorted.length - 1].dt, wt: +currentWt.toFixed(1), type: "current" });
+
+  // Sort by date
+  events.sort((a, b) => a.dt.localeCompare(b.dt));
+
+  // Limit to 8 most significant events
+  if (events.length > 8) {
+    const start = events[0];
+    const current = events[events.length - 1];
+    const best = events.find((e) => e.type === "best");
+    const milestones = events.filter((e) => e.type === "milestone");
+    const kept = [start];
+    if (best) kept.push(best);
+    // Keep evenly spaced milestones
+    const step = Math.max(1, Math.floor(milestones.length / 5));
+    for (let i = 0; i < milestones.length; i += step) {
+      if (kept.length < 7) kept.push(milestones[i]);
+    }
+    kept.push(current);
+    kept.sort((a, b) => a.dt.localeCompare(b.dt));
+    return { events: kept, totalChange: +(currentWt - startWt).toFixed(1) };
+  }
+
+  return { events, totalChange: +(currentWt - startWt).toFixed(1) };
+}
+
+/**
+ * Project weight at 7 and 30 days with confidence based on trend consistency.
+ * Returns { current, forecast7, forecast30, dailyRate, confidence }
+ * confidence: 0–100 (how consistent the recent trend is)
+ */
+export function calcForecastConfidence(records) {
+  if (!records || records.length < 10) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-14);
+  if (recent.length < 7) return null;
+
+  const current = recent[recent.length - 1].wt;
+
+  // Calculate daily rate from linear regression
+  const n = recent.length;
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+  for (let i = 0; i < n; i++) {
+    sumX += i;
+    sumY += recent[i].wt;
+    sumXY += i * recent[i].wt;
+    sumX2 += i * i;
+  }
+  const dailyRate = +((n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX)).toFixed(4);
+
+  // Calculate confidence: how well the data fits the trend line
+  const intercept = (sumY - dailyRate * sumX) / n;
+  let ssRes = 0, ssTot = 0;
+  const mean = sumY / n;
+  for (let i = 0; i < n; i++) {
+    const predicted = intercept + dailyRate * i;
+    ssRes += (recent[i].wt - predicted) ** 2;
+    ssTot += (recent[i].wt - mean) ** 2;
+  }
+  const r2 = ssTot > 0 ? Math.max(0, 1 - ssRes / ssTot) : 0;
+  const confidence = Math.round(r2 * 100);
+
+  const forecast7 = +(current + dailyRate * 7).toFixed(1);
+  const forecast30 = +(current + dailyRate * 30).toFixed(1);
+
+  return { current: +current.toFixed(1), forecast7, forecast30, dailyRate, confidence };
+}
+
+/**
+ * Categorize weight readings into zones relative to goal weight.
+ * Zones: below (< goal - margin), at (within margin), above (> goal + margin)
+ * margin = 1% of goal weight (min 0.5 kg)
+ * Returns { zones: { below, at, above } with count/pct, margin, goal, recent30 }
+ */
+export function calcWeightZones(records, goalWeight) {
+  if (!records || records.length < 3 || !goalWeight || goalWeight <= 0) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const margin = Math.max(0.5, goalWeight * 0.01);
+  const low = goalWeight - margin;
+  const high = goalWeight + margin;
+
+  let below = 0, at = 0, above = 0;
+  for (const r of sorted) {
+    if (r.wt < low) below++;
+    else if (r.wt > high) above++;
+    else at++;
+  }
+
+  const total = sorted.length;
+
+  // Also calculate for recent 30 entries
+  const recent = sorted.slice(-30);
+  let rBelow = 0, rAt = 0, rAbove = 0;
+  for (const r of recent) {
+    if (r.wt < low) rBelow++;
+    else if (r.wt > high) rAbove++;
+    else rAt++;
+  }
+  const rTotal = recent.length;
+
+  return {
+    zones: {
+      below: { count: below, pct: Math.round((below / total) * 100) },
+      at: { count: at, pct: Math.round((at / total) * 100) },
+      above: { count: above, pct: Math.round((above / total) * 100) },
+    },
+    recent30: {
+      below: { count: rBelow, pct: Math.round((rBelow / rTotal) * 100) },
+      at: { count: rAt, pct: Math.round((rAt / rTotal) * 100) },
+      above: { count: rAbove, pct: Math.round((rAbove / rTotal) * 100) },
+    },
+    margin: +margin.toFixed(1),
+    goal: goalWeight,
+    total,
+  };
+}
+
+/**
+ * Calculate rolling 7-day weight change rates over time.
+ * Returns up to the last 8 windows so it can be rendered as a mini bar chart.
+ * Each window: { endDt, rate (kg/week), direction }
+ */
+export function calcWeightChangeRate(records) {
+  if (!records || records.length < 14) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+
+  // Build weekly windows: take pairs 7 entries apart
+  const windowSize = 7;
+  const rates = [];
+  for (let i = windowSize; i < sorted.length; i += windowSize) {
+    const start = sorted[i - windowSize];
+    const end = sorted[i];
+    const daysDiff = (new Date(end.dt) - new Date(start.dt)) / 86400000;
+    if (daysDiff <= 0) continue;
+    const rate = +((end.wt - start.wt) / daysDiff * 7).toFixed(2); // kg per week
+    rates.push({
+      endDt: end.dt,
+      rate,
+      direction: rate < -0.1 ? "losing" : rate > 0.1 ? "gaining" : "stable",
+    });
+  }
+
+  if (rates.length === 0) return null;
+
+  // Keep last 8 windows
+  const recent = rates.slice(-8);
+  const maxAbs = Math.max(...recent.map((r) => Math.abs(r.rate)), 0.1);
+  const avgRate = +(recent.reduce((s, r) => s + r.rate, 0) / recent.length).toFixed(2);
+
+  return {
+    windows: recent,
+    maxAbsRate: +maxAbs.toFixed(2),
+    avgRate,
+    trend: avgRate < -0.1 ? "losing" : avgRate > 0.1 ? "gaining" : "stable",
+  };
+}
+
+/**
+ * Analyze weigh-in interval consistency.
+ * Detects the user's natural cadence and scores how well they stick to it.
+ * Returns { avgInterval, medianInterval, cadence, score (0-100), totalGaps, regularGaps }
+ */
+export function calcWeighInConsistency(records) {
+  if (!records || records.length < 5) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const gaps = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const days = Math.round((new Date(sorted[i].dt) - new Date(sorted[i - 1].dt)) / 86400000);
+    if (days > 0) gaps.push(days);
+  }
+
+  if (gaps.length < 3) return null;
+
+  // Average and median interval
+  const avgInterval = +(gaps.reduce((s, g) => s + g, 0) / gaps.length).toFixed(1);
+  const sortedGaps = [...gaps].sort((a, b) => a - b);
+  const medianInterval = sortedGaps[Math.floor(sortedGaps.length / 2)];
+
+  // Detect natural cadence: 1 = daily, 2 = every other day, 7 = weekly, etc.
+  const cadence = medianInterval <= 1.5 ? 1 : medianInterval <= 3 ? 2 : medianInterval <= 5 ? 3 : 7;
+
+  // Score: how many gaps are within ±1 day of the cadence
+  const tolerance = cadence <= 2 ? 1 : 2;
+  let regularGaps = 0;
+  for (const g of gaps) {
+    if (Math.abs(g - cadence) <= tolerance) regularGaps++;
+  }
+
+  const score = Math.round((regularGaps / gaps.length) * 100);
+
+  // Cadence label
+  let cadenceLabel;
+  if (cadence === 1) cadenceLabel = "daily";
+  else if (cadence === 2) cadenceLabel = "every_other_day";
+  else if (cadence === 3) cadenceLabel = "every_few_days";
+  else cadenceLabel = "weekly";
+
+  return {
+    avgInterval,
+    medianInterval,
+    cadence,
+    cadenceLabel,
+    score,
+    totalGaps: gaps.length,
+    regularGaps,
+  };
+}
+
+/**
+ * Identify plateau periods where weight stayed within a narrow band.
+ * A plateau = 7+ consecutive readings within ±0.5kg of their mean.
+ * Returns { plateaus: [{ startDt, endDt, days, avgWt, readings }], current, longestDays }
+ */
+export function calcPlateauPeriods(records) {
+  if (!records || records.length < 7) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const band = 0.5; // kg tolerance
+  const minReadings = 7;
+
+  const plateaus = [];
+  let start = 0;
+
+  while (start < sorted.length) {
+    // Try to extend a window from start
+    let end = start;
+    let sum = sorted[start].wt;
+    let count = 1;
+    let mean = sum;
+
+    while (end + 1 < sorted.length) {
+      const nextWt = sorted[end + 1].wt;
+      const newSum = sum + nextWt;
+      const newMean = newSum / (count + 1);
+      // Check if all readings in window are within band of new mean
+      let allInBand = Math.abs(nextWt - newMean) <= band;
+      if (allInBand) {
+        for (let j = start; j <= end; j++) {
+          if (Math.abs(sorted[j].wt - newMean) > band) {
+            allInBand = false;
+            break;
+          }
+        }
+      }
+      if (allInBand) {
+        end++;
+        sum = newSum;
+        count++;
+        mean = newMean;
+      } else {
+        break;
+      }
+    }
+
+    if (count >= minReadings) {
+      const days = Math.round((new Date(sorted[end].dt) - new Date(sorted[start].dt)) / 86400000);
+      plateaus.push({
+        startDt: sorted[start].dt,
+        endDt: sorted[end].dt,
+        days: Math.max(days, 1),
+        avgWt: +mean.toFixed(1),
+        readings: count,
+      });
+      start = end + 1;
+    } else {
+      start++;
+    }
+  }
+
+  if (plateaus.length === 0) return null;
+
+  const longestDays = Math.max(...plateaus.map((p) => p.days));
+  const lastRecord = sorted[sorted.length - 1];
+  const current = plateaus.length > 0 && plateaus[plateaus.length - 1].endDt === lastRecord.dt;
+
+  return { plateaus, current, longestDays };
+}
+
+/**
+ * Calculate where the current weight falls as a percentile within all readings.
+ * Also shows quartile boundaries (Q1, median, Q3).
+ * Returns { percentile, current, min, max, q1, median, q3, totalReadings }
+ */
+export function calcWeightPercentileRank(records) {
+  if (!records || records.length < 5) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const current = sorted[sorted.length - 1].wt;
+  const weights = sorted.map((r) => r.wt).sort((a, b) => a - b);
+  const n = weights.length;
+
+  // Count how many readings are below current
+  const belowCount = weights.filter((w) => w < current).length;
+  const equalCount = weights.filter((w) => w === current).length;
+  // Percentile rank: (below + 0.5 * equal) / total * 100
+  const percentile = Math.round(((belowCount + 0.5 * equalCount) / n) * 100);
+
+  const q1 = weights[Math.floor(n * 0.25)];
+  const median = weights[Math.floor(n * 0.5)];
+  const q3 = weights[Math.floor(n * 0.75)];
+
+  return {
+    percentile,
+    current: +current.toFixed(1),
+    min: +weights[0].toFixed(1),
+    max: +weights[n - 1].toFixed(1),
+    q1: +q1.toFixed(1),
+    median: +median.toFixed(1),
+    q3: +q3.toFixed(1),
+    totalReadings: n,
+  };
+}
+
+/**
+ * Calculate a simple trend arrow based on last 3–7 days of data.
+ * Returns { arrow, label, change, days }
+ * arrow: "up2" (rising fast), "up1" (rising), "flat", "down1" (falling), "down2" (falling fast)
+ * Thresholds: ±0.3kg = flat, ±0.3–0.8 = moderate, >0.8 = strong
+ */
+export function calcWeightTrendArrow(records) {
+  if (!records || records.length < 3) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-7);
+  if (recent.length < 3) return null;
+
+  const first = recent[0].wt;
+  const last = recent[recent.length - 1].wt;
+  const change = +(last - first).toFixed(1);
+  const days = Math.max(1, Math.round((new Date(recent[recent.length - 1].dt) - new Date(recent[0].dt)) / 86400000));
+  const dailyChange = change / days;
+
+  let arrow;
+  if (dailyChange > 0.12) arrow = "up2";
+  else if (dailyChange > 0.04) arrow = "up1";
+  else if (dailyChange < -0.12) arrow = "down2";
+  else if (dailyChange < -0.04) arrow = "down1";
+  else arrow = "flat";
+
+  return { arrow, change, days };
+}
+
+/**
+ * Calculate fat mass vs lean mass breakdown from records with body fat %.
+ * Compares first and latest readings to show composition change.
+ * Returns { current, first, fatChange, leanChange, entries }
+ */
+export function calcBodyCompositionBreakdown(records) {
+  if (!records || records.length < 2) return null;
+
+  const withBf = records
+    .filter((r) => r.bf != null && r.bf > 0 && r.bf < 100)
+    .sort((a, b) => a.dt.localeCompare(b.dt));
+
+  if (withBf.length < 2) return null;
+
+  const first = withBf[0];
+  const latest = withBf[withBf.length - 1];
+
+  const firstFat = +(first.wt * first.bf / 100).toFixed(1);
+  const firstLean = +(first.wt - firstFat).toFixed(1);
+  const latestFat = +(latest.wt * latest.bf / 100).toFixed(1);
+  const latestLean = +(latest.wt - latestFat).toFixed(1);
+
+  return {
+    current: {
+      dt: latest.dt,
+      wt: +latest.wt.toFixed(1),
+      bf: +latest.bf.toFixed(1),
+      fatMass: latestFat,
+      leanMass: latestLean,
+    },
+    first: {
+      dt: first.dt,
+      wt: +first.wt.toFixed(1),
+      bf: +first.bf.toFixed(1),
+      fatMass: firstFat,
+      leanMass: firstLean,
+    },
+    fatChange: +(latestFat - firstFat).toFixed(1),
+    leanChange: +(latestLean - firstLean).toFixed(1),
+    entries: withBf.length,
+  };
+}
+
+/**
+ * Generate a weekly report card grading recording consistency, goal progress, and stability.
+ * Grade: A (90+), B (70-89), C (50-69), D (30-49), F (<30)
+ * Returns { grade, score, consistency, goalProgress, stability, weekRecords }
+ */
+export function calcWeeklyReportCard(records, goalWeight) {
+  if (!records || records.length < 3) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1];
+  const latestDate = new Date(latest.dt);
+
+  // Get records from the last 7 calendar days
+  const weekAgo = new Date(latestDate);
+  weekAgo.setDate(weekAgo.getDate() - 6);
+  const weekStr = weekAgo.toISOString().slice(0, 10);
+  const weekRecords = sorted.filter((r) => r.dt >= weekStr);
+
+  if (weekRecords.length < 1) return null;
+
+  // 1. Consistency score (0-100): how many of the last 7 days have records
+  const daysWithRecords = new Set(weekRecords.map((r) => r.dt)).size;
+  const consistency = Math.round((daysWithRecords / 7) * 100);
+
+  // 2. Goal progress score (0-100): are we moving toward goal?
+  let goalProgress = 50; // neutral if no goal
+  if (goalWeight && goalWeight > 0 && weekRecords.length >= 2) {
+    const weekStart = weekRecords[0].wt;
+    const weekEnd = weekRecords[weekRecords.length - 1].wt;
+    const change = weekEnd - weekStart;
+    const needed = goalWeight - weekStart;
+    if (Math.abs(needed) < 0.3) {
+      goalProgress = 100; // at goal
+    } else if ((needed < 0 && change < 0) || (needed > 0 && change > 0)) {
+      // Moving in right direction
+      const ratio = Math.min(Math.abs(change / needed), 1);
+      goalProgress = 60 + Math.round(ratio * 40);
+    } else if (Math.abs(change) < 0.3) {
+      goalProgress = 40; // stable but not at goal
+    } else {
+      goalProgress = Math.max(0, 30 - Math.round(Math.abs(change) * 10));
+    }
+  }
+
+  // 3. Stability score (0-100): low daily fluctuation is good
+  let stability = 50;
+  if (weekRecords.length >= 2) {
+    const wts = weekRecords.map((r) => r.wt);
+    const mean = wts.reduce((s, w) => s + w, 0) / wts.length;
+    const variance = wts.reduce((s, w) => s + (w - mean) ** 2, 0) / wts.length;
+    const stdDev = Math.sqrt(variance);
+    // stdDev < 0.3 = very stable (100), > 1.5 = very unstable (0)
+    stability = Math.max(0, Math.min(100, Math.round((1.5 - stdDev) / 1.5 * 100)));
+  }
+
+  const score = Math.round(consistency * 0.4 + goalProgress * 0.35 + stability * 0.25);
+  let grade;
+  if (score >= 90) grade = "A";
+  else if (score >= 70) grade = "B";
+  else if (score >= 50) grade = "C";
+  else if (score >= 30) grade = "D";
+  else grade = "F";
+
+  return { grade, score, consistency, goalProgress, stability, weekRecords: daysWithRecords };
+}
+
+/**
+ * Analyze note text frequency from records.
+ * Extracts words from notes, counts frequency, returns top words.
+ * Returns { words: [{ text, count }], totalNotes, totalWords }
+ */
+export function calcNoteWordFrequency(records, topN = 10) {
+  if (!records || records.length < 1) return null;
+
+  const withNotes = records.filter((r) => r.note && r.note.trim().length > 0);
+  if (withNotes.length < 2) return null;
+
+  // Common stop words to filter out (ja + en)
+  const stopWords = new Set([
+    "the", "a", "an", "is", "was", "are", "were", "be", "been", "to", "of", "in", "for",
+    "and", "on", "at", "it", "by", "with", "as", "or", "but", "not", "no", "so", "if",
+    "my", "i", "me", "we", "he", "she", "they", "this", "that", "from", "had", "has", "have",
+    "の", "は", "が", "を", "に", "で", "と", "も", "た", "て", "し", "な", "だ", "する",
+    "した", "です", "ます", "ない", "ある", "いる", "こと", "もの", "その", "この",
+  ]);
+
+  const freq = {};
+  for (const r of withNotes) {
+    // Remove tag markers like #exercise, split on whitespace and punctuation
+    const cleaned = r.note.replace(/#\w+/g, "").trim();
+    const words = cleaned.split(/[\s,、。.!?！？\-/]+/).filter((w) => w.length >= 2 && !stopWords.has(w.toLowerCase()));
+    for (const w of words) {
+      const key = w.toLowerCase();
+      freq[key] = (freq[key] || 0) + 1;
+    }
+  }
+
+  const sorted = Object.entries(freq)
+    .filter(([, count]) => count >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, topN)
+    .map(([text, count]) => ({ text, count }));
+
+  if (sorted.length === 0) return null;
+
+  return {
+    words: sorted,
+    totalNotes: withNotes.length,
+    totalWords: Object.values(freq).reduce((s, c) => s + c, 0),
+  };
+}

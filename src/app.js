@@ -132,6 +132,22 @@ import {
   calcMotivationLevel,
   calcWeightBand,
   calcBestWeighDay,
+  calcMiniSparkline,
+  calcEntrySummary,
+  calcGoalDistance,
+  calcTimeSlotPattern,
+  calcStreakBadges,
+  calcProgressTimeline,
+  calcForecastConfidence,
+  calcWeightZones,
+  calcWeightChangeRate,
+  calcWeighInConsistency,
+  calcPlateauPeriods,
+  calcWeightPercentileRank,
+  calcWeightTrendArrow,
+  calcBodyCompositionBreakdown,
+  calcWeeklyReportCard,
+  calcNoteWordFrequency,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -846,6 +862,12 @@ function render() {
             ${renderPeriodBreakdown()}
             ${renderMotivation()}
             ${renderWeightBand()}
+            ${renderMiniSparkline()}
+            ${renderEntrySummary()}
+            ${renderGoalDistance()}
+            ${renderStreakBadges()}
+            ${renderWeightTrendArrow()}
+            ${renderWeeklyReportCard()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -888,6 +910,16 @@ function render() {
                 ${renderRecordCompleteness()}
                 ${renderWeightSmoothness()}
                 ${renderBestWeighDay()}
+                ${renderTimeSlotPattern()}
+                ${renderProgressTimeline()}
+                ${renderForecastConfidence()}
+                ${renderWeightZones()}
+                ${renderWeightChangeRate()}
+                ${renderWeighInConsistency()}
+                ${renderPlateauPeriods()}
+                ${renderWeightPercentileRank()}
+                ${renderBodyCompositionBreakdown()}
+                ${renderNoteWordFrequency()}
               </div>
               ` : ""}
             </div>
@@ -3233,6 +3265,432 @@ function renderBestWeighDay() {
       <div class="helper">${t("bwd.title")}</div>
       ${bars}
       <div class="bwd-best-label">${t("bwd.best")}: ${t("bwd.days." + data.bestDay)}</div>
+    </div>
+  `;
+}
+
+function renderMiniSparkline() {
+  const data = calcMiniSparkline(state.records, 10);
+  if (!data) return "";
+
+  const trendColor = data.trend === "down" ? "var(--ok)" : data.trend === "up" ? "var(--error)" : "var(--accent-3)";
+  const trendLabel = t("spark." + data.trend);
+
+  return `
+    <div class="spk-section">
+      <div class="helper">${t("spark.title")}</div>
+      <div class="spk-row">
+        <svg class="spk-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <path d="${data.svgPath}" fill="none" stroke="${trendColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+        </svg>
+        <div class="spk-info">
+          <div class="spk-trend" style="color:${trendColor}">${trendLabel}</div>
+          <div class="spk-range">${data.min}–${data.max}kg</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderEntrySummary() {
+  const data = calcEntrySummary(state.records);
+  if (!data) return "";
+
+  const fmtDiff = (v) => {
+    const sign = v > 0 ? "+" : "";
+    const cls = v < 0 ? "esum-down" : v > 0 ? "esum-up" : "";
+    return `<span class="${cls}">${sign}${v}kg</span>`;
+  };
+
+  return `
+    <div class="esum-section">
+      <div class="helper">${t("esum.title")} (${data.latest.dt.slice(5).replace("-", "/")})</div>
+      <div class="esum-grid">
+        <div class="esum-item"><span class="esum-label">${t("esum.vsPrev")}</span>${fmtDiff(data.vsYesterday)}</div>
+        <div class="esum-item"><span class="esum-label">${t("esum.vsWeek")}</span>${fmtDiff(data.vsWeekAvg)}</div>
+        <div class="esum-item"><span class="esum-label">${t("esum.best")}</span><span>${data.allTimeBest}kg</span></div>
+      </div>
+      ${data.isNewBest ? `<div class="esum-new-best">${t("esum.newBest")}</div>` : ""}
+    </div>
+  `;
+}
+
+function renderGoalDistance() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const data = calcGoalDistance(state.records, goalWeight);
+  if (!data) return "";
+
+  if (data.direction === "achieved") {
+    return `<div class="gd-section"><div class="gd-achieved">${t("gdist.achieved")}</div></div>`;
+  }
+
+  const etaStr = data.etaDays !== null
+    ? t("gdist.days").replace("{days}", String(data.etaDays))
+    : t("gdist.noEta");
+
+  return `
+    <div class="gd-section">
+      <div class="helper">${t("gdist.title")}</div>
+      <div class="gd-progress-track"><div class="gd-progress-fill" style="width:${data.progressPct}%"></div></div>
+      <div class="gd-info">
+        <span class="gd-remaining">${t("gdist.remaining")} ${data.remaining}kg</span>
+        <span class="gd-pct">${data.progressPct}%</span>
+      </div>
+      <div class="gd-eta">${t("gdist.eta")}: ${etaStr}</div>
+    </div>
+  `;
+}
+
+function renderTimeSlotPattern() {
+  const data = calcTimeSlotPattern(state.records);
+  if (!data) return "";
+
+  const maxCount = Math.max(...data.slots.map((s) => s.count), 1);
+  const bars = data.slots.map((s) => {
+    const pct = Math.round((s.count / maxCount) * 100);
+    const isBest = s.name === data.preferredSlot;
+    return `<div class="ts-row">
+      <span class="ts-label">${t("tslot." + s.name)}</span>
+      <div class="ts-bar-track"><div class="ts-bar-fill${isBest ? " ts-best" : ""}" style="width:${pct}%"></div></div>
+      <span class="ts-count">${s.count}</span>
+    </div>`;
+  }).join("");
+
+  return `
+    <div class="ts-section">
+      <div class="helper">${t("tslot.title")}</div>
+      ${bars}
+      <div class="ts-preferred">${t("tslot.preferred")}: ${t("tslot." + data.preferredSlot)}</div>
+    </div>
+  `;
+}
+
+function renderStreakBadges() {
+  const data = calcStreakBadges(state.records);
+  if (!data) return "";
+
+  const badgeItems = data.badges.map((b) => {
+    const cls = b.earned ? "sb-earned" : "sb-locked";
+    const label = t("sbadge.days").replace("{n}", String(b.days));
+    return `<div class="sb-badge ${cls}" title="${label}"><span class="sb-icon">${b.earned ? b.icon : "🔒"}</span><span class="sb-label">${label}</span></div>`;
+  }).join("");
+
+  return `
+    <div class="sb-section">
+      <div class="helper">${t("sbadge.title")}</div>
+      <div class="sb-grid">${badgeItems}</div>
+      <div class="sb-stats">
+        <span>${t("sbadge.current")}: ${data.currentStreak}${t("sbadge.days").replace("{n}", "").trim()}</span>
+        <span>${t("sbadge.longest")}: ${data.longestStreak}${t("sbadge.days").replace("{n}", "").trim()}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderProgressTimeline() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const data = calcProgressTimeline(state.records, goalWeight);
+  if (!data || data.events.length < 2) return "";
+
+  const icons = { start: "🏁", milestone: "📍", best: "⭐", current: "📌" };
+  const items = data.events.map((e) => {
+    const label = t("ptl." + e.type);
+    const icon = icons[e.type] || "📍";
+    return `<div class="ptl-item">
+      <div class="ptl-dot">${icon}</div>
+      <div class="ptl-content">
+        <span class="ptl-date">${e.dt.slice(5).replace("-", "/")}</span>
+        <span class="ptl-wt">${e.wt}kg</span>
+        <span class="ptl-type">${label}</span>
+      </div>
+    </div>`;
+  }).join("");
+
+  const sign = data.totalChange > 0 ? "+" : "";
+  const changeCls = data.totalChange < 0 ? "ptl-loss" : data.totalChange > 0 ? "ptl-gain" : "";
+
+  return `
+    <div class="ptl-section">
+      <div class="helper">${t("ptl.title")}</div>
+      <div class="ptl-timeline">${items}</div>
+      <div class="ptl-total ${changeCls}">${t("ptl.total")}: ${sign}${data.totalChange}kg</div>
+    </div>
+  `;
+}
+
+function renderForecastConfidence() {
+  const data = calcForecastConfidence(state.records);
+  if (!data) return "";
+
+  const confColor = data.confidence >= 60 ? "var(--ok)" : data.confidence >= 30 ? "var(--warn)" : "var(--muted)";
+  const sign7 = data.forecast7 > data.current ? "+" : "";
+  const sign30 = data.forecast30 > data.current ? "+" : "";
+  const diff7 = +(data.forecast7 - data.current).toFixed(1);
+  const diff30 = +(data.forecast30 - data.current).toFixed(1);
+
+  return `
+    <div class="fc2-section">
+      <div class="helper">${t("fconf.title")}</div>
+      <div class="fc2-grid">
+        <div class="fc2-col">
+          <div class="fc2-label">${t("fconf.7day")}</div>
+          <div class="fc2-val">${data.forecast7}kg</div>
+          <div class="fc2-diff ${diff7 < 0 ? "fc2-down" : diff7 > 0 ? "fc2-up" : ""}">${sign7}${diff7}kg</div>
+        </div>
+        <div class="fc2-col">
+          <div class="fc2-label">${t("fconf.30day")}</div>
+          <div class="fc2-val">${data.forecast30}kg</div>
+          <div class="fc2-diff ${diff30 < 0 ? "fc2-down" : diff30 > 0 ? "fc2-up" : ""}">${sign30}${diff30}kg</div>
+        </div>
+      </div>
+      <div class="fc2-conf">
+        <span>${t("fconf.confidence")}</span>
+        <div class="fc2-conf-track"><div class="fc2-conf-fill" style="width:${data.confidence}%;background:${confColor}"></div></div>
+        <span class="fc2-conf-val" style="color:${confColor}">${data.confidence}%</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderWeightZones() {
+  const goal = Number(state.settings.goalWeight);
+  const data = calcWeightZones(state.records, goal);
+  if (!data) return "";
+
+  return `
+    <div class="wz-section">
+      <div class="helper">${t("wz.title")}</div>
+      <div class="wz-bar-label">${t("wz.all")} (${data.total})</div>
+      <div class="wz-bar">
+        ${data.zones.below.pct > 0 ? `<div class="wz-seg wz-below" style="width:${data.zones.below.pct}%">${data.zones.below.pct}%</div>` : ""}
+        ${data.zones.at.pct > 0 ? `<div class="wz-seg wz-at" style="width:${data.zones.at.pct}%">${data.zones.at.pct}%</div>` : ""}
+        ${data.zones.above.pct > 0 ? `<div class="wz-seg wz-above" style="width:${data.zones.above.pct}%">${data.zones.above.pct}%</div>` : ""}
+      </div>
+      <div class="wz-bar-label">${t("wz.recent")} (${Math.min(30, data.total)})</div>
+      <div class="wz-bar">
+        ${data.recent30.below.pct > 0 ? `<div class="wz-seg wz-below" style="width:${data.recent30.below.pct}%">${data.recent30.below.pct}%</div>` : ""}
+        ${data.recent30.at.pct > 0 ? `<div class="wz-seg wz-at" style="width:${data.recent30.at.pct}%">${data.recent30.at.pct}%</div>` : ""}
+        ${data.recent30.above.pct > 0 ? `<div class="wz-seg wz-above" style="width:${data.recent30.above.pct}%">${data.recent30.above.pct}%</div>` : ""}
+      </div>
+      <div class="wz-legend">
+        <span class="wz-leg-item"><span class="wz-dot wz-below"></span>${t("wz.below")}</span>
+        <span class="wz-leg-item"><span class="wz-dot wz-at"></span>${t("wz.at")}</span>
+        <span class="wz-leg-item"><span class="wz-dot wz-above"></span>${t("wz.above")}</span>
+        <span class="wz-leg-margin">±${data.margin}kg</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderWeightChangeRate() {
+  const data = calcWeightChangeRate(state.records);
+  if (!data) return "";
+
+  const trendLabel = data.trend === "losing" ? t("wcr.losing") : data.trend === "gaining" ? t("wcr.gaining") : t("wcr.stable");
+  const trendColor = data.trend === "losing" ? "var(--ok)" : data.trend === "gaining" ? "var(--warn)" : "var(--muted)";
+
+  const bars = data.windows.map((w) => {
+    const pct = Math.round((Math.abs(w.rate) / data.maxAbsRate) * 100);
+    const color = w.direction === "losing" ? "var(--ok)" : w.direction === "gaining" ? "var(--warn)" : "var(--muted)";
+    const isNeg = w.rate < 0;
+    return `<div class="wcr-col">
+      <div class="wcr-bar-wrap">
+        ${isNeg ? `<div class="wcr-bar wcr-bar-neg" style="height:${pct}%;background:${color}"></div>` : ""}
+        <div class="wcr-zero"></div>
+        ${!isNeg ? `<div class="wcr-bar wcr-bar-pos" style="height:${pct}%;background:${color}"></div>` : ""}
+      </div>
+      <div class="wcr-label">${w.rate > 0 ? "+" : ""}${w.rate}</div>
+    </div>`;
+  }).join("");
+
+  return `
+    <div class="wcr-section">
+      <div class="helper">${t("wcr.title")}</div>
+      <div class="wcr-chart">${bars}</div>
+      <div class="wcr-summary">
+        <span style="color:${trendColor}">${trendLabel}</span>
+        <span class="wcr-avg">${t("wcr.avg")}: ${data.avgRate > 0 ? "+" : ""}${data.avgRate}kg${t("wcr.perWeek")}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderWeighInConsistency() {
+  const data = calcWeighInConsistency(state.records);
+  if (!data) return "";
+
+  const cadenceLabel = t(`wic.${data.cadenceLabel}`);
+  const scoreColor = data.score >= 70 ? "var(--ok)" : data.score >= 40 ? "var(--warn)" : "var(--muted)";
+
+  return `
+    <div class="wic-section">
+      <div class="helper">${t("wic.title")}</div>
+      <div class="wic-grid">
+        <div class="wic-item">
+          <div class="wic-label">${t("wic.cadence")}</div>
+          <div class="wic-val">${cadenceLabel}</div>
+        </div>
+        <div class="wic-item">
+          <div class="wic-label">${t("wic.avgInterval")}</div>
+          <div class="wic-val">${data.avgInterval} ${t("wic.days")}</div>
+        </div>
+      </div>
+      <div class="wic-score-row">
+        <span>${t("wic.score")}</span>
+        <div class="wic-score-track"><div class="wic-score-fill" style="width:${data.score}%;background:${scoreColor}"></div></div>
+        <span class="wic-score-val" style="color:${scoreColor}">${data.score}%</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderPlateauPeriods() {
+  const data = calcPlateauPeriods(state.records);
+  if (!data) return "";
+
+  const recent = data.plateaus.slice(-3);
+  const rows = recent.map((p) => `
+    <div class="plat-row">
+      <span class="plat-dates">${p.startDt.slice(5)} ~ ${p.endDt.slice(5)}</span>
+      <span class="plat-info">${t("plat.around")}${p.avgWt}kg · ${p.days}${t("plat.days")}</span>
+    </div>
+  `).join("");
+
+  return `
+    <div class="plat-section">
+      <div class="helper">${t("plat.title")}</div>
+      ${rows}
+      <div class="plat-summary">
+        <span>${t("plat.count")}: ${data.plateaus.length}</span>
+        <span>${t("plat.longest")}: ${data.longestDays}${t("plat.days")}</span>
+        ${data.current ? `<span class="plat-active">${t("plat.current")}</span>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function renderWeightPercentileRank() {
+  const data = calcWeightPercentileRank(state.records);
+  if (!data) return "";
+
+  const pctColor = data.percentile <= 30 ? "var(--ok)" : data.percentile >= 70 ? "var(--warn)" : "var(--accent)";
+  const markerPos = Math.max(2, Math.min(98, data.percentile));
+
+  return `
+    <div class="wpr-section">
+      <div class="helper">${t("wpr.title")}</div>
+      <div class="wpr-main">
+        <span class="wpr-pct" style="color:${pctColor}">${data.percentile}%</span>
+        <span class="wpr-desc">${t("wpr.lower")}</span>
+      </div>
+      <div class="wpr-track">
+        <div class="wpr-q1" style="left:25%"></div>
+        <div class="wpr-q3" style="left:75%"></div>
+        <div class="wpr-marker" style="left:${markerPos}%;background:${pctColor}"></div>
+      </div>
+      <div class="wpr-labels">
+        <span>${data.min}kg</span>
+        <span>${t("wpr.median")}: ${data.median}kg</span>
+        <span>${data.max}kg</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderWeightTrendArrow() {
+  const data = calcWeightTrendArrow(state.records);
+  if (!data) return "";
+
+  const arrows = { up2: "⬆⬆", up1: "⬆", flat: "➡", down1: "⬇", down2: "⬇⬇" };
+  const colors = { up2: "var(--warn)", up1: "var(--warn)", flat: "var(--muted)", down1: "var(--ok)", down2: "var(--ok)" };
+  const label = t(`wta.${data.arrow}`);
+  const sign = data.change > 0 ? "+" : "";
+
+  return `
+    <div class="wta-section">
+      <div class="wta-arrow" style="color:${colors[data.arrow]}">${arrows[data.arrow]}</div>
+      <div class="wta-info">
+        <div class="wta-label">${label}</div>
+        <div class="wta-change">${sign}${data.change}kg${t("wta.inDays")}${data.days}${t("wic.days")}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderBodyCompositionBreakdown() {
+  const data = calcBodyCompositionBreakdown(state.records);
+  if (!data) return "";
+
+  const fmtSign = (v) => (v > 0 ? "+" : "") + v;
+  const fatColor = data.fatChange <= 0 ? "var(--ok)" : "var(--warn)";
+  const leanColor = data.leanChange >= 0 ? "var(--ok)" : "var(--warn)";
+
+  return `
+    <div class="bcb-section">
+      <div class="helper">${t("bcb.title")}</div>
+      <table class="bcb-table">
+        <thead><tr><th></th><th>${t("bcb.start")}</th><th>${t("bcb.now")}</th><th>${t("bcb.change")}</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="bcb-label">${t("bcb.fatMass")}</td>
+            <td>${data.first.fatMass}kg</td>
+            <td>${data.current.fatMass}kg</td>
+            <td style="color:${fatColor}">${fmtSign(data.fatChange)}kg</td>
+          </tr>
+          <tr>
+            <td class="bcb-label">${t("bcb.leanMass")}</td>
+            <td>${data.first.leanMass}kg</td>
+            <td>${data.current.leanMass}kg</td>
+            <td style="color:${leanColor}">${fmtSign(data.leanChange)}kg</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderWeeklyReportCard() {
+  const goal = Number(state.settings.goalWeight);
+  const data = calcWeeklyReportCard(state.records, goal);
+  if (!data) return "";
+
+  const gradeColors = { A: "var(--ok)", B: "#4caf50", C: "var(--warn)", D: "#ff9800", F: "#f44336" };
+  const color = gradeColors[data.grade] || "var(--muted)";
+
+  const bar = (label, val) => `
+    <div class="wrc-row">
+      <span class="wrc-label">${label}</span>
+      <div class="wrc-bar-track"><div class="wrc-bar-fill" style="width:${val}%;background:${val >= 70 ? "var(--ok)" : val >= 40 ? "var(--warn)" : "var(--muted)"}"></div></div>
+      <span class="wrc-val">${val}</span>
+    </div>`;
+
+  return `
+    <div class="wrc-section">
+      <div class="helper">${t("wrc.title")}</div>
+      <div class="wrc-grade" style="color:${color}">${data.grade}</div>
+      <div class="wrc-score">${data.score}/100 · ${data.weekRecords}/7 ${t("wrc.days")}</div>
+      ${bar(t("wrc.consistency"), data.consistency)}
+      ${bar(t("wrc.goal"), data.goalProgress)}
+      ${bar(t("wrc.stability"), data.stability)}
+    </div>
+  `;
+}
+
+function renderNoteWordFrequency() {
+  const data = calcNoteWordFrequency(state.records);
+  if (!data) return "";
+
+  const maxCount = data.words[0].count;
+  const tags = data.words.map((w) => {
+    const size = 0.7 + (w.count / maxCount) * 0.6;
+    const opacity = 0.5 + (w.count / maxCount) * 0.5;
+    return `<span class="nwf-word" style="font-size:${size}rem;opacity:${opacity}" title="${w.count}${t("nwf.times")}">${w.text}</span>`;
+  }).join("");
+
+  return `
+    <div class="nwf-section">
+      <div class="helper">${t("nwf.title")} <span class="nwf-count">(${data.totalNotes} ${t("nwf.notes")})</span></div>
+      <div class="nwf-cloud">${tags}</div>
     </div>
   `;
 }

@@ -4144,6 +4144,575 @@ function calcBestWeighDay(records) {
   }
   return { days: days2, bestDay, worstDay };
 }
+function calcMiniSparkline(records, count = 10) {
+  if (!records || records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-count);
+  if (recent.length < 3) return null;
+  const weights = recent.map((r) => r.wt);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  const range = max - min || 1;
+  const points = weights.map((w, i) => ({
+    x: Math.round(i / (weights.length - 1) * 100),
+    y: Math.round(100 - (w - min) / range * 100)
+  }));
+  const svgPath = "M" + points.map((p) => `${p.x},${p.y}`).join(" L");
+  const firstAvg = weights.slice(0, Math.floor(weights.length / 2)).reduce((s, w) => s + w, 0) / Math.floor(weights.length / 2);
+  const lastAvg = weights.slice(Math.floor(weights.length / 2)).reduce((s, w) => s + w, 0) / (weights.length - Math.floor(weights.length / 2));
+  const diff = lastAvg - firstAvg;
+  const trend = diff < -0.2 ? "down" : diff > 0.2 ? "up" : "flat";
+  return { points, min: +min.toFixed(1), max: +max.toFixed(1), trend, svgPath };
+}
+function calcEntrySummary(records) {
+  if (!records || records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1];
+  const prev = sorted[sorted.length - 2];
+  const vsYesterday = +(latest.wt - prev.wt).toFixed(1);
+  const recentExcluding = sorted.slice(-8, -1);
+  const weekAvg = +(recentExcluding.reduce((s, r) => s + r.wt, 0) / recentExcluding.length).toFixed(1);
+  const vsWeekAvg = +(latest.wt - weekAvg).toFixed(1);
+  const allTimeBest = +Math.min(...sorted.map((r) => r.wt)).toFixed(1);
+  const isNewBest = latest.wt <= allTimeBest;
+  return {
+    latest: { dt: latest.dt, wt: +latest.wt.toFixed(1) },
+    vsYesterday,
+    vsWeekAvg,
+    allTimeBest,
+    isNewBest
+  };
+}
+function calcGoalDistance(records, goalWeight) {
+  if (!records || records.length < 2 || !goalWeight || goalWeight <= 0) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const current = sorted[sorted.length - 1].wt;
+  const start = sorted[0].wt;
+  const remaining = +(current - goalWeight).toFixed(1);
+  if (Math.abs(remaining) < 0.1) {
+    return { current: +current.toFixed(1), goal: goalWeight, remaining: 0, progressPct: 100, direction: "achieved", etaDays: 0 };
+  }
+  const direction = current > goalWeight ? "lose" : "gain";
+  const totalJourney = Math.abs(start - goalWeight);
+  const covered = totalJourney - Math.abs(remaining);
+  const progressPct = totalJourney > 0 ? Math.max(0, Math.min(100, Math.round(covered / totalJourney * 100))) : 0;
+  let etaDays = null;
+  const recent = sorted.slice(-14);
+  if (recent.length >= 7) {
+    const daysDiff = Math.max(1, Math.round((new Date(recent[recent.length - 1].dt) - new Date(recent[0].dt)) / 864e5));
+    const dailyRate = (recent[recent.length - 1].wt - recent[0].wt) / daysDiff;
+    if (direction === "lose" && dailyRate < -0.01 || direction === "gain" && dailyRate > 0.01) {
+      etaDays = Math.round(Math.abs(remaining) / Math.abs(dailyRate));
+      if (etaDays > 730) etaDays = null;
+    }
+  }
+  return { current: +current.toFixed(1), goal: goalWeight, remaining: +Math.abs(remaining).toFixed(1), progressPct, direction, etaDays };
+}
+function calcTimeSlotPattern(records) {
+  if (!records || records.length < 5) return null;
+  const slots = {
+    morning: { count: 0, totalWt: 0 },
+    afternoon: { count: 0, totalWt: 0 },
+    evening: { count: 0, totalWt: 0 },
+    night: { count: 0, totalWt: 0 }
+  };
+  let totalWithTime = 0;
+  for (const r of records) {
+    if (!r.time) continue;
+    const hour = parseInt(r.time.split(":")[0], 10);
+    if (isNaN(hour)) continue;
+    totalWithTime++;
+    let slot;
+    if (hour >= 5 && hour < 12) slot = "morning";
+    else if (hour >= 12 && hour < 18) slot = "afternoon";
+    else if (hour >= 18 && hour < 22) slot = "evening";
+    else slot = "night";
+    slots[slot].count++;
+    slots[slot].totalWt += r.wt;
+  }
+  if (totalWithTime < 3) return null;
+  const result = Object.entries(slots).map(([name, data]) => ({
+    name,
+    count: data.count,
+    pct: Math.round(data.count / totalWithTime * 100),
+    avgWt: data.count > 0 ? +(data.totalWt / data.count).toFixed(1) : null
+  }));
+  const preferredSlot = result.reduce((best, s) => s.count > best.count ? s : best, result[0]).name;
+  return { slots: result, preferredSlot, totalWithTime };
+}
+function calcStreakBadges(records) {
+  if (!records || records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const dateSet = new Set(sorted.map((r) => r.dt));
+  const dates = [...dateSet].sort();
+  let longestStreak = 1;
+  let currentRun = 1;
+  for (let i = 1; i < dates.length; i++) {
+    const prev = /* @__PURE__ */ new Date(dates[i - 1] + "T00:00:00");
+    const curr = /* @__PURE__ */ new Date(dates[i] + "T00:00:00");
+    const diffDays = Math.round((curr - prev) / 864e5);
+    if (diffDays === 1) {
+      currentRun++;
+      longestStreak = Math.max(longestStreak, currentRun);
+    } else {
+      currentRun = 1;
+    }
+  }
+  let currentStreak = 1;
+  for (let i = dates.length - 1; i > 0; i--) {
+    const curr = /* @__PURE__ */ new Date(dates[i] + "T00:00:00");
+    const prev = /* @__PURE__ */ new Date(dates[i - 1] + "T00:00:00");
+    const diffDays = Math.round((curr - prev) / 864e5);
+    if (diffDays === 1) {
+      currentStreak++;
+    } else {
+      break;
+    }
+  }
+  const milestones = [3, 7, 14, 30, 60, 90];
+  const icons = ["\u{1F525}", "\u2B50", "\u{1F4AA}", "\u{1F3C6}", "\u{1F48E}", "\u{1F451}"];
+  const badges = milestones.map((days2, i) => ({
+    days: days2,
+    earned: longestStreak >= days2,
+    icon: icons[i]
+  }));
+  return { badges, longestStreak, currentStreak };
+}
+function calcProgressTimeline(records, goalWeight) {
+  if (!records || records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const startWt = sorted[0].wt;
+  const currentWt = sorted[sorted.length - 1].wt;
+  const events = [];
+  events.push({ dt: sorted[0].dt, wt: +startWt.toFixed(1), type: "start" });
+  const direction = goalWeight && goalWeight > 0 ? startWt > goalWeight ? -1 : 1 : currentWt < startWt ? -1 : 1;
+  const milestonesHit = /* @__PURE__ */ new Set();
+  let bestWt = sorted[0].wt;
+  let bestDt = sorted[0].dt;
+  for (const r of sorted.slice(1)) {
+    if (r.wt < bestWt) {
+      bestWt = r.wt;
+      bestDt = r.dt;
+    }
+    const kgFromStart = Math.floor(Math.abs(r.wt - startWt));
+    if (kgFromStart > 0) {
+      for (let k = 1; k <= kgFromStart && k <= 20; k++) {
+        const mKey = direction === -1 ? -k : k;
+        if (!milestonesHit.has(mKey)) {
+          milestonesHit.add(mKey);
+          const mWt = +(startWt + mKey).toFixed(1);
+          events.push({ dt: r.dt, wt: mWt, type: "milestone" });
+        }
+      }
+    }
+  }
+  if (bestWt < startWt && bestWt < currentWt) {
+    events.push({ dt: bestDt, wt: +bestWt.toFixed(1), type: "best" });
+  }
+  events.push({ dt: sorted[sorted.length - 1].dt, wt: +currentWt.toFixed(1), type: "current" });
+  events.sort((a, b) => a.dt.localeCompare(b.dt));
+  if (events.length > 8) {
+    const start = events[0];
+    const current = events[events.length - 1];
+    const best = events.find((e) => e.type === "best");
+    const milestones = events.filter((e) => e.type === "milestone");
+    const kept = [start];
+    if (best) kept.push(best);
+    const step = Math.max(1, Math.floor(milestones.length / 5));
+    for (let i = 0; i < milestones.length; i += step) {
+      if (kept.length < 7) kept.push(milestones[i]);
+    }
+    kept.push(current);
+    kept.sort((a, b) => a.dt.localeCompare(b.dt));
+    return { events: kept, totalChange: +(currentWt - startWt).toFixed(1) };
+  }
+  return { events, totalChange: +(currentWt - startWt).toFixed(1) };
+}
+function calcForecastConfidence(records) {
+  if (!records || records.length < 10) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-14);
+  if (recent.length < 7) return null;
+  const current = recent[recent.length - 1].wt;
+  const n = recent.length;
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+  for (let i = 0; i < n; i++) {
+    sumX += i;
+    sumY += recent[i].wt;
+    sumXY += i * recent[i].wt;
+    sumX2 += i * i;
+  }
+  const dailyRate = +((n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX)).toFixed(4);
+  const intercept = (sumY - dailyRate * sumX) / n;
+  let ssRes = 0, ssTot = 0;
+  const mean = sumY / n;
+  for (let i = 0; i < n; i++) {
+    const predicted = intercept + dailyRate * i;
+    ssRes += (recent[i].wt - predicted) ** 2;
+    ssTot += (recent[i].wt - mean) ** 2;
+  }
+  const r2 = ssTot > 0 ? Math.max(0, 1 - ssRes / ssTot) : 0;
+  const confidence = Math.round(r2 * 100);
+  const forecast7 = +(current + dailyRate * 7).toFixed(1);
+  const forecast30 = +(current + dailyRate * 30).toFixed(1);
+  return { current: +current.toFixed(1), forecast7, forecast30, dailyRate, confidence };
+}
+function calcWeightZones(records, goalWeight) {
+  if (!records || records.length < 3 || !goalWeight || goalWeight <= 0) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const margin = Math.max(0.5, goalWeight * 0.01);
+  const low = goalWeight - margin;
+  const high = goalWeight + margin;
+  let below = 0, at = 0, above = 0;
+  for (const r of sorted) {
+    if (r.wt < low) below++;
+    else if (r.wt > high) above++;
+    else at++;
+  }
+  const total = sorted.length;
+  const recent = sorted.slice(-30);
+  let rBelow = 0, rAt = 0, rAbove = 0;
+  for (const r of recent) {
+    if (r.wt < low) rBelow++;
+    else if (r.wt > high) rAbove++;
+    else rAt++;
+  }
+  const rTotal = recent.length;
+  return {
+    zones: {
+      below: { count: below, pct: Math.round(below / total * 100) },
+      at: { count: at, pct: Math.round(at / total * 100) },
+      above: { count: above, pct: Math.round(above / total * 100) }
+    },
+    recent30: {
+      below: { count: rBelow, pct: Math.round(rBelow / rTotal * 100) },
+      at: { count: rAt, pct: Math.round(rAt / rTotal * 100) },
+      above: { count: rAbove, pct: Math.round(rAbove / rTotal * 100) }
+    },
+    margin: +margin.toFixed(1),
+    goal: goalWeight,
+    total
+  };
+}
+function calcWeightChangeRate(records) {
+  if (!records || records.length < 14) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const windowSize = 7;
+  const rates = [];
+  for (let i = windowSize; i < sorted.length; i += windowSize) {
+    const start = sorted[i - windowSize];
+    const end = sorted[i];
+    const daysDiff = (new Date(end.dt) - new Date(start.dt)) / 864e5;
+    if (daysDiff <= 0) continue;
+    const rate = +((end.wt - start.wt) / daysDiff * 7).toFixed(2);
+    rates.push({
+      endDt: end.dt,
+      rate,
+      direction: rate < -0.1 ? "losing" : rate > 0.1 ? "gaining" : "stable"
+    });
+  }
+  if (rates.length === 0) return null;
+  const recent = rates.slice(-8);
+  const maxAbs = Math.max(...recent.map((r) => Math.abs(r.rate)), 0.1);
+  const avgRate = +(recent.reduce((s, r) => s + r.rate, 0) / recent.length).toFixed(2);
+  return {
+    windows: recent,
+    maxAbsRate: +maxAbs.toFixed(2),
+    avgRate,
+    trend: avgRate < -0.1 ? "losing" : avgRate > 0.1 ? "gaining" : "stable"
+  };
+}
+function calcWeighInConsistency(records) {
+  if (!records || records.length < 5) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const gaps = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const days2 = Math.round((new Date(sorted[i].dt) - new Date(sorted[i - 1].dt)) / 864e5);
+    if (days2 > 0) gaps.push(days2);
+  }
+  if (gaps.length < 3) return null;
+  const avgInterval = +(gaps.reduce((s, g) => s + g, 0) / gaps.length).toFixed(1);
+  const sortedGaps = [...gaps].sort((a, b) => a - b);
+  const medianInterval = sortedGaps[Math.floor(sortedGaps.length / 2)];
+  const cadence = medianInterval <= 1.5 ? 1 : medianInterval <= 3 ? 2 : medianInterval <= 5 ? 3 : 7;
+  const tolerance = cadence <= 2 ? 1 : 2;
+  let regularGaps = 0;
+  for (const g of gaps) {
+    if (Math.abs(g - cadence) <= tolerance) regularGaps++;
+  }
+  const score = Math.round(regularGaps / gaps.length * 100);
+  let cadenceLabel;
+  if (cadence === 1) cadenceLabel = "daily";
+  else if (cadence === 2) cadenceLabel = "every_other_day";
+  else if (cadence === 3) cadenceLabel = "every_few_days";
+  else cadenceLabel = "weekly";
+  return {
+    avgInterval,
+    medianInterval,
+    cadence,
+    cadenceLabel,
+    score,
+    totalGaps: gaps.length,
+    regularGaps
+  };
+}
+function calcPlateauPeriods(records) {
+  if (!records || records.length < 7) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const band = 0.5;
+  const minReadings = 7;
+  const plateaus = [];
+  let start = 0;
+  while (start < sorted.length) {
+    let end = start;
+    let sum = sorted[start].wt;
+    let count = 1;
+    let mean = sum;
+    while (end + 1 < sorted.length) {
+      const nextWt = sorted[end + 1].wt;
+      const newSum = sum + nextWt;
+      const newMean = newSum / (count + 1);
+      let allInBand = Math.abs(nextWt - newMean) <= band;
+      if (allInBand) {
+        for (let j = start; j <= end; j++) {
+          if (Math.abs(sorted[j].wt - newMean) > band) {
+            allInBand = false;
+            break;
+          }
+        }
+      }
+      if (allInBand) {
+        end++;
+        sum = newSum;
+        count++;
+        mean = newMean;
+      } else {
+        break;
+      }
+    }
+    if (count >= minReadings) {
+      const days2 = Math.round((new Date(sorted[end].dt) - new Date(sorted[start].dt)) / 864e5);
+      plateaus.push({
+        startDt: sorted[start].dt,
+        endDt: sorted[end].dt,
+        days: Math.max(days2, 1),
+        avgWt: +mean.toFixed(1),
+        readings: count
+      });
+      start = end + 1;
+    } else {
+      start++;
+    }
+  }
+  if (plateaus.length === 0) return null;
+  const longestDays = Math.max(...plateaus.map((p) => p.days));
+  const lastRecord = sorted[sorted.length - 1];
+  const current = plateaus.length > 0 && plateaus[plateaus.length - 1].endDt === lastRecord.dt;
+  return { plateaus, current, longestDays };
+}
+function calcWeightPercentileRank(records) {
+  if (!records || records.length < 5) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const current = sorted[sorted.length - 1].wt;
+  const weights = sorted.map((r) => r.wt).sort((a, b) => a - b);
+  const n = weights.length;
+  const belowCount = weights.filter((w) => w < current).length;
+  const equalCount = weights.filter((w) => w === current).length;
+  const percentile = Math.round((belowCount + 0.5 * equalCount) / n * 100);
+  const q1 = weights[Math.floor(n * 0.25)];
+  const median = weights[Math.floor(n * 0.5)];
+  const q3 = weights[Math.floor(n * 0.75)];
+  return {
+    percentile,
+    current: +current.toFixed(1),
+    min: +weights[0].toFixed(1),
+    max: +weights[n - 1].toFixed(1),
+    q1: +q1.toFixed(1),
+    median: +median.toFixed(1),
+    q3: +q3.toFixed(1),
+    totalReadings: n
+  };
+}
+function calcWeightTrendArrow(records) {
+  if (!records || records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-7);
+  if (recent.length < 3) return null;
+  const first = recent[0].wt;
+  const last = recent[recent.length - 1].wt;
+  const change = +(last - first).toFixed(1);
+  const days2 = Math.max(1, Math.round((new Date(recent[recent.length - 1].dt) - new Date(recent[0].dt)) / 864e5));
+  const dailyChange = change / days2;
+  let arrow;
+  if (dailyChange > 0.12) arrow = "up2";
+  else if (dailyChange > 0.04) arrow = "up1";
+  else if (dailyChange < -0.12) arrow = "down2";
+  else if (dailyChange < -0.04) arrow = "down1";
+  else arrow = "flat";
+  return { arrow, change, days: days2 };
+}
+function calcBodyCompositionBreakdown(records) {
+  if (!records || records.length < 2) return null;
+  const withBf = records.filter((r) => r.bf != null && r.bf > 0 && r.bf < 100).sort((a, b) => a.dt.localeCompare(b.dt));
+  if (withBf.length < 2) return null;
+  const first = withBf[0];
+  const latest = withBf[withBf.length - 1];
+  const firstFat = +(first.wt * first.bf / 100).toFixed(1);
+  const firstLean = +(first.wt - firstFat).toFixed(1);
+  const latestFat = +(latest.wt * latest.bf / 100).toFixed(1);
+  const latestLean = +(latest.wt - latestFat).toFixed(1);
+  return {
+    current: {
+      dt: latest.dt,
+      wt: +latest.wt.toFixed(1),
+      bf: +latest.bf.toFixed(1),
+      fatMass: latestFat,
+      leanMass: latestLean
+    },
+    first: {
+      dt: first.dt,
+      wt: +first.wt.toFixed(1),
+      bf: +first.bf.toFixed(1),
+      fatMass: firstFat,
+      leanMass: firstLean
+    },
+    fatChange: +(latestFat - firstFat).toFixed(1),
+    leanChange: +(latestLean - firstLean).toFixed(1),
+    entries: withBf.length
+  };
+}
+function calcWeeklyReportCard(records, goalWeight) {
+  if (!records || records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1];
+  const latestDate = new Date(latest.dt);
+  const weekAgo = new Date(latestDate);
+  weekAgo.setDate(weekAgo.getDate() - 6);
+  const weekStr = weekAgo.toISOString().slice(0, 10);
+  const weekRecords = sorted.filter((r) => r.dt >= weekStr);
+  if (weekRecords.length < 1) return null;
+  const daysWithRecords = new Set(weekRecords.map((r) => r.dt)).size;
+  const consistency = Math.round(daysWithRecords / 7 * 100);
+  let goalProgress = 50;
+  if (goalWeight && goalWeight > 0 && weekRecords.length >= 2) {
+    const weekStart = weekRecords[0].wt;
+    const weekEnd = weekRecords[weekRecords.length - 1].wt;
+    const change = weekEnd - weekStart;
+    const needed = goalWeight - weekStart;
+    if (Math.abs(needed) < 0.3) {
+      goalProgress = 100;
+    } else if (needed < 0 && change < 0 || needed > 0 && change > 0) {
+      const ratio = Math.min(Math.abs(change / needed), 1);
+      goalProgress = 60 + Math.round(ratio * 40);
+    } else if (Math.abs(change) < 0.3) {
+      goalProgress = 40;
+    } else {
+      goalProgress = Math.max(0, 30 - Math.round(Math.abs(change) * 10));
+    }
+  }
+  let stability = 50;
+  if (weekRecords.length >= 2) {
+    const wts = weekRecords.map((r) => r.wt);
+    const mean = wts.reduce((s, w) => s + w, 0) / wts.length;
+    const variance = wts.reduce((s, w) => s + (w - mean) ** 2, 0) / wts.length;
+    const stdDev = Math.sqrt(variance);
+    stability = Math.max(0, Math.min(100, Math.round((1.5 - stdDev) / 1.5 * 100)));
+  }
+  const score = Math.round(consistency * 0.4 + goalProgress * 0.35 + stability * 0.25);
+  let grade;
+  if (score >= 90) grade = "A";
+  else if (score >= 70) grade = "B";
+  else if (score >= 50) grade = "C";
+  else if (score >= 30) grade = "D";
+  else grade = "F";
+  return { grade, score, consistency, goalProgress, stability, weekRecords: daysWithRecords };
+}
+function calcNoteWordFrequency(records, topN = 10) {
+  if (!records || records.length < 1) return null;
+  const withNotes = records.filter((r) => r.note && r.note.trim().length > 0);
+  if (withNotes.length < 2) return null;
+  const stopWords = /* @__PURE__ */ new Set([
+    "the",
+    "a",
+    "an",
+    "is",
+    "was",
+    "are",
+    "were",
+    "be",
+    "been",
+    "to",
+    "of",
+    "in",
+    "for",
+    "and",
+    "on",
+    "at",
+    "it",
+    "by",
+    "with",
+    "as",
+    "or",
+    "but",
+    "not",
+    "no",
+    "so",
+    "if",
+    "my",
+    "i",
+    "me",
+    "we",
+    "he",
+    "she",
+    "they",
+    "this",
+    "that",
+    "from",
+    "had",
+    "has",
+    "have",
+    "\u306E",
+    "\u306F",
+    "\u304C",
+    "\u3092",
+    "\u306B",
+    "\u3067",
+    "\u3068",
+    "\u3082",
+    "\u305F",
+    "\u3066",
+    "\u3057",
+    "\u306A",
+    "\u3060",
+    "\u3059\u308B",
+    "\u3057\u305F",
+    "\u3067\u3059",
+    "\u307E\u3059",
+    "\u306A\u3044",
+    "\u3042\u308B",
+    "\u3044\u308B",
+    "\u3053\u3068",
+    "\u3082\u306E",
+    "\u305D\u306E",
+    "\u3053\u306E"
+  ]);
+  const freq = {};
+  for (const r of withNotes) {
+    const cleaned = r.note.replace(/#\w+/g, "").trim();
+    const words = cleaned.split(/[\s,、。.!?！？\-/]+/).filter((w) => w.length >= 2 && !stopWords.has(w.toLowerCase()));
+    for (const w of words) {
+      const key = w.toLowerCase();
+      freq[key] = (freq[key] || 0) + 1;
+    }
+  }
+  const sorted = Object.entries(freq).filter(([, count]) => count >= 2).sort((a, b) => b[1] - a[1]).slice(0, topN).map(([text, count]) => ({ text, count }));
+  if (sorted.length === 0) return null;
+  return {
+    words: sorted,
+    totalNotes: withNotes.length,
+    totalWords: Object.values(freq).reduce((s, c) => s + c, 0)
+  };
+}
 
 // src/i18n.js
 var translations = {
@@ -5139,7 +5708,99 @@ var translations = {
     "bwd.days.3": "\u6C34",
     "bwd.days.4": "\u6728",
     "bwd.days.5": "\u91D1",
-    "bwd.days.6": "\u571F"
+    "bwd.days.6": "\u571F",
+    "spark.title": "\u6700\u8FD1\u306E\u30C8\u30EC\u30F3\u30C9",
+    "spark.up": "\u4E0A\u6607\u4E2D",
+    "spark.down": "\u4E0B\u964D\u4E2D",
+    "spark.flat": "\u6A2A\u3070\u3044",
+    "esum.title": "\u6700\u65B0\u306E\u8A18\u9332",
+    "esum.vsPrev": "\u524D\u56DE\u6BD4",
+    "esum.vsWeek": "\u9031\u5E73\u5747\u6BD4",
+    "esum.best": "\u81EA\u5DF1\u30D9\u30B9\u30C8",
+    "esum.newBest": "\u65B0\u8A18\u9332\uFF01",
+    "gdist.title": "\u76EE\u6A19\u307E\u3067\u306E\u8DDD\u96E2",
+    "gdist.remaining": "\u3042\u3068",
+    "gdist.eta": "\u5230\u9054\u4E88\u5B9A",
+    "gdist.days": "\u7D04{days}\u65E5",
+    "gdist.achieved": "\u76EE\u6A19\u9054\u6210\uFF01",
+    "gdist.noEta": "\u30DA\u30FC\u30B9\u8A08\u6E2C\u4E2D",
+    "tslot.title": "\u8A18\u9332\u6642\u9593\u5E2F",
+    "tslot.morning": "\u671D (5-11\u6642)",
+    "tslot.afternoon": "\u663C (12-17\u6642)",
+    "tslot.evening": "\u591C (18-21\u6642)",
+    "tslot.night": "\u6DF1\u591C (22-4\u6642)",
+    "tslot.preferred": "\u3088\u304F\u8A18\u9332\u3059\u308B\u6642\u9593\u5E2F",
+    "sbadge.title": "\u9023\u7D9A\u8A18\u9332\u30D0\u30C3\u30B8",
+    "sbadge.longest": "\u6700\u9577\u9023\u7D9A",
+    "sbadge.current": "\u73FE\u5728\u306E\u9023\u7D9A",
+    "sbadge.days": "{n}\u65E5",
+    "sbadge.locked": "\u672A\u9054\u6210",
+    "ptl.title": "\u4F53\u91CD\u306E\u8ECC\u8DE1",
+    "ptl.start": "\u958B\u59CB",
+    "ptl.milestone": "\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3",
+    "ptl.best": "\u81EA\u5DF1\u30D9\u30B9\u30C8",
+    "ptl.current": "\u73FE\u5728",
+    "ptl.total": "\u5408\u8A08\u5909\u5316",
+    "fconf.title": "\u4F53\u91CD\u4E88\u6E2C",
+    "fconf.7day": "7\u65E5\u5F8C",
+    "fconf.30day": "30\u65E5\u5F8C",
+    "fconf.confidence": "\u4FE1\u983C\u5EA6",
+    "fconf.rate": "\u65E5\u5909\u5316\u7387",
+    "wz.title": "\u4F53\u91CD\u30BE\u30FC\u30F3\u5206\u5E03",
+    "wz.below": "\u76EE\u6A19\u4EE5\u4E0B",
+    "wz.at": "\u76EE\u6A19\u4ED8\u8FD1",
+    "wz.above": "\u76EE\u6A19\u4EE5\u4E0A",
+    "wz.recent": "\u76F4\u8FD130\u4EF6",
+    "wz.all": "\u5168\u671F\u9593",
+    "wz.margin": "\u8A31\u5BB9\u7BC4\u56F2",
+    "wcr.title": "\u4F53\u91CD\u5909\u5316\u30DA\u30FC\u30B9\u63A8\u79FB",
+    "wcr.losing": "\u6E1B\u5C11\u4E2D",
+    "wcr.gaining": "\u5897\u52A0\u4E2D",
+    "wcr.stable": "\u5B89\u5B9A",
+    "wcr.avg": "\u5E73\u5747",
+    "wcr.perWeek": "/\u9031",
+    "wic.title": "\u8A08\u6E2C\u30EA\u30BA\u30E0",
+    "wic.daily": "\u6BCE\u65E5",
+    "wic.every_other_day": "1\u65E5\u304A\u304D",
+    "wic.every_few_days": "\u6570\u65E5\u304A\u304D",
+    "wic.weekly": "\u90311\u56DE",
+    "wic.cadence": "\u30EA\u30BA\u30E0",
+    "wic.score": "\u898F\u5247\u6027",
+    "wic.avgInterval": "\u5E73\u5747\u9593\u9694",
+    "wic.days": "\u65E5",
+    "plat.title": "\u505C\u6EDE\u671F\u306E\u691C\u51FA",
+    "plat.count": "\u691C\u51FA\u6570",
+    "plat.longest": "\u6700\u9577",
+    "plat.days": "\u65E5\u9593",
+    "plat.current": "\u73FE\u5728\u505C\u6EDE\u4E2D",
+    "plat.none": "\u505C\u6EDE\u671F\u306A\u3057",
+    "plat.around": "\u7D04",
+    "wpr.title": "\u4F53\u91CD\u30D1\u30FC\u30BB\u30F3\u30BF\u30A4\u30EB",
+    "wpr.rank": "\u9806\u4F4D",
+    "wpr.lower": "\u306E\u8A18\u9332\u3088\u308A\u4F4E\u3044",
+    "wpr.median": "\u4E2D\u592E\u5024",
+    "wpr.range": "\u5168\u7BC4\u56F2",
+    "wta.title": "\u30C8\u30EC\u30F3\u30C9\u77E2\u5370",
+    "wta.up2": "\u6025\u4E0A\u6607",
+    "wta.up1": "\u4E0A\u6607\u50BE\u5411",
+    "wta.flat": "\u5B89\u5B9A",
+    "wta.down1": "\u4E0B\u964D\u50BE\u5411",
+    "wta.down2": "\u6025\u4E0B\u964D",
+    "wta.inDays": "\u65E5\u9593\u3067",
+    "bcb.title": "\u4F53\u7D44\u6210\u306E\u5909\u5316",
+    "bcb.fatMass": "\u8102\u80AA\u91CF",
+    "bcb.leanMass": "\u9664\u8102\u80AA\u91CF",
+    "bcb.now": "\u73FE\u5728",
+    "bcb.start": "\u958B\u59CB\u6642",
+    "bcb.change": "\u5909\u5316",
+    "wrc.title": "\u4ECA\u9031\u306E\u6210\u7E3E",
+    "wrc.consistency": "\u8A18\u9332\u306E\u7D99\u7D9A",
+    "wrc.goal": "\u76EE\u6A19\u3078\u306E\u9032\u6357",
+    "wrc.stability": "\u5B89\u5B9A\u6027",
+    "wrc.days": "\u65E5\u8A18\u9332",
+    "nwf.title": "\u30CE\u30FC\u30C8\u983B\u51FA\u30EF\u30FC\u30C9",
+    "nwf.notes": "\u4EF6\u306E\u30CE\u30FC\u30C8",
+    "nwf.times": "\u56DE"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -6133,7 +6794,99 @@ var translations = {
     "bwd.days.3": "Wed",
     "bwd.days.4": "Thu",
     "bwd.days.5": "Fri",
-    "bwd.days.6": "Sat"
+    "bwd.days.6": "Sat",
+    "spark.title": "Recent Trend",
+    "spark.up": "Trending Up",
+    "spark.down": "Trending Down",
+    "spark.flat": "Flat",
+    "esum.title": "Latest Entry",
+    "esum.vsPrev": "vs Previous",
+    "esum.vsWeek": "vs Week Avg",
+    "esum.best": "All-time Best",
+    "esum.newBest": "New Record!",
+    "gdist.title": "Distance to Goal",
+    "gdist.remaining": "Remaining",
+    "gdist.eta": "Estimated",
+    "gdist.days": "~{days} days",
+    "gdist.achieved": "Goal Achieved!",
+    "gdist.noEta": "Measuring pace",
+    "tslot.title": "Recording Time",
+    "tslot.morning": "Morning (5-11)",
+    "tslot.afternoon": "Afternoon (12-17)",
+    "tslot.evening": "Evening (18-21)",
+    "tslot.night": "Night (22-4)",
+    "tslot.preferred": "Preferred time",
+    "sbadge.title": "Streak Badges",
+    "sbadge.longest": "Longest Streak",
+    "sbadge.current": "Current Streak",
+    "sbadge.days": "{n} days",
+    "sbadge.locked": "Locked",
+    "ptl.title": "Weight Journey",
+    "ptl.start": "Start",
+    "ptl.milestone": "Milestone",
+    "ptl.best": "Personal Best",
+    "ptl.current": "Current",
+    "ptl.total": "Total Change",
+    "fconf.title": "Weight Forecast",
+    "fconf.7day": "In 7 days",
+    "fconf.30day": "In 30 days",
+    "fconf.confidence": "Confidence",
+    "fconf.rate": "Daily rate",
+    "wz.title": "Weight Zones",
+    "wz.below": "Below goal",
+    "wz.at": "At goal",
+    "wz.above": "Above goal",
+    "wz.recent": "Recent 30",
+    "wz.all": "All time",
+    "wz.margin": "Margin",
+    "wcr.title": "Weight Change Rate",
+    "wcr.losing": "Losing",
+    "wcr.gaining": "Gaining",
+    "wcr.stable": "Stable",
+    "wcr.avg": "Avg",
+    "wcr.perWeek": "/wk",
+    "wic.title": "Weigh-in Rhythm",
+    "wic.daily": "Daily",
+    "wic.every_other_day": "Every other day",
+    "wic.every_few_days": "Every few days",
+    "wic.weekly": "Weekly",
+    "wic.cadence": "Rhythm",
+    "wic.score": "Regularity",
+    "wic.avgInterval": "Avg interval",
+    "wic.days": "days",
+    "plat.title": "Plateau Detection",
+    "plat.count": "Found",
+    "plat.longest": "Longest",
+    "plat.days": "days",
+    "plat.current": "Currently in plateau",
+    "plat.none": "No plateaus",
+    "plat.around": "~",
+    "wpr.title": "Weight Percentile",
+    "wpr.rank": "Rank",
+    "wpr.lower": " of readings are lower",
+    "wpr.median": "Median",
+    "wpr.range": "Full range",
+    "wta.title": "Trend Arrow",
+    "wta.up2": "Rising fast",
+    "wta.up1": "Rising",
+    "wta.flat": "Stable",
+    "wta.down1": "Falling",
+    "wta.down2": "Falling fast",
+    "wta.inDays": " in ",
+    "bcb.title": "Body Composition Change",
+    "bcb.fatMass": "Fat mass",
+    "bcb.leanMass": "Lean mass",
+    "bcb.now": "Now",
+    "bcb.start": "Start",
+    "bcb.change": "Change",
+    "wrc.title": "Weekly Report",
+    "wrc.consistency": "Consistency",
+    "wrc.goal": "Goal progress",
+    "wrc.stability": "Stability",
+    "wrc.days": "days logged",
+    "nwf.title": "Note Keywords",
+    "nwf.notes": "notes",
+    "nwf.times": "\xD7"
   }
 };
 function createTranslator(language) {
@@ -27304,6 +28057,12 @@ function render() {
             ${renderPeriodBreakdown()}
             ${renderMotivation()}
             ${renderWeightBand()}
+            ${renderMiniSparkline()}
+            ${renderEntrySummary()}
+            ${renderGoalDistance()}
+            ${renderStreakBadges()}
+            ${renderWeightTrendArrow()}
+            ${renderWeeklyReportCard()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -27346,6 +28105,16 @@ function render() {
                 ${renderRecordCompleteness()}
                 ${renderWeightSmoothness()}
                 ${renderBestWeighDay()}
+                ${renderTimeSlotPattern()}
+                ${renderProgressTimeline()}
+                ${renderForecastConfidence()}
+                ${renderWeightZones()}
+                ${renderWeightChangeRate()}
+                ${renderWeighInConsistency()}
+                ${renderPlateauPeriods()}
+                ${renderWeightPercentileRank()}
+                ${renderBodyCompositionBreakdown()}
+                ${renderNoteWordFrequency()}
               </div>
               ` : ""}
             </div>
@@ -29498,6 +30267,379 @@ function renderBestWeighDay() {
       <div class="helper">${t("bwd.title")}</div>
       ${bars}
       <div class="bwd-best-label">${t("bwd.best")}: ${t("bwd.days." + data.bestDay)}</div>
+    </div>
+  `;
+}
+function renderMiniSparkline() {
+  const data = calcMiniSparkline(state.records, 10);
+  if (!data) return "";
+  const trendColor = data.trend === "down" ? "var(--ok)" : data.trend === "up" ? "var(--error)" : "var(--accent-3)";
+  const trendLabel = t("spark." + data.trend);
+  return `
+    <div class="spk-section">
+      <div class="helper">${t("spark.title")}</div>
+      <div class="spk-row">
+        <svg class="spk-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <path d="${data.svgPath}" fill="none" stroke="${trendColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+        </svg>
+        <div class="spk-info">
+          <div class="spk-trend" style="color:${trendColor}">${trendLabel}</div>
+          <div class="spk-range">${data.min}\u2013${data.max}kg</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function renderEntrySummary() {
+  const data = calcEntrySummary(state.records);
+  if (!data) return "";
+  const fmtDiff = (v) => {
+    const sign = v > 0 ? "+" : "";
+    const cls = v < 0 ? "esum-down" : v > 0 ? "esum-up" : "";
+    return `<span class="${cls}">${sign}${v}kg</span>`;
+  };
+  return `
+    <div class="esum-section">
+      <div class="helper">${t("esum.title")} (${data.latest.dt.slice(5).replace("-", "/")})</div>
+      <div class="esum-grid">
+        <div class="esum-item"><span class="esum-label">${t("esum.vsPrev")}</span>${fmtDiff(data.vsYesterday)}</div>
+        <div class="esum-item"><span class="esum-label">${t("esum.vsWeek")}</span>${fmtDiff(data.vsWeekAvg)}</div>
+        <div class="esum-item"><span class="esum-label">${t("esum.best")}</span><span>${data.allTimeBest}kg</span></div>
+      </div>
+      ${data.isNewBest ? `<div class="esum-new-best">${t("esum.newBest")}</div>` : ""}
+    </div>
+  `;
+}
+function renderGoalDistance() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const data = calcGoalDistance(state.records, goalWeight);
+  if (!data) return "";
+  if (data.direction === "achieved") {
+    return `<div class="gd-section"><div class="gd-achieved">${t("gdist.achieved")}</div></div>`;
+  }
+  const etaStr = data.etaDays !== null ? t("gdist.days").replace("{days}", String(data.etaDays)) : t("gdist.noEta");
+  return `
+    <div class="gd-section">
+      <div class="helper">${t("gdist.title")}</div>
+      <div class="gd-progress-track"><div class="gd-progress-fill" style="width:${data.progressPct}%"></div></div>
+      <div class="gd-info">
+        <span class="gd-remaining">${t("gdist.remaining")} ${data.remaining}kg</span>
+        <span class="gd-pct">${data.progressPct}%</span>
+      </div>
+      <div class="gd-eta">${t("gdist.eta")}: ${etaStr}</div>
+    </div>
+  `;
+}
+function renderTimeSlotPattern() {
+  const data = calcTimeSlotPattern(state.records);
+  if (!data) return "";
+  const maxCount = Math.max(...data.slots.map((s) => s.count), 1);
+  const bars = data.slots.map((s) => {
+    const pct = Math.round(s.count / maxCount * 100);
+    const isBest = s.name === data.preferredSlot;
+    return `<div class="ts-row">
+      <span class="ts-label">${t("tslot." + s.name)}</span>
+      <div class="ts-bar-track"><div class="ts-bar-fill${isBest ? " ts-best" : ""}" style="width:${pct}%"></div></div>
+      <span class="ts-count">${s.count}</span>
+    </div>`;
+  }).join("");
+  return `
+    <div class="ts-section">
+      <div class="helper">${t("tslot.title")}</div>
+      ${bars}
+      <div class="ts-preferred">${t("tslot.preferred")}: ${t("tslot." + data.preferredSlot)}</div>
+    </div>
+  `;
+}
+function renderStreakBadges() {
+  const data = calcStreakBadges(state.records);
+  if (!data) return "";
+  const badgeItems = data.badges.map((b) => {
+    const cls = b.earned ? "sb-earned" : "sb-locked";
+    const label = t("sbadge.days").replace("{n}", String(b.days));
+    return `<div class="sb-badge ${cls}" title="${label}"><span class="sb-icon">${b.earned ? b.icon : "\u{1F512}"}</span><span class="sb-label">${label}</span></div>`;
+  }).join("");
+  return `
+    <div class="sb-section">
+      <div class="helper">${t("sbadge.title")}</div>
+      <div class="sb-grid">${badgeItems}</div>
+      <div class="sb-stats">
+        <span>${t("sbadge.current")}: ${data.currentStreak}${t("sbadge.days").replace("{n}", "").trim()}</span>
+        <span>${t("sbadge.longest")}: ${data.longestStreak}${t("sbadge.days").replace("{n}", "").trim()}</span>
+      </div>
+    </div>
+  `;
+}
+function renderProgressTimeline() {
+  const goalWeight = Number(state.settings.goalWeight);
+  const data = calcProgressTimeline(state.records, goalWeight);
+  if (!data || data.events.length < 2) return "";
+  const icons = { start: "\u{1F3C1}", milestone: "\u{1F4CD}", best: "\u2B50", current: "\u{1F4CC}" };
+  const items = data.events.map((e) => {
+    const label = t("ptl." + e.type);
+    const icon = icons[e.type] || "\u{1F4CD}";
+    return `<div class="ptl-item">
+      <div class="ptl-dot">${icon}</div>
+      <div class="ptl-content">
+        <span class="ptl-date">${e.dt.slice(5).replace("-", "/")}</span>
+        <span class="ptl-wt">${e.wt}kg</span>
+        <span class="ptl-type">${label}</span>
+      </div>
+    </div>`;
+  }).join("");
+  const sign = data.totalChange > 0 ? "+" : "";
+  const changeCls = data.totalChange < 0 ? "ptl-loss" : data.totalChange > 0 ? "ptl-gain" : "";
+  return `
+    <div class="ptl-section">
+      <div class="helper">${t("ptl.title")}</div>
+      <div class="ptl-timeline">${items}</div>
+      <div class="ptl-total ${changeCls}">${t("ptl.total")}: ${sign}${data.totalChange}kg</div>
+    </div>
+  `;
+}
+function renderForecastConfidence() {
+  const data = calcForecastConfidence(state.records);
+  if (!data) return "";
+  const confColor = data.confidence >= 60 ? "var(--ok)" : data.confidence >= 30 ? "var(--warn)" : "var(--muted)";
+  const sign7 = data.forecast7 > data.current ? "+" : "";
+  const sign30 = data.forecast30 > data.current ? "+" : "";
+  const diff7 = +(data.forecast7 - data.current).toFixed(1);
+  const diff30 = +(data.forecast30 - data.current).toFixed(1);
+  return `
+    <div class="fc2-section">
+      <div class="helper">${t("fconf.title")}</div>
+      <div class="fc2-grid">
+        <div class="fc2-col">
+          <div class="fc2-label">${t("fconf.7day")}</div>
+          <div class="fc2-val">${data.forecast7}kg</div>
+          <div class="fc2-diff ${diff7 < 0 ? "fc2-down" : diff7 > 0 ? "fc2-up" : ""}">${sign7}${diff7}kg</div>
+        </div>
+        <div class="fc2-col">
+          <div class="fc2-label">${t("fconf.30day")}</div>
+          <div class="fc2-val">${data.forecast30}kg</div>
+          <div class="fc2-diff ${diff30 < 0 ? "fc2-down" : diff30 > 0 ? "fc2-up" : ""}">${sign30}${diff30}kg</div>
+        </div>
+      </div>
+      <div class="fc2-conf">
+        <span>${t("fconf.confidence")}</span>
+        <div class="fc2-conf-track"><div class="fc2-conf-fill" style="width:${data.confidence}%;background:${confColor}"></div></div>
+        <span class="fc2-conf-val" style="color:${confColor}">${data.confidence}%</span>
+      </div>
+    </div>
+  `;
+}
+function renderWeightZones() {
+  const goal = Number(state.settings.goalWeight);
+  const data = calcWeightZones(state.records, goal);
+  if (!data) return "";
+  return `
+    <div class="wz-section">
+      <div class="helper">${t("wz.title")}</div>
+      <div class="wz-bar-label">${t("wz.all")} (${data.total})</div>
+      <div class="wz-bar">
+        ${data.zones.below.pct > 0 ? `<div class="wz-seg wz-below" style="width:${data.zones.below.pct}%">${data.zones.below.pct}%</div>` : ""}
+        ${data.zones.at.pct > 0 ? `<div class="wz-seg wz-at" style="width:${data.zones.at.pct}%">${data.zones.at.pct}%</div>` : ""}
+        ${data.zones.above.pct > 0 ? `<div class="wz-seg wz-above" style="width:${data.zones.above.pct}%">${data.zones.above.pct}%</div>` : ""}
+      </div>
+      <div class="wz-bar-label">${t("wz.recent")} (${Math.min(30, data.total)})</div>
+      <div class="wz-bar">
+        ${data.recent30.below.pct > 0 ? `<div class="wz-seg wz-below" style="width:${data.recent30.below.pct}%">${data.recent30.below.pct}%</div>` : ""}
+        ${data.recent30.at.pct > 0 ? `<div class="wz-seg wz-at" style="width:${data.recent30.at.pct}%">${data.recent30.at.pct}%</div>` : ""}
+        ${data.recent30.above.pct > 0 ? `<div class="wz-seg wz-above" style="width:${data.recent30.above.pct}%">${data.recent30.above.pct}%</div>` : ""}
+      </div>
+      <div class="wz-legend">
+        <span class="wz-leg-item"><span class="wz-dot wz-below"></span>${t("wz.below")}</span>
+        <span class="wz-leg-item"><span class="wz-dot wz-at"></span>${t("wz.at")}</span>
+        <span class="wz-leg-item"><span class="wz-dot wz-above"></span>${t("wz.above")}</span>
+        <span class="wz-leg-margin">\xB1${data.margin}kg</span>
+      </div>
+    </div>
+  `;
+}
+function renderWeightChangeRate() {
+  const data = calcWeightChangeRate(state.records);
+  if (!data) return "";
+  const trendLabel = data.trend === "losing" ? t("wcr.losing") : data.trend === "gaining" ? t("wcr.gaining") : t("wcr.stable");
+  const trendColor = data.trend === "losing" ? "var(--ok)" : data.trend === "gaining" ? "var(--warn)" : "var(--muted)";
+  const bars = data.windows.map((w) => {
+    const pct = Math.round(Math.abs(w.rate) / data.maxAbsRate * 100);
+    const color = w.direction === "losing" ? "var(--ok)" : w.direction === "gaining" ? "var(--warn)" : "var(--muted)";
+    const isNeg = w.rate < 0;
+    return `<div class="wcr-col">
+      <div class="wcr-bar-wrap">
+        ${isNeg ? `<div class="wcr-bar wcr-bar-neg" style="height:${pct}%;background:${color}"></div>` : ""}
+        <div class="wcr-zero"></div>
+        ${!isNeg ? `<div class="wcr-bar wcr-bar-pos" style="height:${pct}%;background:${color}"></div>` : ""}
+      </div>
+      <div class="wcr-label">${w.rate > 0 ? "+" : ""}${w.rate}</div>
+    </div>`;
+  }).join("");
+  return `
+    <div class="wcr-section">
+      <div class="helper">${t("wcr.title")}</div>
+      <div class="wcr-chart">${bars}</div>
+      <div class="wcr-summary">
+        <span style="color:${trendColor}">${trendLabel}</span>
+        <span class="wcr-avg">${t("wcr.avg")}: ${data.avgRate > 0 ? "+" : ""}${data.avgRate}kg${t("wcr.perWeek")}</span>
+      </div>
+    </div>
+  `;
+}
+function renderWeighInConsistency() {
+  const data = calcWeighInConsistency(state.records);
+  if (!data) return "";
+  const cadenceLabel = t(`wic.${data.cadenceLabel}`);
+  const scoreColor = data.score >= 70 ? "var(--ok)" : data.score >= 40 ? "var(--warn)" : "var(--muted)";
+  return `
+    <div class="wic-section">
+      <div class="helper">${t("wic.title")}</div>
+      <div class="wic-grid">
+        <div class="wic-item">
+          <div class="wic-label">${t("wic.cadence")}</div>
+          <div class="wic-val">${cadenceLabel}</div>
+        </div>
+        <div class="wic-item">
+          <div class="wic-label">${t("wic.avgInterval")}</div>
+          <div class="wic-val">${data.avgInterval} ${t("wic.days")}</div>
+        </div>
+      </div>
+      <div class="wic-score-row">
+        <span>${t("wic.score")}</span>
+        <div class="wic-score-track"><div class="wic-score-fill" style="width:${data.score}%;background:${scoreColor}"></div></div>
+        <span class="wic-score-val" style="color:${scoreColor}">${data.score}%</span>
+      </div>
+    </div>
+  `;
+}
+function renderPlateauPeriods() {
+  const data = calcPlateauPeriods(state.records);
+  if (!data) return "";
+  const recent = data.plateaus.slice(-3);
+  const rows = recent.map((p) => `
+    <div class="plat-row">
+      <span class="plat-dates">${p.startDt.slice(5)} ~ ${p.endDt.slice(5)}</span>
+      <span class="plat-info">${t("plat.around")}${p.avgWt}kg \xB7 ${p.days}${t("plat.days")}</span>
+    </div>
+  `).join("");
+  return `
+    <div class="plat-section">
+      <div class="helper">${t("plat.title")}</div>
+      ${rows}
+      <div class="plat-summary">
+        <span>${t("plat.count")}: ${data.plateaus.length}</span>
+        <span>${t("plat.longest")}: ${data.longestDays}${t("plat.days")}</span>
+        ${data.current ? `<span class="plat-active">${t("plat.current")}</span>` : ""}
+      </div>
+    </div>
+  `;
+}
+function renderWeightPercentileRank() {
+  const data = calcWeightPercentileRank(state.records);
+  if (!data) return "";
+  const pctColor = data.percentile <= 30 ? "var(--ok)" : data.percentile >= 70 ? "var(--warn)" : "var(--accent)";
+  const markerPos = Math.max(2, Math.min(98, data.percentile));
+  return `
+    <div class="wpr-section">
+      <div class="helper">${t("wpr.title")}</div>
+      <div class="wpr-main">
+        <span class="wpr-pct" style="color:${pctColor}">${data.percentile}%</span>
+        <span class="wpr-desc">${t("wpr.lower")}</span>
+      </div>
+      <div class="wpr-track">
+        <div class="wpr-q1" style="left:25%"></div>
+        <div class="wpr-q3" style="left:75%"></div>
+        <div class="wpr-marker" style="left:${markerPos}%;background:${pctColor}"></div>
+      </div>
+      <div class="wpr-labels">
+        <span>${data.min}kg</span>
+        <span>${t("wpr.median")}: ${data.median}kg</span>
+        <span>${data.max}kg</span>
+      </div>
+    </div>
+  `;
+}
+function renderWeightTrendArrow() {
+  const data = calcWeightTrendArrow(state.records);
+  if (!data) return "";
+  const arrows = { up2: "\u2B06\u2B06", up1: "\u2B06", flat: "\u27A1", down1: "\u2B07", down2: "\u2B07\u2B07" };
+  const colors = { up2: "var(--warn)", up1: "var(--warn)", flat: "var(--muted)", down1: "var(--ok)", down2: "var(--ok)" };
+  const label = t(`wta.${data.arrow}`);
+  const sign = data.change > 0 ? "+" : "";
+  return `
+    <div class="wta-section">
+      <div class="wta-arrow" style="color:${colors[data.arrow]}">${arrows[data.arrow]}</div>
+      <div class="wta-info">
+        <div class="wta-label">${label}</div>
+        <div class="wta-change">${sign}${data.change}kg${t("wta.inDays")}${data.days}${t("wic.days")}</div>
+      </div>
+    </div>
+  `;
+}
+function renderBodyCompositionBreakdown() {
+  const data = calcBodyCompositionBreakdown(state.records);
+  if (!data) return "";
+  const fmtSign = (v) => (v > 0 ? "+" : "") + v;
+  const fatColor = data.fatChange <= 0 ? "var(--ok)" : "var(--warn)";
+  const leanColor = data.leanChange >= 0 ? "var(--ok)" : "var(--warn)";
+  return `
+    <div class="bcb-section">
+      <div class="helper">${t("bcb.title")}</div>
+      <table class="bcb-table">
+        <thead><tr><th></th><th>${t("bcb.start")}</th><th>${t("bcb.now")}</th><th>${t("bcb.change")}</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="bcb-label">${t("bcb.fatMass")}</td>
+            <td>${data.first.fatMass}kg</td>
+            <td>${data.current.fatMass}kg</td>
+            <td style="color:${fatColor}">${fmtSign(data.fatChange)}kg</td>
+          </tr>
+          <tr>
+            <td class="bcb-label">${t("bcb.leanMass")}</td>
+            <td>${data.first.leanMass}kg</td>
+            <td>${data.current.leanMass}kg</td>
+            <td style="color:${leanColor}">${fmtSign(data.leanChange)}kg</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+function renderWeeklyReportCard() {
+  const goal = Number(state.settings.goalWeight);
+  const data = calcWeeklyReportCard(state.records, goal);
+  if (!data) return "";
+  const gradeColors = { A: "var(--ok)", B: "#4caf50", C: "var(--warn)", D: "#ff9800", F: "#f44336" };
+  const color = gradeColors[data.grade] || "var(--muted)";
+  const bar = (label, val) => `
+    <div class="wrc-row">
+      <span class="wrc-label">${label}</span>
+      <div class="wrc-bar-track"><div class="wrc-bar-fill" style="width:${val}%;background:${val >= 70 ? "var(--ok)" : val >= 40 ? "var(--warn)" : "var(--muted)"}"></div></div>
+      <span class="wrc-val">${val}</span>
+    </div>`;
+  return `
+    <div class="wrc-section">
+      <div class="helper">${t("wrc.title")}</div>
+      <div class="wrc-grade" style="color:${color}">${data.grade}</div>
+      <div class="wrc-score">${data.score}/100 \xB7 ${data.weekRecords}/7 ${t("wrc.days")}</div>
+      ${bar(t("wrc.consistency"), data.consistency)}
+      ${bar(t("wrc.goal"), data.goalProgress)}
+      ${bar(t("wrc.stability"), data.stability)}
+    </div>
+  `;
+}
+function renderNoteWordFrequency() {
+  const data = calcNoteWordFrequency(state.records);
+  if (!data) return "";
+  const maxCount = data.words[0].count;
+  const tags = data.words.map((w) => {
+    const size = 0.7 + w.count / maxCount * 0.6;
+    const opacity = 0.5 + w.count / maxCount * 0.5;
+    return `<span class="nwf-word" style="font-size:${size}rem;opacity:${opacity}" title="${w.count}${t("nwf.times")}">${w.text}</span>`;
+  }).join("");
+  return `
+    <div class="nwf-section">
+      <div class="helper">${t("nwf.title")} <span class="nwf-count">(${data.totalNotes} ${t("nwf.notes")})</span></div>
+      <div class="nwf-cloud">${tags}</div>
     </div>
   `;
 }

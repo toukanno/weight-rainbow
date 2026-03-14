@@ -129,6 +129,22 @@ import {
   calcMotivationLevel,
   calcWeightBand,
   calcBestWeighDay,
+  calcMiniSparkline,
+  calcEntrySummary,
+  calcGoalDistance,
+  calcTimeSlotPattern,
+  calcStreakBadges,
+  calcProgressTimeline,
+  calcForecastConfidence,
+  calcWeightZones,
+  calcWeightChangeRate,
+  calcWeighInConsistency,
+  calcPlateauPeriods,
+  calcWeightPercentileRank,
+  calcWeightTrendArrow,
+  calcBodyCompositionBreakdown,
+  calcWeeklyReportCard,
+  calcNoteWordFrequency,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -9524,5 +9540,965 @@ describe("calcBestWeighDay", () => {
     const records = makeWeeksOfRecords(3, 70, offsets);
     const result = calcBestWeighDay(records);
     expect(result.worstDay).toBe(1); // Monday = day 1
+  });
+});
+
+describe("calcMiniSparkline", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcMiniSparkline(null)).toBeNull();
+    expect(calcMiniSparkline([])).toBeNull();
+    expect(calcMiniSparkline([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("generates points for valid data", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 - i * 0.2,
+    }));
+    const result = calcMiniSparkline(records, 10);
+    expect(result).not.toBeNull();
+    expect(result.points).toHaveLength(5);
+    expect(result.points[0].x).toBe(0);
+    expect(result.points[4].x).toBe(100);
+  });
+
+  it("detects downward trend", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 75 - i * 0.5,
+    }));
+    const result = calcMiniSparkline(records, 10);
+    expect(result.trend).toBe("down");
+  });
+
+  it("detects upward trend", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 65 + i * 0.5,
+    }));
+    const result = calcMiniSparkline(records, 10);
+    expect(result.trend).toBe("up");
+  });
+
+  it("detects flat trend", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcMiniSparkline(records, 10);
+    expect(result.trend).toBe("flat");
+  });
+
+  it("generates valid SVG path", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i,
+    }));
+    const result = calcMiniSparkline(records, 10);
+    expect(result.svgPath).toMatch(/^M\d+,\d+/);
+    expect(result.svgPath).toContain("L");
+  });
+
+  it("returns min and max", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 68 + i,
+    }));
+    const result = calcMiniSparkline(records, 10);
+    expect(result.min).toBe(68);
+    expect(result.max).toBe(72);
+  });
+});
+
+describe("calcEntrySummary", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcEntrySummary(null)).toBeNull();
+    expect(calcEntrySummary([])).toBeNull();
+    expect(calcEntrySummary([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("calculates vsYesterday correctly", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69.5 },
+    ];
+    const result = calcEntrySummary(records);
+    expect(result.vsYesterday).toBe(-0.5);
+    expect(result.latest.wt).toBe(69.5);
+  });
+
+  it("calculates vsWeekAvg", () => {
+    const records = Array.from({ length: 8 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    records[7].wt = 68;
+    const result = calcEntrySummary(records);
+    expect(result.vsWeekAvg).toBe(-2);
+  });
+
+  it("detects new all-time best", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72 },
+      { dt: "2025-01-02", wt: 71 },
+      { dt: "2025-01-03", wt: 70 },
+    ];
+    const result = calcEntrySummary(records);
+    expect(result.isNewBest).toBe(true);
+    expect(result.allTimeBest).toBe(70);
+  });
+
+  it("does not flag new best when not lowest", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 68 },
+      { dt: "2025-01-02", wt: 71 },
+      { dt: "2025-01-03", wt: 70 },
+    ];
+    const result = calcEntrySummary(records);
+    expect(result.isNewBest).toBe(false);
+    expect(result.allTimeBest).toBe(68);
+  });
+
+  it("returns latest date and weight", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-05", wt: 69 },
+    ];
+    const result = calcEntrySummary(records);
+    expect(result.latest.dt).toBe("2025-01-05");
+    expect(result.latest.wt).toBe(69);
+  });
+});
+
+describe("calcGoalDistance", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcGoalDistance(null, 65)).toBeNull();
+    expect(calcGoalDistance([], 65)).toBeNull();
+    expect(calcGoalDistance([{ dt: "2025-01-01", wt: 70 }], 65)).toBeNull();
+    expect(calcGoalDistance([{ dt: "2025-01-01", wt: 70 }, { dt: "2025-01-02", wt: 69 }], 0)).toBeNull();
+  });
+
+  it("detects achieved goal", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 66 },
+      { dt: "2025-01-02", wt: 65 },
+    ];
+    const result = calcGoalDistance(records, 65);
+    expect(result.direction).toBe("achieved");
+    expect(result.progressPct).toBe(100);
+    expect(result.remaining).toBe(0);
+  });
+
+  it("calculates remaining for loss goal", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-01-02", wt: 70 },
+    ];
+    const result = calcGoalDistance(records, 65);
+    expect(result.remaining).toBe(5);
+    expect(result.direction).toBe("lose");
+    expect(result.progressPct).toBe(50);
+  });
+
+  it("calculates remaining for gain goal", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 55 },
+      { dt: "2025-01-02", wt: 58 },
+    ];
+    const result = calcGoalDistance(records, 65);
+    expect(result.remaining).toBe(7);
+    expect(result.direction).toBe("gain");
+  });
+
+  it("estimates ETA with sufficient trend data", () => {
+    // 14 days losing 0.1kg/day → 50 days for 5kg
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: +(75 - i * 0.1).toFixed(1),
+    }));
+    const result = calcGoalDistance(records, 65);
+    expect(result.etaDays).not.toBeNull();
+    expect(result.etaDays).toBeGreaterThan(0);
+  });
+
+  it("returns null ETA when pace is wrong direction", () => {
+    // Gaining when should be losing
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i * 0.1,
+    }));
+    const result = calcGoalDistance(records, 65);
+    expect(result.etaDays).toBeNull();
+  });
+});
+
+describe("calcTimeSlotPattern", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcTimeSlotPattern(null)).toBeNull();
+    expect(calcTimeSlotPattern([])).toBeNull();
+    expect(calcTimeSlotPattern([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns null when no records have time", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    expect(calcTimeSlotPattern(records)).toBeNull();
+  });
+
+  it("categorizes morning records correctly", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+      time: "07:30",
+    }));
+    const result = calcTimeSlotPattern(records);
+    expect(result).not.toBeNull();
+    expect(result.preferredSlot).toBe("morning");
+    const morning = result.slots.find((s) => s.name === "morning");
+    expect(morning.count).toBe(5);
+  });
+
+  it("categorizes evening records correctly", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+      time: "19:00",
+    }));
+    const result = calcTimeSlotPattern(records);
+    expect(result.preferredSlot).toBe("evening");
+  });
+
+  it("calculates average weight per slot", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, time: "07:00" },
+      { dt: "2025-01-02", wt: 72, time: "07:30" },
+      { dt: "2025-01-03", wt: 68, time: "08:00" },
+      { dt: "2025-01-04", wt: 69, time: "19:00" },
+      { dt: "2025-01-05", wt: 71, time: "20:00" },
+    ];
+    const result = calcTimeSlotPattern(records);
+    const morning = result.slots.find((s) => s.name === "morning");
+    expect(morning.avgWt).toBe(70);
+  });
+
+  it("returns 4 slots", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+      time: "10:00",
+    }));
+    const result = calcTimeSlotPattern(records);
+    expect(result.slots).toHaveLength(4);
+  });
+});
+
+describe("calcStreakBadges", () => {
+  const makeConsecutive = (days, startWt = 70) =>
+    Array.from({ length: days }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: startWt,
+    }));
+
+  it("returns null for insufficient data", () => {
+    expect(calcStreakBadges(null)).toBeNull();
+    expect(calcStreakBadges([])).toBeNull();
+    expect(calcStreakBadges([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("earns 3-day badge for 3 consecutive days", () => {
+    const records = makeConsecutive(3);
+    const result = calcStreakBadges(records);
+    expect(result.badges[0].days).toBe(3);
+    expect(result.badges[0].earned).toBe(true);
+    expect(result.badges[1].earned).toBe(false); // 7-day not earned
+  });
+
+  it("earns all badges for 90+ consecutive days", () => {
+    // Use 3 months of consecutive dates
+    const records = [];
+    const start = new Date(2025, 0, 1);
+    for (let i = 0; i < 91; i++) {
+      const d = new Date(start);
+      d.setDate(d.getDate() + i);
+      records.push({
+        dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+        wt: 70,
+      });
+    }
+    const result = calcStreakBadges(records);
+    expect(result.badges.every((b) => b.earned)).toBe(true);
+    expect(result.longestStreak).toBe(91);
+  });
+
+  it("calculates current streak", () => {
+    const records = makeConsecutive(5);
+    const result = calcStreakBadges(records);
+    expect(result.currentStreak).toBe(5);
+  });
+
+  it("returns 6 badge milestones", () => {
+    const records = makeConsecutive(2);
+    const result = calcStreakBadges(records);
+    expect(result.badges).toHaveLength(6);
+  });
+
+  it("handles gaps in recording", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70 },
+      { dt: "2025-01-05", wt: 70 }, // gap
+      { dt: "2025-01-06", wt: 70 },
+    ];
+    const result = calcStreakBadges(records);
+    expect(result.longestStreak).toBe(2);
+    expect(result.currentStreak).toBe(2);
+  });
+});
+
+describe("calcProgressTimeline", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcProgressTimeline(null, 65)).toBeNull();
+    expect(calcProgressTimeline([], 65)).toBeNull();
+    expect(calcProgressTimeline([{ dt: "2025-01-01", wt: 70 }], 65)).toBeNull();
+  });
+
+  it("includes start and current events", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 72 },
+      { dt: "2025-01-02", wt: 71 },
+      { dt: "2025-01-03", wt: 70 },
+    ];
+    const result = calcProgressTimeline(records, 65);
+    expect(result).not.toBeNull();
+    expect(result.events[0].type).toBe("start");
+    expect(result.events[result.events.length - 1].type).toBe("current");
+  });
+
+  it("calculates total change", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-01-02", wt: 73 },
+      { dt: "2025-01-03", wt: 70 },
+    ];
+    const result = calcProgressTimeline(records, 65);
+    expect(result.totalChange).toBe(-5);
+  });
+
+  it("adds milestone events for kg crossings", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 73 },
+      { dt: "2025-01-05", wt: 71 },
+      { dt: "2025-01-10", wt: 70 },
+    ];
+    const result = calcProgressTimeline(records, 65);
+    const milestones = result.events.filter((e) => e.type === "milestone");
+    expect(milestones.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("adds personal best event", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 73 },
+      { dt: "2025-01-05", wt: 69 },
+      { dt: "2025-01-10", wt: 71 }, // bounced back
+    ];
+    const result = calcProgressTimeline(records, 65);
+    const best = result.events.find((e) => e.type === "best");
+    expect(best).toBeDefined();
+    expect(best.wt).toBe(69);
+  });
+
+  it("limits events to 8 max", () => {
+    // Large weight change = many milestones
+    const records = Array.from({ length: 20 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 85 - i,
+    }));
+    const result = calcProgressTimeline(records, 60);
+    expect(result.events.length).toBeLessThanOrEqual(8);
+  });
+});
+
+describe("calcForecastConfidence", () => {
+  const makeRecords = (count, startWt, dailyDelta) =>
+    Array.from({ length: count }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: +(startWt + dailyDelta * i).toFixed(1),
+    }));
+
+  it("returns null for insufficient data", () => {
+    expect(calcForecastConfidence(null)).toBeNull();
+    expect(calcForecastConfidence([])).toBeNull();
+    expect(calcForecastConfidence(makeRecords(5, 70, -0.1))).toBeNull();
+  });
+
+  it("forecasts for sufficient data", () => {
+    const records = makeRecords(14, 75, -0.1);
+    const result = calcForecastConfidence(records);
+    expect(result).not.toBeNull();
+    expect(result.forecast7).toBeLessThan(result.current);
+    expect(result.forecast30).toBeLessThan(result.forecast7);
+  });
+
+  it("has high confidence for perfectly linear data", () => {
+    const records = makeRecords(14, 70, -0.1);
+    const result = calcForecastConfidence(records);
+    expect(result.confidence).toBeGreaterThanOrEqual(90);
+  });
+
+  it("has lower confidence for noisy data", () => {
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + (i % 2 === 0 ? 1 : -1) * 0.8,
+    }));
+    const result = calcForecastConfidence(records);
+    expect(result.confidence).toBeLessThan(50);
+  });
+
+  it("includes daily rate", () => {
+    const records = makeRecords(14, 70, -0.1);
+    const result = calcForecastConfidence(records);
+    expect(result.dailyRate).toBeLessThan(0);
+  });
+
+  it("confidence is 0–100", () => {
+    const records = makeRecords(10, 70, 0.05);
+    const result = calcForecastConfidence(records);
+    expect(result.confidence).toBeGreaterThanOrEqual(0);
+    expect(result.confidence).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("calcWeightZones", () => {
+  const makeRecords = (count, startWt, dailyDelta) =>
+    Array.from({ length: count }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: +(startWt + dailyDelta * i).toFixed(1),
+    }));
+
+  it("returns null for insufficient data", () => {
+    expect(calcWeightZones(null, 70)).toBeNull();
+    expect(calcWeightZones([], 70)).toBeNull();
+    expect(calcWeightZones([{ dt: "2025-01-01", wt: 70 }], 70)).toBeNull();
+    expect(calcWeightZones(makeRecords(5, 70, 0), 0)).toBeNull();
+  });
+
+  it("categorizes all records at goal", () => {
+    const records = makeRecords(10, 70, 0); // all exactly 70
+    const result = calcWeightZones(records, 70);
+    expect(result.zones.at.pct).toBe(100);
+    expect(result.zones.below.pct).toBe(0);
+    expect(result.zones.above.pct).toBe(0);
+  });
+
+  it("categorizes records below goal", () => {
+    const records = makeRecords(10, 60, 0); // all 60, goal 70
+    const result = calcWeightZones(records, 70);
+    expect(result.zones.below.pct).toBe(100);
+    expect(result.zones.at.pct).toBe(0);
+    expect(result.zones.above.pct).toBe(0);
+  });
+
+  it("categorizes records above goal", () => {
+    const records = makeRecords(10, 80, 0); // all 80, goal 70
+    const result = calcWeightZones(records, 70);
+    expect(result.zones.above.pct).toBe(100);
+  });
+
+  it("calculates margin correctly", () => {
+    const result = calcWeightZones(makeRecords(5, 70, 0), 70);
+    // 1% of 70 = 0.7
+    expect(result.margin).toBe(0.7);
+    expect(result.goal).toBe(70);
+  });
+
+  it("uses min margin of 0.5 for low goal", () => {
+    const result = calcWeightZones(makeRecords(5, 40, 0), 40);
+    // 1% of 40 = 0.4, but min is 0.5
+    expect(result.margin).toBe(0.5);
+  });
+
+  it("includes recent30 stats", () => {
+    const records = makeRecords(50, 70, 0);
+    const result = calcWeightZones(records, 70);
+    expect(result.recent30).toBeDefined();
+    expect(result.recent30.at.pct).toBe(100);
+    expect(result.total).toBe(50);
+  });
+});
+
+describe("calcWeightChangeRate", () => {
+  const makeRecords = (count, startWt, dailyDelta) =>
+    Array.from({ length: count }, (_, i) => ({
+      dt: `2025-${String(Math.floor(i / 28) + 1).padStart(2, "0")}-${String((i % 28) + 1).padStart(2, "0")}`,
+      wt: +(startWt + dailyDelta * i).toFixed(1),
+    }));
+
+  it("returns null for insufficient data", () => {
+    expect(calcWeightChangeRate(null)).toBeNull();
+    expect(calcWeightChangeRate([])).toBeNull();
+    expect(calcWeightChangeRate(makeRecords(10, 70, -0.1))).toBeNull();
+  });
+
+  it("returns windows for sufficient data", () => {
+    const records = makeRecords(28, 70, -0.1);
+    const result = calcWeightChangeRate(records);
+    expect(result).not.toBeNull();
+    expect(result.windows.length).toBeGreaterThan(0);
+  });
+
+  it("detects losing trend", () => {
+    const records = makeRecords(28, 75, -0.15);
+    const result = calcWeightChangeRate(records);
+    expect(result.trend).toBe("losing");
+    expect(result.avgRate).toBeLessThan(0);
+  });
+
+  it("detects gaining trend", () => {
+    const records = makeRecords(28, 60, 0.15);
+    const result = calcWeightChangeRate(records);
+    expect(result.trend).toBe("gaining");
+    expect(result.avgRate).toBeGreaterThan(0);
+  });
+
+  it("detects stable trend", () => {
+    const records = makeRecords(28, 70, 0);
+    const result = calcWeightChangeRate(records);
+    expect(result.trend).toBe("stable");
+  });
+
+  it("limits to 8 windows max", () => {
+    const records = makeRecords(100, 70, -0.05);
+    const result = calcWeightChangeRate(records);
+    expect(result.windows.length).toBeLessThanOrEqual(8);
+  });
+
+  it("each window has required fields", () => {
+    const records = makeRecords(28, 70, -0.1);
+    const result = calcWeightChangeRate(records);
+    for (const w of result.windows) {
+      expect(w).toHaveProperty("endDt");
+      expect(w).toHaveProperty("rate");
+      expect(w).toHaveProperty("direction");
+      expect(["losing", "gaining", "stable"]).toContain(w.direction);
+    }
+  });
+});
+
+describe("calcWeighInConsistency", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcWeighInConsistency(null)).toBeNull();
+    expect(calcWeighInConsistency([])).toBeNull();
+    expect(calcWeighInConsistency([
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 70 },
+    ])).toBeNull();
+  });
+
+  it("detects daily cadence", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcWeighInConsistency(records);
+    expect(result.cadenceLabel).toBe("daily");
+    expect(result.cadence).toBe(1);
+  });
+
+  it("detects every-other-day cadence", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i * 2 + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcWeighInConsistency(records);
+    expect(result.cadenceLabel).toBe("every_other_day");
+    expect(result.cadence).toBe(2);
+  });
+
+  it("detects weekly cadence", () => {
+    const records = Array.from({ length: 8 }, (_, i) => ({
+      dt: `2025-${String(Math.floor((i * 7) / 28) + 1).padStart(2, "0")}-${String((i * 7) % 28 + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcWeighInConsistency(records);
+    expect(result.cadenceLabel).toBe("weekly");
+  });
+
+  it("score is 0-100", () => {
+    const records = Array.from({ length: 15 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcWeighInConsistency(records);
+    expect(result.score).toBeGreaterThanOrEqual(0);
+    expect(result.score).toBeLessThanOrEqual(100);
+  });
+
+  it("high score for consistent daily recording", () => {
+    const records = Array.from({ length: 20 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcWeighInConsistency(records);
+    expect(result.score).toBeGreaterThanOrEqual(80);
+  });
+
+  it("returns avgInterval", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcWeighInConsistency(records);
+    expect(result.avgInterval).toBe(1);
+    expect(result.totalGaps).toBe(9);
+  });
+});
+
+describe("calcPlateauPeriods", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcPlateauPeriods(null)).toBeNull();
+    expect(calcPlateauPeriods([])).toBeNull();
+    expect(calcPlateauPeriods([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("detects a plateau of stable weights", () => {
+    // 10 readings all at 70kg = clear plateau
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcPlateauPeriods(records);
+    expect(result).not.toBeNull();
+    expect(result.plateaus.length).toBeGreaterThanOrEqual(1);
+    expect(result.plateaus[0].avgWt).toBe(70);
+  });
+
+  it("returns null when weights vary too much", () => {
+    // Each reading differs by 2kg - no plateau
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 60 + i * 2,
+    }));
+    const result = calcPlateauPeriods(records);
+    expect(result).toBeNull();
+  });
+
+  it("detects current plateau", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + (Math.random() * 0.4 - 0.2), // tiny variation
+    }));
+    // Force exact weights for predictability
+    records.forEach((r) => { r.wt = 70; });
+    const result = calcPlateauPeriods(records);
+    expect(result.current).toBe(true);
+  });
+
+  it("tracks longest plateau days", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcPlateauPeriods(records);
+    expect(result.longestDays).toBeGreaterThan(0);
+  });
+
+  it("plateau has required fields", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcPlateauPeriods(records);
+    const p = result.plateaus[0];
+    expect(p).toHaveProperty("startDt");
+    expect(p).toHaveProperty("endDt");
+    expect(p).toHaveProperty("days");
+    expect(p).toHaveProperty("avgWt");
+    expect(p).toHaveProperty("readings");
+    expect(p.readings).toBeGreaterThanOrEqual(7);
+  });
+});
+
+describe("calcWeightPercentileRank", () => {
+  const mkRecords = (weights) =>
+    weights.map((wt, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt,
+    }));
+
+  it("returns null for insufficient data", () => {
+    expect(calcWeightPercentileRank(null)).toBeNull();
+    expect(calcWeightPercentileRank([])).toBeNull();
+    expect(calcWeightPercentileRank(mkRecords([70, 71]))).toBeNull();
+  });
+
+  it("calculates percentile for current weight", () => {
+    // weights: 60,62,64,66,68,70,72,74,76,78 → current=78 (highest)
+    const records = mkRecords([60, 62, 64, 66, 68, 70, 72, 74, 76, 78]);
+    const result = calcWeightPercentileRank(records);
+    expect(result.percentile).toBeGreaterThanOrEqual(90);
+    expect(result.current).toBe(78);
+  });
+
+  it("low percentile when current is near minimum", () => {
+    // current = 60 (lowest)
+    const records = mkRecords([70, 72, 74, 76, 78, 60]);
+    const result = calcWeightPercentileRank(records);
+    expect(result.percentile).toBeLessThanOrEqual(15);
+  });
+
+  it("returns quartile boundaries", () => {
+    const records = mkRecords([60, 62, 64, 66, 68, 70, 72, 74, 76, 78]);
+    const result = calcWeightPercentileRank(records);
+    expect(result.q1).toBeDefined();
+    expect(result.median).toBeDefined();
+    expect(result.q3).toBeDefined();
+    expect(result.q1).toBeLessThanOrEqual(result.median);
+    expect(result.median).toBeLessThanOrEqual(result.q3);
+  });
+
+  it("returns min/max range", () => {
+    const records = mkRecords([60, 65, 70, 75, 80]);
+    const result = calcWeightPercentileRank(records);
+    expect(result.min).toBe(60);
+    expect(result.max).toBe(80);
+    expect(result.totalReadings).toBe(5);
+  });
+
+  it("percentile is 0-100", () => {
+    const records = mkRecords([70, 70, 70, 70, 70]);
+    const result = calcWeightPercentileRank(records);
+    expect(result.percentile).toBeGreaterThanOrEqual(0);
+    expect(result.percentile).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("calcWeightTrendArrow", () => {
+  const mkRecords = (weights) =>
+    weights.map((wt, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt,
+    }));
+
+  it("returns null for insufficient data", () => {
+    expect(calcWeightTrendArrow(null)).toBeNull();
+    expect(calcWeightTrendArrow([])).toBeNull();
+    expect(calcWeightTrendArrow(mkRecords([70, 71]))).toBeNull();
+  });
+
+  it("detects rising trend", () => {
+    const records = mkRecords([70, 70.5, 71, 71.5, 72]);
+    const result = calcWeightTrendArrow(records);
+    expect(["up1", "up2"]).toContain(result.arrow);
+    expect(result.change).toBeGreaterThan(0);
+  });
+
+  it("detects falling trend", () => {
+    const records = mkRecords([75, 74.5, 74, 73.5, 73]);
+    const result = calcWeightTrendArrow(records);
+    expect(["down1", "down2"]).toContain(result.arrow);
+    expect(result.change).toBeLessThan(0);
+  });
+
+  it("detects flat trend", () => {
+    const records = mkRecords([70, 70.1, 70, 69.9, 70]);
+    const result = calcWeightTrendArrow(records);
+    expect(result.arrow).toBe("flat");
+  });
+
+  it("returns change and days", () => {
+    const records = mkRecords([70, 71, 72, 73, 74]);
+    const result = calcWeightTrendArrow(records);
+    expect(result).toHaveProperty("change");
+    expect(result).toHaveProperty("days");
+    expect(result.days).toBeGreaterThan(0);
+  });
+
+  it("uses last 7 entries max", () => {
+    const records = mkRecords([60, 61, 62, 63, 64, 65, 66, 67, 68, 69]);
+    const result = calcWeightTrendArrow(records);
+    // Should only consider last 7
+    expect(result).not.toBeNull();
+    expect(result.days).toBeLessThanOrEqual(7);
+  });
+});
+
+describe("calcBodyCompositionBreakdown", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcBodyCompositionBreakdown(null)).toBeNull();
+    expect(calcBodyCompositionBreakdown([])).toBeNull();
+    expect(calcBodyCompositionBreakdown([{ dt: "2025-01-01", wt: 70, bf: 20 }])).toBeNull();
+  });
+
+  it("returns null when no bf records", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 71 },
+    ];
+    expect(calcBodyCompositionBreakdown(records)).toBeNull();
+  });
+
+  it("calculates fat and lean mass", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 80, bf: 25 },
+      { dt: "2025-02-01", wt: 75, bf: 20 },
+    ];
+    const result = calcBodyCompositionBreakdown(records);
+    expect(result.first.fatMass).toBe(20); // 80 * 25%
+    expect(result.first.leanMass).toBe(60); // 80 - 20
+    expect(result.current.fatMass).toBe(15); // 75 * 20%
+    expect(result.current.leanMass).toBe(60); // 75 - 15
+  });
+
+  it("calculates changes", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 80, bf: 25 },
+      { dt: "2025-02-01", wt: 75, bf: 20 },
+    ];
+    const result = calcBodyCompositionBreakdown(records);
+    expect(result.fatChange).toBe(-5); // 15 - 20
+    expect(result.leanChange).toBe(0); // 60 - 60
+  });
+
+  it("counts entries with bf", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 80, bf: 25 },
+      { dt: "2025-01-15", wt: 78, bf: 23 },
+      { dt: "2025-02-01", wt: 75, bf: 20 },
+    ];
+    const result = calcBodyCompositionBreakdown(records);
+    expect(result.entries).toBe(3);
+  });
+
+  it("ignores invalid bf values", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 80, bf: 25 },
+      { dt: "2025-01-10", wt: 79, bf: 0 },
+      { dt: "2025-02-01", wt: 75, bf: 20 },
+    ];
+    const result = calcBodyCompositionBreakdown(records);
+    expect(result.entries).toBe(2); // bf=0 excluded
+  });
+});
+
+describe("calcWeeklyReportCard", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcWeeklyReportCard(null, 70)).toBeNull();
+    expect(calcWeeklyReportCard([], 70)).toBeNull();
+    expect(calcWeeklyReportCard([{ dt: "2025-01-01", wt: 70 }], 70)).toBeNull();
+  });
+
+  it("returns a grade A-F", () => {
+    const records = Array.from({ length: 7 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcWeeklyReportCard(records, 70);
+    expect(["A", "B", "C", "D", "F"]).toContain(result.grade);
+  });
+
+  it("high grade for consistent daily recording at goal", () => {
+    const records = Array.from({ length: 7 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcWeeklyReportCard(records, 70);
+    expect(result.score).toBeGreaterThanOrEqual(80);
+    expect(["A", "B"]).toContain(result.grade);
+  });
+
+  it("score is 0-100", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + i,
+    }));
+    const result = calcWeeklyReportCard(records, 65);
+    expect(result.score).toBeGreaterThanOrEqual(0);
+    expect(result.score).toBeLessThanOrEqual(100);
+  });
+
+  it("returns component scores", () => {
+    const records = Array.from({ length: 5 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcWeeklyReportCard(records, 70);
+    expect(result).toHaveProperty("consistency");
+    expect(result).toHaveProperty("goalProgress");
+    expect(result).toHaveProperty("stability");
+    expect(result).toHaveProperty("weekRecords");
+  });
+
+  it("lower consistency for fewer records", () => {
+    const daily = Array.from({ length: 7 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const sparse = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-04", wt: 70 },
+      { dt: "2025-01-07", wt: 70 },
+    ];
+    const dailyResult = calcWeeklyReportCard(daily, 70);
+    const sparseResult = calcWeeklyReportCard(sparse, 70);
+    expect(dailyResult.consistency).toBeGreaterThan(sparseResult.consistency);
+  });
+});
+
+describe("calcNoteWordFrequency", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcNoteWordFrequency(null)).toBeNull();
+    expect(calcNoteWordFrequency([])).toBeNull();
+    expect(calcNoteWordFrequency([{ dt: "2025-01-01", wt: 70, note: "test" }])).toBeNull();
+  });
+
+  it("returns null when no notes", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 71 },
+    ];
+    expect(calcNoteWordFrequency(records)).toBeNull();
+  });
+
+  it("counts word frequency", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, note: "morning run" },
+      { dt: "2025-01-02", wt: 70, note: "morning walk" },
+      { dt: "2025-01-03", wt: 70, note: "morning run again" },
+    ];
+    const result = calcNoteWordFrequency(records);
+    expect(result).not.toBeNull();
+    expect(result.words[0].text).toBe("morning");
+    expect(result.words[0].count).toBe(3);
+  });
+
+  it("filters stop words", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, note: "the morning is good" },
+      { dt: "2025-01-02", wt: 70, note: "the morning was great" },
+    ];
+    const result = calcNoteWordFrequency(records);
+    expect(result.words.find((w) => w.text === "the")).toBeUndefined();
+  });
+
+  it("returns totalNotes count", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, note: "run fast" },
+      { dt: "2025-01-02", wt: 70, note: "run slow" },
+      { dt: "2025-01-03", wt: 70 },
+    ];
+    const result = calcNoteWordFrequency(records);
+    expect(result.totalNotes).toBe(2);
+  });
+
+  it("ignores tag markers", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70, note: "#exercise morning run" },
+      { dt: "2025-01-02", wt: 70, note: "#exercise evening run" },
+    ];
+    const result = calcNoteWordFrequency(records);
+    expect(result.words.find((w) => w.text === "#exercise")).toBeUndefined();
+    expect(result.words.find((w) => w.text === "exercise")).toBeUndefined();
   });
 });
