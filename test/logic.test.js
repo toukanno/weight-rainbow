@@ -145,6 +145,18 @@ import {
   calcBodyCompositionBreakdown,
   calcWeeklyReportCard,
   calcNoteWordFrequency,
+  calcShareText,
+  calcEntryCountByMonth,
+  calcDailyFluctuation,
+  calcGoalCountdown,
+  calcWeekOverWeek,
+  calcTrendSummary,
+  calcTrackingAnniversary,
+  calcWeightConfidence,
+  calcMonthlyChange,
+  calcWeightSparkline,
+  calcDataCompleteness,
+  calcPersonalBest,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -10500,6 +10512,692 @@ describe("calcNoteWordFrequency", () => {
     const result = calcNoteWordFrequency(records);
     expect(result.words.find((w) => w.text === "#exercise")).toBeUndefined();
     expect(result.words.find((w) => w.text === "exercise")).toBeUndefined();
+  });
+});
+
+describe("calcShareText", () => {
+  const mkRecords = (weights) =>
+    weights.map((wt, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt,
+    }));
+
+  it("returns null for insufficient data", () => {
+    expect(calcShareText(null, 70, 170)).toBeNull();
+    expect(calcShareText([], 70, 170)).toBeNull();
+    expect(calcShareText(mkRecords([70]), 70, 170)).toBeNull();
+  });
+
+  it("calculates weight change", () => {
+    const result = calcShareText(mkRecords([75, 73, 71]), 65, 170);
+    expect(result.currentWt).toBe(71);
+    expect(result.startWt).toBe(75);
+    expect(result.change).toBe(-4);
+  });
+
+  it("calculates BMI when height provided", () => {
+    const result = calcShareText(mkRecords([70, 70]), 65, 170);
+    expect(result.bmi).toBe(24.2); // 70 / (1.7^2)
+  });
+
+  it("returns null BMI without height", () => {
+    const result = calcShareText(mkRecords([70, 70]), 65, 0);
+    expect(result.bmi).toBeNull();
+  });
+
+  it("calculates goal percentage", () => {
+    // start 80, current 70, goal 60 → 50% progress
+    const result = calcShareText(mkRecords([80, 75, 70]), 60, 170);
+    expect(result.goalPct).toBe(50);
+  });
+
+  it("returns totalRecords", () => {
+    const result = calcShareText(mkRecords([70, 71, 72]), 65, 170);
+    expect(result.totalRecords).toBe(3);
+  });
+});
+
+describe("calcEntryCountByMonth", () => {
+  it("returns null for empty or null input", () => {
+    expect(calcEntryCountByMonth(null)).toBeNull();
+    expect(calcEntryCountByMonth([])).toBeNull();
+  });
+
+  it("returns correct number of months (default 6)", () => {
+    const records = [{ dt: "2025-06-15", wt: 70 }];
+    const result = calcEntryCountByMonth(records);
+    expect(result).not.toBeNull();
+    expect(result.months).toHaveLength(6);
+  });
+
+  it("returns custom number of months", () => {
+    const records = [{ dt: "2025-06-15", wt: 70 }];
+    const result = calcEntryCountByMonth(records, 3);
+    expect(result.months).toHaveLength(3);
+  });
+
+  it("counts entries per month correctly", () => {
+    const records = [
+      { dt: "2025-06-01", wt: 70 },
+      { dt: "2025-06-15", wt: 71 },
+      { dt: "2025-06-20", wt: 69 },
+      { dt: "2025-05-10", wt: 72 },
+    ];
+    const result = calcEntryCountByMonth(records, 2);
+    const jun = result.months.find((m) => m.yearMonth === "2025-06");
+    const may = result.months.find((m) => m.yearMonth === "2025-05");
+    expect(jun.count).toBe(3);
+    expect(may.count).toBe(1);
+  });
+
+  it("sets maxCount to at least 1", () => {
+    const records = [{ dt: "2025-06-15", wt: 70 }];
+    const result = calcEntryCountByMonth(records, 3);
+    expect(result.maxCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("calculates maxCount from highest month", () => {
+    const records = [
+      { dt: "2025-06-01", wt: 70 },
+      { dt: "2025-06-15", wt: 71 },
+      { dt: "2025-05-10", wt: 72 },
+    ];
+    const result = calcEntryCountByMonth(records, 2);
+    expect(result.maxCount).toBe(2);
+  });
+
+  it("includes daysInMonth for each month", () => {
+    const records = [{ dt: "2025-02-15", wt: 70 }];
+    const result = calcEntryCountByMonth(records, 1);
+    expect(result.months[0].daysInMonth).toBe(28);
+  });
+
+  it("formats yearMonth as YYYY-MM", () => {
+    const records = [{ dt: "2025-01-15", wt: 70 }];
+    const result = calcEntryCountByMonth(records, 1);
+    expect(result.months[0].yearMonth).toMatch(/^\d{4}-\d{2}$/);
+    expect(result.months[0].yearMonth).toBe("2025-01");
+  });
+
+  it("sorts months chronologically", () => {
+    const records = [
+      { dt: "2025-03-01", wt: 70 },
+      { dt: "2025-01-01", wt: 71 },
+    ];
+    const result = calcEntryCountByMonth(records, 3);
+    const yms = result.months.map((m) => m.yearMonth);
+    expect(yms).toEqual([...yms].sort());
+  });
+});
+
+describe("calcDailyFluctuation", () => {
+  const mkRecords = (weights) =>
+    weights.map((wt, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt,
+    }));
+
+  it("returns null for insufficient data", () => {
+    expect(calcDailyFluctuation(null)).toBeNull();
+    expect(calcDailyFluctuation([])).toBeNull();
+    expect(calcDailyFluctuation(mkRecords([70, 71]))).toBeNull();
+  });
+
+  it("calculates average fluctuation", () => {
+    // diffs: |71-70|=1, |72-71|=1, |71-72|=1 → avg=1
+    const result = calcDailyFluctuation(mkRecords([70, 71, 72, 71]));
+    expect(result.avgFluctuation).toBe(1);
+  });
+
+  it("calculates max fluctuation", () => {
+    const result = calcDailyFluctuation(mkRecords([70, 73, 72, 70]));
+    expect(result.maxFluctuation).toBe(3);
+  });
+
+  it("calculates min fluctuation", () => {
+    const result = calcDailyFluctuation(mkRecords([70, 70.1, 70.3, 70]));
+    expect(result.minFluctuation).toBe(0.1);
+  });
+
+  it("counts stable days (within 0.3kg)", () => {
+    // diffs: 0.1, 0.2, 0.1, 0.5 → 3 stable
+    const result = calcDailyFluctuation(mkRecords([70, 70.1, 70.3, 70.2, 70.7]));
+    expect(result.stableDays).toBe(3);
+  });
+
+  it("calculates stable percentage", () => {
+    // 3 out of 4 diffs stable
+    const result = calcDailyFluctuation(mkRecords([70, 70.1, 70.3, 70.2, 70.7]));
+    expect(result.stablePct).toBe(75);
+  });
+
+  it("returns last 14 fluctuations", () => {
+    const weights = Array.from({ length: 20 }, (_, i) => 70 + (i % 2));
+    const result = calcDailyFluctuation(mkRecords(weights));
+    expect(result.fluctuations.length).toBeLessThanOrEqual(14);
+  });
+
+  it("returns totalDays", () => {
+    const result = calcDailyFluctuation(mkRecords([70, 71, 72, 73]));
+    expect(result.totalDays).toBe(3);
+  });
+});
+
+describe("calcGoalCountdown (render integration)", () => {
+  const mkRecords = (weights) =>
+    weights.map((wt, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt,
+    }));
+
+  it("returns null for insufficient data", () => {
+    expect(calcGoalCountdown([], 70)).toBeNull();
+    expect(calcGoalCountdown(mkRecords([70, 71]), 65)).toBeNull(); // needs >= 3 records
+  });
+
+  it("returns null for falsy goal", () => {
+    expect(calcGoalCountdown(mkRecords([70, 71, 72]), 0)).toBeNull();
+  });
+
+  it("detects goal reached when at goal weight", () => {
+    const result = calcGoalCountdown(mkRecords([75, 72, 70]), 70);
+    expect(result.reached).toBe(true);
+    expect(result.pct).toBe(100);
+  });
+
+  it("calculates direction lose when above goal", () => {
+    const result = calcGoalCountdown(mkRecords([75, 74, 73]), 65);
+    expect(result.reached).toBe(false);
+    expect(result.direction).toBe("lose");
+    expect(result.absRemaining).toBeGreaterThan(0);
+  });
+
+  it("calculates direction gain when below goal", () => {
+    const result = calcGoalCountdown(mkRecords([55, 56, 57]), 65);
+    expect(result.reached).toBe(false);
+    expect(result.direction).toBe("gain");
+  });
+
+  it("estimates etaDays when trend moves toward goal", () => {
+    const result = calcGoalCountdown(mkRecords([75, 74, 73, 72, 71, 70]), 65);
+    expect(result.etaDays).toBeGreaterThan(0);
+  });
+
+  it("returns null etaDays when trend moves away", () => {
+    const result = calcGoalCountdown(mkRecords([70, 71, 72, 73]), 65);
+    expect(result.etaDays).toBeNull();
+  });
+
+  it("calculates progress percentage", () => {
+    // start 80, current 70, goal 60 → 50%
+    const result = calcGoalCountdown(mkRecords([80, 75, 70]), 60);
+    expect(result.pct).toBe(50);
+  });
+
+  it("clamps pct to 0-100", () => {
+    const result = calcGoalCountdown(mkRecords([70, 72, 75]), 60);
+    expect(result.pct).toBeGreaterThanOrEqual(0);
+    expect(result.pct).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("calcWeekOverWeek", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcWeekOverWeek(null)).toBeNull();
+    expect(calcWeekOverWeek([])).toBeNull();
+    expect(calcWeekOverWeek([{ dt: "2025-01-06", wt: 70 }])).toBeNull();
+  });
+
+  it("returns null when no data in one of the weeks", () => {
+    // Both records in same week (Mon Jan 6 - Sun Jan 12)
+    const records = [
+      { dt: "2025-01-06", wt: 70 },
+      { dt: "2025-01-07", wt: 71 },
+    ];
+    expect(calcWeekOverWeek(records)).toBeNull();
+  });
+
+  it("calculates averages for two weeks", () => {
+    // Week 1 (Dec 30 - Jan 5): 70, 72 → avg 71
+    // Week 2 (Jan 6 - Jan 12): 68, 66 → avg 67
+    const records = [
+      { dt: "2024-12-30", wt: 70 },
+      { dt: "2025-01-02", wt: 72 },
+      { dt: "2025-01-06", wt: 68 },
+      { dt: "2025-01-08", wt: 66 },
+    ];
+    const result = calcWeekOverWeek(records);
+    expect(result).not.toBeNull();
+    expect(result.lastWeekAvg).toBe(71);
+    expect(result.thisWeekAvg).toBe(67);
+    expect(result.change).toBe(-4);
+    expect(result.direction).toBe("down");
+  });
+
+  it("detects weight gain direction", () => {
+    const records = [
+      { dt: "2024-12-30", wt: 70 },
+      { dt: "2025-01-06", wt: 73 },
+    ];
+    const result = calcWeekOverWeek(records);
+    expect(result).not.toBeNull();
+    expect(result.direction).toBe("up");
+    expect(result.change).toBeGreaterThan(0);
+  });
+
+  it("returns record counts per week", () => {
+    const records = [
+      { dt: "2024-12-30", wt: 70 },
+      { dt: "2024-12-31", wt: 71 },
+      { dt: "2025-01-01", wt: 72 },
+      { dt: "2025-01-06", wt: 69 },
+    ];
+    const result = calcWeekOverWeek(records);
+    expect(result).not.toBeNull();
+    expect(result.lastWeekCount).toBe(3);
+    expect(result.thisWeekCount).toBe(1);
+  });
+
+  it("detects flat direction when no change", () => {
+    const records = [
+      { dt: "2024-12-30", wt: 70 },
+      { dt: "2025-01-06", wt: 70 },
+    ];
+    const result = calcWeekOverWeek(records);
+    expect(result).not.toBeNull();
+    expect(result.direction).toBe("flat");
+    expect(result.change).toBe(0);
+  });
+});
+
+describe("calcTrendSummary", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcTrendSummary(null)).toBeNull();
+    expect(calcTrendSummary([])).toBeNull();
+    expect(calcTrendSummary([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns insufficient when only 1 record in last 7 days", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-01-20", wt: 70 },
+    ];
+    const result = calcTrendSummary(records);
+    expect(result.status).toBe("insufficient");
+  });
+
+  it("detects losing_fast status", () => {
+    // -1kg/day over 5 days → losing fast
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-01-03", wt: 74 },
+      { dt: "2025-01-05", wt: 72 },
+      { dt: "2025-01-06", wt: 71 },
+    ];
+    const result = calcTrendSummary(records);
+    expect(result.status).toBe("losing_fast");
+    expect(result.changeKg).toBeLessThan(0);
+  });
+
+  it("detects stable status", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-03", wt: 70.1 },
+      { dt: "2025-01-05", wt: 70 },
+      { dt: "2025-01-06", wt: 70.1 },
+    ];
+    const result = calcTrendSummary(records);
+    expect(result.status).toBe("stable");
+  });
+
+  it("detects gaining status", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-03", wt: 70.5 },
+      { dt: "2025-01-05", wt: 70.8 },
+      { dt: "2025-01-06", wt: 70.5 },
+    ];
+    const result = calcTrendSummary(records);
+    expect(["gaining", "stable"]).toContain(result.status);
+  });
+
+  it("returns latestWt and avgWt", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-03", wt: 72 },
+      { dt: "2025-01-05", wt: 74 },
+    ];
+    const result = calcTrendSummary(records);
+    expect(result.latestWt).toBe(74);
+    expect(result.avgWt).toBeGreaterThan(0);
+  });
+
+  it("returns days span", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-04", wt: 72 },
+    ];
+    const result = calcTrendSummary(records);
+    expect(result.days).toBe(3);
+  });
+});
+
+describe("calcTrackingAnniversary", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcTrackingAnniversary(null)).toBeNull();
+    expect(calcTrackingAnniversary([])).toBeNull();
+    expect(calcTrackingAnniversary([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("detects 7-day milestone", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-08", wt: 71 },
+    ];
+    const result = calcTrackingAnniversary(records);
+    expect(result.milestone).toBe(7);
+    expect(result.totalDays).toBe(7);
+  });
+
+  it("detects 30-day milestone", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-02-05", wt: 69 },
+    ];
+    const result = calcTrackingAnniversary(records);
+    expect(result.milestone).toBe(30);
+    expect(result.totalDays).toBe(35);
+  });
+
+  it("returns nextMilestone and nextMilestoneDays", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-10", wt: 69 },
+    ];
+    const result = calcTrackingAnniversary(records);
+    expect(result.milestone).toBe(7);
+    expect(result.nextMilestone).toBe(30);
+    expect(result.nextMilestoneDays).toBe(21); // 30 - 9
+  });
+
+  it("returns no milestone when under 7 days", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-04", wt: 69 },
+    ];
+    const result = calcTrackingAnniversary(records);
+    expect(result.milestone).toBeNull();
+    expect(result.totalDays).toBe(3);
+  });
+
+  it("detects 365-day milestone", () => {
+    const records = [
+      { dt: "2024-01-01", wt: 75 },
+      { dt: "2025-01-15", wt: 70 },
+    ];
+    const result = calcTrackingAnniversary(records);
+    expect(result.milestone).toBe(365);
+  });
+
+  it("returns firstDt and latestDt", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-02-01", wt: 69 },
+    ];
+    const result = calcTrackingAnniversary(records);
+    expect(result.firstDt).toBe("2025-01-01");
+    expect(result.latestDt).toBe("2025-02-01");
+  });
+});
+
+describe("calcWeightConfidence (render integration)", () => {
+  const mkRecords = (weights) =>
+    weights.map((wt, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt,
+    }));
+
+  it("returns null for insufficient data", () => {
+    expect(calcWeightConfidence(mkRecords([70, 71, 72]))).toBeNull();
+  });
+
+  it("returns forecasts with low/high for 7+ records", () => {
+    const result = calcWeightConfidence(mkRecords([75, 74, 73, 72, 71, 70, 69]));
+    expect(result).not.toBeNull();
+    expect(result.forecasts).toHaveLength(3);
+    expect(result.forecasts[0].low).toBeLessThanOrEqual(result.forecasts[0].high);
+  });
+
+  it("returns stdDev", () => {
+    const result = calcWeightConfidence(mkRecords([75, 74, 73, 72, 71, 70, 69]));
+    expect(result.stdDev).toBeGreaterThanOrEqual(0);
+  });
+
+  it("returns latest weight", () => {
+    const result = calcWeightConfidence(mkRecords([75, 74, 73, 72, 71, 70, 69]));
+    expect(result.latest).toBe(69);
+  });
+
+  it("returns confidence level", () => {
+    const result = calcWeightConfidence(mkRecords([75, 74, 73, 72, 71, 70, 69]));
+    expect(["low", "medium", "high"]).toContain(result.confidence);
+  });
+
+  it("returns dataPoints count", () => {
+    const result = calcWeightConfidence(mkRecords([75, 74, 73, 72, 71, 70, 69]));
+    expect(result.dataPoints).toBe(7);
+  });
+
+  it("returns dailyRate and weeklyRate", () => {
+    const result = calcWeightConfidence(mkRecords([75, 74, 73, 72, 71, 70, 69]));
+    expect(result.dailyRate).toBeLessThan(0);
+    expect(result.weeklyRate).toBeLessThan(0);
+  });
+});
+
+describe("calcMonthlyChange", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcMonthlyChange(null)).toBeNull();
+    expect(calcMonthlyChange([])).toBeNull();
+    expect(calcMonthlyChange([{ dt: "2025-01-01", wt: 70 }])).toBeNull();
+  });
+
+  it("returns 3 months by default", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-01-31", wt: 73 },
+      { dt: "2025-02-01", wt: 73 },
+      { dt: "2025-02-28", wt: 71 },
+      { dt: "2025-03-01", wt: 71 },
+      { dt: "2025-03-15", wt: 70 },
+    ];
+    const result = calcMonthlyChange(records);
+    expect(result.months).toHaveLength(3);
+  });
+
+  it("calculates change per month", () => {
+    const records = [
+      { dt: "2025-03-01", wt: 72 },
+      { dt: "2025-03-15", wt: 70 },
+    ];
+    const result = calcMonthlyChange(records, 1);
+    expect(result.months[0].change).toBe(-2);
+    expect(result.months[0].startWt).toBe(72);
+    expect(result.months[0].endWt).toBe(70);
+  });
+
+  it("returns null change for months with <2 records", () => {
+    const records = [
+      { dt: "2025-03-01", wt: 72 },
+      { dt: "2025-03-15", wt: 70 },
+    ];
+    const result = calcMonthlyChange(records, 2);
+    const feb = result.months.find((m) => m.yearMonth === "2025-02");
+    expect(feb.change).toBeNull();
+  });
+
+  it("identifies bestMonth and worstMonth", () => {
+    const records = [
+      { dt: "2025-02-01", wt: 75 },
+      { dt: "2025-02-28", wt: 73 },
+      { dt: "2025-03-01", wt: 73 },
+      { dt: "2025-03-31", wt: 74 },
+    ];
+    const result = calcMonthlyChange(records, 2);
+    expect(result.bestMonth).toBe("2025-02");
+    expect(result.worstMonth).toBe("2025-03");
+  });
+
+  it("supports custom numMonths", () => {
+    const records = [
+      { dt: "2025-01-01", wt: 75 },
+      { dt: "2025-06-15", wt: 70 },
+    ];
+    const result = calcMonthlyChange(records, 6);
+    expect(result.months).toHaveLength(6);
+  });
+});
+
+describe("calcWeightSparkline", () => {
+  const mkRecords = (weights) =>
+    weights.map((wt, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt,
+    }));
+
+  it("returns null for insufficient data", () => {
+    expect(calcWeightSparkline(null)).toBeNull();
+    expect(calcWeightSparkline([])).toBeNull();
+    expect(calcWeightSparkline(mkRecords([70, 71]))).toBeNull();
+  });
+
+  it("returns sparkline string", () => {
+    const result = calcWeightSparkline(mkRecords([70, 72, 74, 73, 71]));
+    expect(typeof result.sparkline).toBe("string");
+    expect(result.sparkline.length).toBe(5);
+  });
+
+  it("returns min and max", () => {
+    const result = calcWeightSparkline(mkRecords([68, 72, 70]));
+    expect(result.min).toBe(68);
+    expect(result.max).toBe(72);
+  });
+
+  it("uses last N records only", () => {
+    const weights = Array.from({ length: 20 }, (_, i) => 70 + i);
+    const result = calcWeightSparkline(mkRecords(weights), 5);
+    expect(result.values).toHaveLength(5);
+    expect(result.sparkline.length).toBe(5);
+  });
+
+  it("handles identical weights", () => {
+    const result = calcWeightSparkline(mkRecords([70, 70, 70]));
+    expect(result.sparkline.length).toBe(3);
+    expect(result.min).toBe(result.max);
+  });
+
+  it("uses full bar range for varied data", () => {
+    const result = calcWeightSparkline(mkRecords([60, 65, 70, 75, 80]));
+    // First char should be lowest bar, last should be highest
+    expect(result.sparkline[0]).toBe("▁");
+    expect(result.sparkline[4]).toBe("█");
+  });
+});
+
+describe("calcDataCompleteness", () => {
+  it("returns null for empty data", () => {
+    expect(calcDataCompleteness(null)).toBeNull();
+    expect(calcDataCompleteness([])).toBeNull();
+  });
+
+  it("returns 100% for daily recording over 30 days", () => {
+    const records = Array.from({ length: 30 }, (_, i) => {
+      const d = new Date(2025, 0, i + 1);
+      return { dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, wt: 70 };
+    });
+    const result = calcDataCompleteness(records, 30);
+    expect(result.pct).toBe(100);
+    expect(result.grade).toBe("A");
+  });
+
+  it("calculates correct percentage", () => {
+    // 15 out of 30 days
+    const records = Array.from({ length: 15 }, (_, i) => {
+      const d = new Date(2025, 0, i * 2 + 1);
+      return { dt: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, wt: 70 };
+    });
+    const result = calcDataCompleteness(records, 30);
+    expect(result.pct).toBe(50);
+    expect(result.grade).toBe("C");
+  });
+
+  it("deduplicates same-day records", () => {
+    const records = [
+      { dt: "2025-01-30", wt: 70 },
+      { dt: "2025-01-30", wt: 71 },
+    ];
+    const result = calcDataCompleteness(records, 30);
+    expect(result.recordedDays).toBe(1);
+  });
+
+  it("assigns grade F for low coverage", () => {
+    const records = [{ dt: "2025-01-30", wt: 70 }];
+    const result = calcDataCompleteness(records, 30);
+    expect(result.grade).toBe("F");
+  });
+
+  it("returns totalDays", () => {
+    const records = [{ dt: "2025-01-30", wt: 70 }];
+    const result = calcDataCompleteness(records, 14);
+    expect(result.totalDays).toBe(14);
+  });
+});
+
+describe("calcPersonalBest", () => {
+  const mkRecords = (weights) =>
+    weights.map((wt, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt,
+    }));
+
+  it("returns null for insufficient data", () => {
+    expect(calcPersonalBest(null)).toBeNull();
+    expect(calcPersonalBest([])).toBeNull();
+    expect(calcPersonalBest(mkRecords([70]))).toBeNull();
+  });
+
+  it("finds all-time low and high", () => {
+    const result = calcPersonalBest(mkRecords([75, 70, 73, 68, 72]));
+    expect(result.allTimeLow).toBe(68);
+    expect(result.allTimeHigh).toBe(75);
+  });
+
+  it("detects new low when current is lowest", () => {
+    const result = calcPersonalBest(mkRecords([75, 73, 71, 69]));
+    expect(result.isNewLow).toBe(true);
+    expect(result.distFromLow).toBe(0);
+  });
+
+  it("detects not new low when current is higher", () => {
+    const result = calcPersonalBest(mkRecords([75, 68, 70]));
+    expect(result.isNewLow).toBe(false);
+    expect(result.distFromLow).toBe(2);
+  });
+
+  it("returns lowDt and highDt", () => {
+    const result = calcPersonalBest(mkRecords([72, 68, 75, 70]));
+    expect(result.lowDt).toBe("2025-01-02");
+    expect(result.highDt).toBe("2025-01-03");
+  });
+
+  it("returns currentWt", () => {
+    const result = calcPersonalBest(mkRecords([70, 72]));
+    expect(result.currentWt).toBe(72);
+  });
+
+  it("calculates distFromHigh", () => {
+    const result = calcPersonalBest(mkRecords([80, 75, 70]));
+    expect(result.distFromHigh).toBe(10);
   });
 });
 

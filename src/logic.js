@@ -5055,3 +5055,342 @@ export function calcNoteWordFrequency(records, topN = 10) {
   };
 }
 
+/**
+ * Generate a shareable text summary of weight journey.
+ * Returns { currentWt, startWt, change, sign, days, streak, bmi, goalPct, totalRecords }
+ */
+export function calcShareText(records, goalWeight, heightCm) {
+  if (!records || records.length < 2) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const first = sorted[0];
+  const latest = sorted[sorted.length - 1];
+  const change = +(latest.wt - first.wt).toFixed(1);
+  const days = Math.max(1, Math.round((new Date(latest.dt) - new Date(first.dt)) / 86400000));
+  const sign = change > 0 ? "+" : "";
+
+  const dates = new Set(sorted.map((r) => r.dt));
+  let streak = 0;
+  const latestDate = new Date(latest.dt);
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(latestDate);
+    d.setDate(d.getDate() - i);
+    const ds = d.toISOString().slice(0, 10);
+    if (dates.has(ds)) streak++;
+    else if (i > 0) break;
+  }
+
+  let bmi = null;
+  if (heightCm && heightCm > 0) {
+    const hm = heightCm / 100;
+    bmi = +(latest.wt / (hm * hm)).toFixed(1);
+  }
+
+  let goalPct = null;
+  if (goalWeight && goalWeight > 0 && Math.abs(first.wt - goalWeight) > 0.5) {
+    const total = first.wt - goalWeight;
+    const progress = first.wt - latest.wt;
+    goalPct = Math.max(0, Math.min(100, Math.round((progress / total) * 100)));
+  }
+
+  return {
+    currentWt: +latest.wt.toFixed(1),
+    startWt: +first.wt.toFixed(1),
+    change,
+    sign,
+    days,
+    streak,
+    bmi,
+    goalPct,
+    totalRecords: sorted.length,
+  };
+}
+
+/**
+ * Count entries per month for the last N months.
+ * Returns { months: [{ yearMonth, count, daysInMonth }], maxCount }
+ */
+export function calcEntryCountByMonth(records, numMonths = 6) {
+  if (!records || records.length < 1) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1].dt;
+  const latestDate = new Date(latest);
+
+  const months = [];
+  for (let i = numMonths - 1; i >= 0; i--) {
+    const d = new Date(latestDate.getFullYear(), latestDate.getMonth() - i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    const count = sorted.filter((r) => r.dt.startsWith(ym)).length;
+    months.push({ yearMonth: ym, count, daysInMonth });
+  }
+
+  const maxCount = Math.max(...months.map((m) => m.count), 1);
+
+  return { months, maxCount };
+}
+
+/**
+ * Calculate daily weight fluctuation stats (moving range).
+ * Shows how much weight changes day-to-day on average.
+ * Returns { avgFluctuation, maxFluctuation, minFluctuation, fluctuations, stableDays }
+ */
+export function calcDailyFluctuation(records) {
+  if (!records || records.length < 3) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const fluctuations = [];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const diff = Math.abs(sorted[i].wt - sorted[i - 1].wt);
+    fluctuations.push({
+      dt: sorted[i].dt,
+      change: Math.round(diff * 100) / 100,
+    });
+  }
+
+  const values = fluctuations.map((f) => f.change);
+  const avg = Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 100) / 100;
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const stableDays = values.filter((v) => v <= 0.3).length;
+  const stablePct = Math.round((stableDays / values.length) * 100);
+
+  return {
+    avgFluctuation: avg,
+    maxFluctuation: Math.round(max * 100) / 100,
+    minFluctuation: Math.round(min * 100) / 100,
+    fluctuations: fluctuations.slice(-14),
+    stableDays,
+    stablePct,
+    totalDays: values.length,
+  };
+}
+
+/**
+ * Compare this week's average weight vs last week's average.
+ * "Week" is Mon-Sun based on the latest record's date.
+ * Returns { thisWeekAvg, lastWeekAvg, change, direction, thisWeekCount, lastWeekCount }
+ */
+export function calcWeekOverWeek(records) {
+  if (!records || records.length < 2) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latestDate = new Date(sorted[sorted.length - 1].dt + "T00:00:00");
+
+  // Find Monday of the latest record's week
+  const day = latestDate.getDay(); // 0=Sun
+  const diffToMon = day === 0 ? 6 : day - 1;
+  const thisMonday = new Date(latestDate);
+  thisMonday.setDate(thisMonday.getDate() - diffToMon);
+  const lastMonday = new Date(thisMonday);
+  lastMonday.setDate(lastMonday.getDate() - 7);
+
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const thisMon = fmt(thisMonday);
+  const lastMon = fmt(lastMonday);
+
+  const thisWeek = sorted.filter((r) => r.dt >= thisMon);
+  const lastWeek = sorted.filter((r) => r.dt >= lastMon && r.dt < thisMon);
+
+  if (thisWeek.length === 0 || lastWeek.length === 0) return null;
+
+  const avg = (arr) => Math.round((arr.reduce((s, r) => s + r.wt, 0) / arr.length) * 10) / 10;
+  const thisWeekAvg = avg(thisWeek);
+  const lastWeekAvg = avg(lastWeek);
+  const change = Math.round((thisWeekAvg - lastWeekAvg) * 10) / 10;
+  const direction = change < 0 ? "down" : change > 0 ? "up" : "flat";
+
+  return { thisWeekAvg, lastWeekAvg, change, direction, thisWeekCount: thisWeek.length, lastWeekCount: lastWeek.length };
+}
+
+/**
+ * Generate a summary status key describing the user's recent weight trend.
+ * Analyzes last 7 days of records to determine a status category.
+ * Returns { status, changeKg, days, latestWt, avgWt }
+ * status: "losing_fast" | "losing" | "stable" | "gaining" | "gaining_fast" | "insufficient"
+ */
+export function calcTrendSummary(records) {
+  if (!records || records.length < 2) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latestDt = sorted[sorted.length - 1].dt;
+  const latestDate = new Date(latestDt + "T00:00:00");
+  const cutoff = new Date(latestDate);
+  cutoff.setDate(cutoff.getDate() - 7);
+  const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+
+  const recent = sorted.filter((r) => r.dt >= cutoffStr);
+  if (recent.length < 2) {
+    return { status: "insufficient", changeKg: 0, days: 0, latestWt: sorted[sorted.length - 1].wt, avgWt: sorted[sorted.length - 1].wt };
+  }
+
+  const first = recent[0].wt;
+  const last = recent[recent.length - 1].wt;
+  const changeKg = Math.round((last - first) * 10) / 10;
+  const daySpan = Math.max(1, Math.round((new Date(recent[recent.length - 1].dt + "T00:00:00") - new Date(recent[0].dt + "T00:00:00")) / 86400000));
+  const dailyRate = changeKg / daySpan;
+  const avgWt = Math.round((recent.reduce((s, r) => s + r.wt, 0) / recent.length) * 10) / 10;
+
+  let status;
+  if (dailyRate <= -0.15) status = "losing_fast";
+  else if (dailyRate < -0.03) status = "losing";
+  else if (dailyRate <= 0.03) status = "stable";
+  else if (dailyRate < 0.15) status = "gaining";
+  else status = "gaining_fast";
+
+  return { status, changeKg, days: daySpan, latestWt: last, avgWt };
+}
+
+/**
+ * Detect tracking anniversary milestones.
+ * Returns { totalDays, milestone, nextMilestone, nextMilestoneDays, firstDt, latestDt }
+ * milestone is the most recent milestone reached (in days), or null if none.
+ */
+export function calcTrackingAnniversary(records) {
+  if (!records || records.length < 2) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const firstDt = sorted[0].dt;
+  const latestDt = sorted[sorted.length - 1].dt;
+  const first = new Date(firstDt + "T00:00:00");
+  const latest = new Date(latestDt + "T00:00:00");
+  const totalDays = Math.round((latest - first) / 86400000);
+
+  const milestones = [7, 30, 60, 90, 180, 365, 730, 1095];
+  let milestone = null;
+  let nextMilestone = milestones[0];
+
+  for (const m of milestones) {
+    if (totalDays >= m) {
+      milestone = m;
+    } else {
+      nextMilestone = m;
+      break;
+    }
+  }
+
+  if (totalDays >= milestones[milestones.length - 1]) {
+    nextMilestone = null;
+  }
+
+  const nextMilestoneDays = nextMilestone != null ? nextMilestone - totalDays : null;
+
+  return { totalDays, milestone, nextMilestone, nextMilestoneDays, firstDt, latestDt };
+}
+
+/**
+ * Calculate weight change per month for the last N months.
+ * Uses first and last reading of each month to compute the change.
+ * Returns { months: [{ yearMonth, startWt, endWt, change }], bestMonth, worstMonth }
+ */
+export function calcMonthlyChange(records, numMonths = 3) {
+  if (!records || records.length < 2) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latestDate = new Date(sorted[sorted.length - 1].dt + "T00:00:00");
+
+  const months = [];
+  for (let i = numMonths - 1; i >= 0; i--) {
+    const d = new Date(latestDate.getFullYear(), latestDate.getMonth() - i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const monthRecords = sorted.filter((r) => r.dt.startsWith(ym));
+    if (monthRecords.length < 2) {
+      months.push({ yearMonth: ym, startWt: null, endWt: null, change: null });
+      continue;
+    }
+    const startWt = monthRecords[0].wt;
+    const endWt = monthRecords[monthRecords.length - 1].wt;
+    const change = Math.round((endWt - startWt) * 10) / 10;
+    months.push({ yearMonth: ym, startWt, endWt, change });
+  }
+
+  const withChange = months.filter((m) => m.change !== null);
+  const bestMonth = withChange.length > 0 ? withChange.reduce((a, b) => (a.change < b.change ? a : b)).yearMonth : null;
+  const worstMonth = withChange.length > 0 ? withChange.reduce((a, b) => (a.change > b.change ? a : b)).yearMonth : null;
+
+  return { months, bestMonth, worstMonth };
+}
+
+/**
+ * Generate a text sparkline from the last N weight readings.
+ * Uses Unicode block characters ▁▂▃▄▅▆▇█ to represent relative values.
+ * Returns { sparkline, min, max, values }
+ */
+export function calcWeightSparkline(records, count = 10) {
+  if (!records || records.length < 3) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-count);
+  const values = recent.map((r) => r.wt);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min;
+  const bars = "▁▂▃▄▅▆▇█";
+
+  const sparkline = values.map((v) => {
+    if (range === 0) return bars[3];
+    const idx = Math.min(7, Math.floor(((v - min) / range) * 7.99));
+    return bars[idx];
+  }).join("");
+
+  return { sparkline, min: Math.round(min * 10) / 10, max: Math.round(max * 10) / 10, values };
+}
+
+/**
+ * Calculate data completeness: percentage of days with recordings in last N days.
+ * Returns { recordedDays, totalDays, pct, grade }
+ * grade: "A" (>=90%), "B" (>=70%), "C" (>=50%), "D" (>=30%), "F" (<30%)
+ */
+export function calcDataCompleteness(records, totalDays = 30) {
+  if (!records || records.length === 0) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latestDate = new Date(sorted[sorted.length - 1].dt + "T00:00:00");
+  const cutoff = new Date(latestDate);
+  cutoff.setDate(cutoff.getDate() - totalDays + 1);
+  const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+
+  const uniqueDays = new Set(sorted.filter((r) => r.dt >= cutoffStr).map((r) => r.dt));
+  const recordedDays = uniqueDays.size;
+  const pct = Math.round((recordedDays / totalDays) * 100);
+
+  let grade;
+  if (pct >= 90) grade = "A";
+  else if (pct >= 70) grade = "B";
+  else if (pct >= 50) grade = "C";
+  else if (pct >= 30) grade = "D";
+  else grade = "F";
+
+  return { recordedDays, totalDays, pct, grade };
+}
+
+/**
+ * Track personal best (lowest weight) and how close current weight is.
+ * Returns { allTimeLow, allTimeHigh, currentWt, isNewLow, isNewHigh, distFromLow, distFromHigh, lowDt, highDt }
+ */
+export function calcPersonalBest(records) {
+  if (!records || records.length < 2) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const currentWt = sorted[sorted.length - 1].wt;
+
+  let allTimeLow = Infinity;
+  let allTimeHigh = -Infinity;
+  let lowDt = "";
+  let highDt = "";
+
+  for (const r of sorted) {
+    if (r.wt < allTimeLow) { allTimeLow = r.wt; lowDt = r.dt; }
+    if (r.wt > allTimeHigh) { allTimeHigh = r.wt; highDt = r.dt; }
+  }
+
+  const isNewLow = currentWt <= allTimeLow;
+  const isNewHigh = currentWt >= allTimeHigh;
+  const distFromLow = Math.round((currentWt - allTimeLow) * 10) / 10;
+  const distFromHigh = Math.round((allTimeHigh - currentWt) * 10) / 10;
+
+  return { allTimeLow, allTimeHigh, currentWt, isNewLow, isNewHigh, distFromLow, distFromHigh, lowDt, highDt };
+}
+

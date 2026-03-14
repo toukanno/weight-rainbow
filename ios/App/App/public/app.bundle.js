@@ -1498,30 +1498,6 @@ function calcWeightPercentile(records) {
     total: sorted.length
   };
 }
-function calcRecordingTimeStats(records) {
-  const withTime = records.filter((r) => r.createdAt);
-  if (withTime.length < 3) return null;
-  const hours = withTime.map((r) => new Date(r.createdAt).getHours());
-  const buckets = { morning: 0, afternoon: 0, evening: 0, night: 0 };
-  for (const h of hours) {
-    if (h >= 5 && h < 12) buckets.morning++;
-    else if (h >= 12 && h < 17) buckets.afternoon++;
-    else if (h >= 17 && h < 22) buckets.evening++;
-    else buckets.night++;
-  }
-  const total = withTime.length;
-  const avgHour = Math.round(hours.reduce((s, h) => s + h, 0) / total);
-  const most = Object.entries(buckets).sort((a, b) => b[1] - a[1])[0];
-  return {
-    morning: { count: buckets.morning, pct: Math.round(buckets.morning / total * 100) },
-    afternoon: { count: buckets.afternoon, pct: Math.round(buckets.afternoon / total * 100) },
-    evening: { count: buckets.evening, pct: Math.round(buckets.evening / total * 100) },
-    night: { count: buckets.night, pct: Math.round(buckets.night / total * 100) },
-    avgHour,
-    mostCommon: most?.[0] || "morning",
-    total
-  };
-}
 function calcMovingAverages(records, shortWindow = 7, longWindow = 30) {
   if (records.length < longWindow) return null;
   const weights = records.map((r) => r.wt);
@@ -1563,31 +1539,6 @@ function calcConsistencyStreak(records, tolerance = 0.5) {
     }
   }
   return { streak, best, tolerance, latest };
-}
-function calcDataHealth(records) {
-  if (records.length < 2) return null;
-  const issues = [];
-  for (let i = 1; i < records.length; i++) {
-    const prev = /* @__PURE__ */ new Date(records[i - 1].dt + "T00:00:00");
-    const curr = /* @__PURE__ */ new Date(records[i].dt + "T00:00:00");
-    const gap = Math.round((curr - prev) / (1e3 * 60 * 60 * 24));
-    if (gap > 7) {
-      issues.push({ type: "gap", days: gap, from: records[i - 1].dt, to: records[i].dt });
-    }
-  }
-  for (let i = 1; i < records.length - 1; i++) {
-    const avg = (records[i - 1].wt + records[i + 1].wt) / 2;
-    const diff = Math.abs(records[i].wt - avg);
-    if (diff > 3) {
-      issues.push({ type: "outlier", date: records[i].dt, weight: records[i].wt, expected: Math.round(avg * 10) / 10 });
-    }
-  }
-  const missingBMI = records.filter((r) => r.bmi == null).length;
-  if (missingBMI > 0 && missingBMI === records.length) {
-    issues.push({ type: "noBMI", count: missingBMI });
-  }
-  const score = Math.max(0, 100 - issues.length * 15);
-  return { score, issues, total: records.length };
 }
 function calcWeekdayVsWeekend(records) {
   if (records.length < 5) return null;
@@ -2204,2515 +2155,6 @@ function calcStreakRewards(records) {
   else if (streak >= 3) level = "beginner";
   return { streak, level, earned, next, nextRemaining, totalRecords: records.length };
 }
-function calcWeightConfidence(records) {
-  if (records.length < 7) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const recent = sorted.slice(-30);
-  if (recent.length < 7) return null;
-  const firstDate = /* @__PURE__ */ new Date(recent[0].dt + "T00:00:00");
-  const xs = recent.map((r) => (/* @__PURE__ */ new Date(r.dt + "T00:00:00") - firstDate) / 864e5);
-  const ys = recent.map((r) => r.wt);
-  const n = xs.length;
-  const sumX = xs.reduce((a, b) => a + b, 0);
-  const sumY = ys.reduce((a, b) => a + b, 0);
-  const sumXY = xs.reduce((a, x, i) => a + x * ys[i], 0);
-  const sumX2 = xs.reduce((a, x) => a + x * x, 0);
-  const denom = n * sumX2 - sumX * sumX;
-  if (denom === 0) return null;
-  const slope = (n * sumXY - sumX * sumY) / denom;
-  const intercept = (sumY - slope * sumX) / n;
-  const residuals = xs.map((x, i) => ys[i] - (intercept + slope * x));
-  const residualSq = residuals.reduce((a, r) => a + r * r, 0);
-  const stdDev = Math.sqrt(residualSq / (n - 2));
-  const latest = recent[recent.length - 1].wt;
-  const lastDay = xs[xs.length - 1];
-  const forecasts = [7, 14, 30].map((days2) => {
-    const futureX = lastDay + days2;
-    const predicted = intercept + slope * futureX;
-    const margin = stdDev * 1.96;
-    return {
-      days: days2,
-      predicted: Math.round(predicted * 10) / 10,
-      low: Math.round((predicted - margin) * 10) / 10,
-      high: Math.round((predicted + margin) * 10) / 10,
-      margin: Math.round(margin * 10) / 10
-    };
-  });
-  const ssTotal = ys.reduce((a, y) => a + (y - sumY / n) ** 2, 0);
-  const r2 = ssTotal > 0 ? 1 - residualSq / ssTotal : 0;
-  let confidence = "low";
-  if (r2 > 0.7 && n >= 14) confidence = "high";
-  else if (r2 > 0.4 && n >= 7) confidence = "medium";
-  return {
-    dailyRate: Math.round(slope * 100) / 100,
-    weeklyRate: Math.round(slope * 7 * 100) / 100,
-    stdDev: Math.round(stdDev * 100) / 100,
-    confidence,
-    r2: Math.round(r2 * 100) / 100,
-    forecasts,
-    latest,
-    dataPoints: n
-  };
-}
-function calcProgressSummary(records) {
-  if (records.length < 4) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const mid = Math.floor(sorted.length / 2);
-  const firstHalf = sorted.slice(0, mid);
-  const secondHalf = sorted.slice(mid);
-  const avg = (arr) => Math.round(arr.reduce((s, r) => s + r.wt, 0) / arr.length * 10) / 10;
-  const stdDev = (arr) => {
-    const mean = arr.reduce((s, r) => s + r.wt, 0) / arr.length;
-    return Math.round(Math.sqrt(arr.reduce((s, r) => s + (r.wt - mean) ** 2, 0) / arr.length) * 100) / 100;
-  };
-  const firstAvg = avg(firstHalf);
-  const secondAvg = avg(secondHalf);
-  const change = Math.round((secondAvg - firstAvg) * 10) / 10;
-  const firstStd = stdDev(firstHalf);
-  const secondStd = stdDev(secondHalf);
-  const moreStable = secondStd < firstStd;
-  const firstWt = sorted[0].wt;
-  const lastWt = sorted[sorted.length - 1].wt;
-  const totalChange = Math.round((lastWt - firstWt) * 10) / 10;
-  const totalDays = Math.max(1, Math.round((/* @__PURE__ */ new Date(sorted[sorted.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(sorted[0].dt + "T00:00:00")) / 864e5));
-  let trend = "stable";
-  if (change < -0.5) trend = "improving";
-  else if (change > 0.5) trend = "gaining";
-  return {
-    firstHalfAvg: firstAvg,
-    secondHalfAvg: secondAvg,
-    change,
-    trend,
-    moreStable,
-    firstStd,
-    secondStd,
-    totalChange,
-    totalDays,
-    firstDate: sorted[0].dt,
-    lastDate: sorted[sorted.length - 1].dt,
-    recordCount: sorted.length
-  };
-}
-function calcMilestoneTimeline(records) {
-  if (records.length < 3) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const events = [];
-  let allTimeLow = sorted[0].wt;
-  let prevBmiZone = null;
-  for (let i = 0; i < sorted.length; i++) {
-    const r = sorted[i];
-    const prev = i > 0 ? sorted[i - 1] : null;
-    if (r.wt < allTimeLow) {
-      allTimeLow = r.wt;
-      events.push({ type: "low", date: r.dt, weight: r.wt });
-    }
-    if (prev) {
-      const prevMark = Math.floor(prev.wt / 5) * 5;
-      const curMark = Math.floor(r.wt / 5) * 5;
-      if (curMark < prevMark) {
-        events.push({ type: "mark", date: r.dt, weight: r.wt, mark: prevMark });
-      }
-    }
-    if (r.bmi != null) {
-      const zone = r.bmi < 18.5 ? "under" : r.bmi < 25 ? "normal" : r.bmi < 30 ? "over" : "obese";
-      if (prevBmiZone && zone !== prevBmiZone) {
-        events.push({ type: "bmi", date: r.dt, weight: r.wt, from: prevBmiZone, to: zone });
-      }
-      prevBmiZone = zone;
-    }
-  }
-  const dedupLows = /* @__PURE__ */ new Map();
-  const filtered = [];
-  for (const e of events) {
-    if (e.type === "low") {
-      const month = e.date.slice(0, 7);
-      dedupLows.set(month, e);
-    } else {
-      filtered.push(e);
-    }
-  }
-  filtered.push(...dedupLows.values());
-  filtered.sort((a, b) => a.date.localeCompare(b.date));
-  return { events: filtered.slice(-10), total: filtered.length };
-}
-function calcVolatilityIndex(records) {
-  if (records.length < 5) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const changes = [];
-  for (let i = 1; i < sorted.length; i++) {
-    const dayDiff = Math.round((/* @__PURE__ */ new Date(sorted[i].dt + "T00:00:00") - /* @__PURE__ */ new Date(sorted[i - 1].dt + "T00:00:00")) / 864e5);
-    if (dayDiff === 1) {
-      changes.push(Math.abs(sorted[i].wt - sorted[i - 1].wt));
-    }
-  }
-  if (changes.length < 3) return null;
-  const avg = (arr) => arr.reduce((s, v) => s + v, 0) / arr.length;
-  const overallAvg = Math.round(avg(changes) * 100) / 100;
-  const recentChanges = changes.slice(-7);
-  const recentAvg = Math.round(avg(recentChanges) * 100) / 100;
-  const maxSwing = Math.round(Math.max(...changes) * 100) / 100;
-  let level = "moderate";
-  if (overallAvg < 0.3) level = "low";
-  else if (overallAvg > 0.8) level = "high";
-  let trend = "stable";
-  if (recentAvg > overallAvg * 1.3) trend = "increasing";
-  else if (recentAvg < overallAvg * 0.7) trend = "decreasing";
-  return {
-    overall: overallAvg,
-    recent: recentAvg,
-    maxSwing,
-    level,
-    trend,
-    dataPoints: changes.length
-  };
-}
-function calcPeriodComparison(records) {
-  if (records.length < 3) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const today = /* @__PURE__ */ new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  function statsForRange(recs) {
-    if (recs.length === 0) return null;
-    const weights = recs.map((r) => r.wt);
-    const avg = Math.round(weights.reduce((s, w) => s + w, 0) / weights.length * 10) / 10;
-    const min = Math.round(Math.min(...weights) * 10) / 10;
-    const max = Math.round(Math.max(...weights) * 10) / 10;
-    return { avg, min, max, count: recs.length };
-  }
-  const dayOfWeek = today.getDay();
-  const weekStart = new Date(today);
-  weekStart.setDate(weekStart.getDate() - dayOfWeek);
-  const prevWeekStart = new Date(weekStart);
-  prevWeekStart.setDate(prevWeekStart.getDate() - 7);
-  function dateStr(d) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  }
-  const weekStartStr = dateStr(weekStart);
-  const prevWeekStartStr = dateStr(prevWeekStart);
-  const thisWeek = sorted.filter((r) => r.dt >= weekStartStr && r.dt <= todayStr);
-  const prevWeek = sorted.filter((r) => r.dt >= prevWeekStartStr && r.dt < weekStartStr);
-  const monthStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
-  const prevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  const prevMonthStart = dateStr(prevMonth);
-  const prevMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
-  const prevMonthEndStr = dateStr(prevMonthEnd);
-  const thisMonth = sorted.filter((r) => r.dt >= monthStart && r.dt <= todayStr);
-  const lastMonth = sorted.filter((r) => r.dt >= prevMonthStart && r.dt <= prevMonthEndStr);
-  const weekly = {
-    current: statsForRange(thisWeek),
-    previous: statsForRange(prevWeek)
-  };
-  if (weekly.current && weekly.previous) {
-    weekly.avgDiff = Math.round((weekly.current.avg - weekly.previous.avg) * 10) / 10;
-  }
-  const monthly = {
-    current: statsForRange(thisMonth),
-    previous: statsForRange(lastMonth)
-  };
-  if (monthly.current && monthly.previous) {
-    monthly.avgDiff = Math.round((monthly.current.avg - monthly.previous.avg) * 10) / 10;
-  }
-  if (!weekly.current && !monthly.current) return null;
-  return { weekly, monthly };
-}
-function calcGoalCountdown(records, goalWeight) {
-  if (!goalWeight || records.length < 3) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const latest = sorted[sorted.length - 1].wt;
-  const remaining = Math.round((latest - goalWeight) * 10) / 10;
-  const absRemaining = Math.abs(remaining);
-  const first = sorted[0].wt;
-  const isLossGoal = first > goalWeight;
-  if (absRemaining < 0.1 || isLossGoal && latest <= goalWeight || !isLossGoal && latest >= goalWeight) {
-    return { reached: true, latest, goal: goalWeight, remaining: 0, pct: 100 };
-  }
-  const totalToLose = first - goalWeight;
-  const lost = first - latest;
-  const pct = totalToLose !== 0 ? Math.max(0, Math.min(100, Math.round(lost / totalToLose * 100))) : 0;
-  const recent = sorted.slice(-14);
-  let etaDays = null;
-  if (recent.length >= 3) {
-    const daySpan = Math.max(1, Math.round((/* @__PURE__ */ new Date(recent[recent.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(recent[0].dt + "T00:00:00")) / 864e5));
-    const rate = (recent[recent.length - 1].wt - recent[0].wt) / daySpan;
-    if (rate < -0.01 && remaining > 0) {
-      etaDays = Math.ceil(remaining / Math.abs(rate));
-    } else if (rate > 0.01 && remaining < 0) {
-      etaDays = Math.ceil(absRemaining / rate);
-    }
-  }
-  return {
-    reached: false,
-    latest,
-    goal: goalWeight,
-    remaining,
-    absRemaining,
-    pct,
-    etaDays,
-    direction: remaining > 0 ? "lose" : "gain"
-  };
-}
-function calcBodyComposition(records) {
-  const withBf = records.filter((r) => r.bf != null && Number.isFinite(r.bf) && r.bf > 0);
-  if (withBf.length < 3) return null;
-  const sorted = [...withBf].sort((a, b) => a.dt.localeCompare(b.dt));
-  const first = sorted[0];
-  const latest = sorted[sorted.length - 1];
-  const bfChange = Math.round((latest.bf - first.bf) * 10) / 10;
-  const wtChange = Math.round((latest.wt - first.wt) * 10) / 10;
-  const firstFatMass = Math.round(first.wt * first.bf / 100 * 10) / 10;
-  const latestFatMass = Math.round(latest.wt * latest.bf / 100 * 10) / 10;
-  const firstLeanMass = Math.round((first.wt - firstFatMass) * 10) / 10;
-  const latestLeanMass = Math.round((latest.wt - latestFatMass) * 10) / 10;
-  const fatMassChange = Math.round((latestFatMass - firstFatMass) * 10) / 10;
-  const leanMassChange = Math.round((latestLeanMass - firstLeanMass) * 10) / 10;
-  let trend = "mixed";
-  if (fatMassChange < -0.3 && leanMassChange >= 0) trend = "fatLoss";
-  else if (fatMassChange >= 0 && leanMassChange > 0.3) trend = "muscleGain";
-  else if (fatMassChange < -0.3 && leanMassChange > 0.3) trend = "recomp";
-  else if (fatMassChange > 0.3 && leanMassChange < 0) trend = "decline";
-  const avgBf = Math.round(sorted.reduce((s, r) => s + r.bf, 0) / sorted.length * 10) / 10;
-  return {
-    firstBf: first.bf,
-    latestBf: latest.bf,
-    bfChange,
-    wtChange,
-    fatMassChange,
-    leanMassChange,
-    firstFatMass,
-    latestFatMass,
-    firstLeanMass,
-    latestLeanMass,
-    trend,
-    avgBf,
-    dataPoints: sorted.length
-  };
-}
-function generateWeightSummary(records, profile = {}) {
-  if (records.length < 2) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const first = sorted[0];
-  const latest = sorted[sorted.length - 1];
-  const weights = sorted.map((r) => r.wt);
-  const min = Math.min(...weights);
-  const max = Math.max(...weights);
-  const avg = Math.round(weights.reduce((s, w) => s + w, 0) / weights.length * 10) / 10;
-  const totalChange = Math.round((latest.wt - first.wt) * 10) / 10;
-  const days2 = Math.max(1, Math.round((/* @__PURE__ */ new Date(latest.dt + "T00:00:00") - /* @__PURE__ */ new Date(first.dt + "T00:00:00")) / 864e5));
-  let bmiInfo = null;
-  if (profile.heightCm) {
-    const h = profile.heightCm / 100;
-    const latestBmi = Math.round(latest.wt / (h * h) * 10) / 10;
-    const zone = latestBmi < 18.5 ? "underweight" : latestBmi < 25 ? "normal" : latestBmi < 30 ? "overweight" : "obese";
-    bmiInfo = { bmi: latestBmi, zone };
-  }
-  return {
-    period: { from: first.dt, to: latest.dt, days: days2 },
-    weight: { first: Math.round(first.wt * 10) / 10, latest: Math.round(latest.wt * 10) / 10, min: Math.round(min * 10) / 10, max: Math.round(max * 10) / 10, avg, totalChange },
-    records: sorted.length,
-    bmi: bmiInfo
-  };
-}
-function getFrequentNotes(records, maxResults = 5) {
-  const counts = /* @__PURE__ */ new Map();
-  for (const r of records) {
-    if (r.note && r.note.trim()) {
-      const note = r.note.trim();
-      counts.set(note, (counts.get(note) || 0) + 1);
-    }
-  }
-  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, maxResults);
-  return sorted.map(([text, count]) => ({ text, count }));
-}
-function detectDuplicates(records) {
-  if (records.length < 2) return { duplicates: [], suspicious: [] };
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const dateGroups = /* @__PURE__ */ new Map();
-  for (const r of sorted) {
-    if (!dateGroups.has(r.dt)) dateGroups.set(r.dt, []);
-    dateGroups.get(r.dt).push(r);
-  }
-  const duplicates = [];
-  for (const [date, recs] of dateGroups) {
-    if (recs.length > 1) {
-      duplicates.push({ date, count: recs.length, weights: recs.map((r) => r.wt) });
-    }
-  }
-  const suspicious = [];
-  let run = 1;
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i].wt === sorted[i - 1].wt) {
-      run++;
-    } else {
-      if (run >= 3) {
-        suspicious.push({
-          weight: sorted[i - 1].wt,
-          from: sorted[i - run].dt,
-          to: sorted[i - 1].dt,
-          count: run
-        });
-      }
-      run = 1;
-    }
-  }
-  if (run >= 3) {
-    suspicious.push({
-      weight: sorted[sorted.length - 1].wt,
-      from: sorted[sorted.length - run].dt,
-      to: sorted[sorted.length - 1].dt,
-      count: run
-    });
-  }
-  return { duplicates, suspicious };
-}
-function validateWeightEntry(newWeight, records, threshold = 3) {
-  const warnings = [];
-  if (!Number.isFinite(newWeight) || records.length === 0) return warnings;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const latest = sorted[sorted.length - 1];
-  const diff = Math.abs(newWeight - latest.wt);
-  if (diff >= threshold) {
-    warnings.push({
-      type: "largeDiff",
-      diff: Math.round(diff * 10) / 10,
-      previous: latest.wt,
-      date: latest.dt
-    });
-  }
-  const weights = sorted.map((r) => r.wt);
-  const min = Math.min(...weights);
-  const max = Math.max(...weights);
-  if (newWeight < min - 2 || newWeight > max + 2) {
-    warnings.push({
-      type: "outsideRange",
-      min,
-      max
-    });
-  }
-  return warnings;
-}
-function calcWeeklyAverages(records, numWeeks = 8) {
-  if (records.length === 0) return [];
-  const now = /* @__PURE__ */ new Date();
-  const todayDay = now.getDay();
-  const currentWeekStart = new Date(now);
-  currentWeekStart.setDate(now.getDate() - (todayDay + 6) % 7);
-  currentWeekStart.setHours(0, 0, 0, 0);
-  const weeks = [];
-  for (let i = numWeeks - 1; i >= 0; i--) {
-    const start = new Date(currentWeekStart);
-    start.setDate(start.getDate() - i * 7);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
-    const startStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
-    const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
-    const inWeek = records.filter((r) => r.dt >= startStr && r.dt <= endStr);
-    if (inWeek.length === 0) {
-      weeks.push({ weekStart: startStr, weekEnd: endStr, avg: null, count: 0, min: null, max: null });
-    } else {
-      const weights = inWeek.map((r) => r.wt);
-      const sum = weights.reduce((s, w) => s + w, 0);
-      weeks.push({
-        weekStart: startStr,
-        weekEnd: endStr,
-        avg: Math.round(sum / weights.length * 10) / 10,
-        count: weights.length,
-        min: Math.round(Math.min(...weights) * 10) / 10,
-        max: Math.round(Math.max(...weights) * 10) / 10
-      });
-    }
-  }
-  return weeks;
-}
-function calcMonthlyRecordingMap(records, year, month) {
-  const y = year ?? (/* @__PURE__ */ new Date()).getFullYear();
-  const m = month ?? (/* @__PURE__ */ new Date()).getMonth();
-  const daysInMonth = new Date(y, m + 1, 0).getDate();
-  const prefix = `${y}-${String(m + 1).padStart(2, "0")}`;
-  const dateMap = /* @__PURE__ */ new Map();
-  for (const r of records) {
-    if (r.dt.startsWith(prefix)) {
-      dateMap.set(r.dt, r.wt);
-    }
-  }
-  const days2 = [];
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dt = `${prefix}-${String(d).padStart(2, "0")}`;
-    const dow = new Date(y, m, d).getDay();
-    days2.push({
-      date: dt,
-      day: d,
-      dayOfWeek: dow,
-      recorded: dateMap.has(dt),
-      weight: dateMap.get(dt) ?? null
-    });
-  }
-  const recordedCount = dateMap.size;
-  return {
-    year: y,
-    month: m,
-    monthName: `${y}-${String(m + 1).padStart(2, "0")}`,
-    days: days2,
-    recordedCount,
-    totalDays: daysInMonth,
-    rate: daysInMonth > 0 ? Math.round(recordedCount / daysInMonth * 100) : 0
-  };
-}
-function calcWeightTrendIndicator(records) {
-  if (records.length < 4) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const recent3 = sorted.slice(-3);
-  const prev3 = sorted.slice(-6, -3);
-  if (prev3.length === 0) return null;
-  const recentAvg = recent3.reduce((s, r) => s + r.wt, 0) / recent3.length;
-  const prevAvg = prev3.reduce((s, r) => s + r.wt, 0) / prev3.length;
-  const change = Math.round((recentAvg - prevAvg) * 10) / 10;
-  let direction = "stable";
-  if (change <= -0.2) direction = "down";
-  else if (change >= 0.2) direction = "up";
-  return {
-    direction,
-    change,
-    recentAvg: Math.round(recentAvg * 10) / 10,
-    previousAvg: Math.round(prevAvg * 10) / 10,
-    dataPoints: sorted.length
-  };
-}
-function calcNoteTagStats(records) {
-  if (records.length < 2) return { tags: [], totalTagged: 0, totalRecords: records.length };
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const tagCounts = {};
-  const tagChanges = {};
-  for (let i = 0; i < sorted.length; i++) {
-    const r = sorted[i];
-    if (!r.note) continue;
-    const tags2 = (r.note.match(/#[\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF66-\uFF9F]+/g) || []).map((s) => s.slice(1));
-    const prev = i > 0 ? sorted[i - 1] : null;
-    const change = prev ? r.wt - prev.wt : 0;
-    for (const tag of tags2) {
-      tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-      if (!tagChanges[tag]) tagChanges[tag] = [];
-      if (prev) tagChanges[tag].push(change);
-    }
-  }
-  const totalTagged = Object.values(tagCounts).reduce((s, c) => s + c, 0);
-  const tags = Object.entries(tagCounts).map(([tag, count]) => {
-    const changes = tagChanges[tag] || [];
-    const avgChange = changes.length > 0 ? Math.round(changes.reduce((s, c) => s + c, 0) / changes.length * 10) / 10 : 0;
-    return {
-      tag,
-      count,
-      pct: records.length > 0 ? Math.round(count / records.length * 100) : 0,
-      avgChange
-    };
-  }).sort((a, b) => b.count - a.count);
-  return { tags, totalTagged, totalRecords: records.length };
-}
-function calcIdealWeightRange(heightCm, currentWeight) {
-  if (!heightCm || heightCm <= 0 || !currentWeight || currentWeight <= 0) return null;
-  const heightM = heightCm / 100;
-  const h2 = heightM * heightM;
-  const minWeight = Math.round(18.5 * h2 * 10) / 10;
-  const maxWeight = Math.round(24.9 * h2 * 10) / 10;
-  const midWeight = Math.round(22 * h2 * 10) / 10;
-  const currentBMI = Math.round(currentWeight / h2 * 10) / 10;
-  const bmiRange = 30 - 15;
-  const position = Math.max(0, Math.min(100, Math.round((currentBMI - 15) / bmiRange * 100)));
-  let zone = "normal";
-  if (currentBMI < 18.5) zone = "underweight";
-  else if (currentBMI >= 25 && currentBMI < 30) zone = "overweight";
-  else if (currentBMI >= 30) zone = "obese";
-  return {
-    minWeight,
-    maxWeight,
-    midWeight,
-    currentBMI,
-    currentWeight: Math.round(currentWeight * 10) / 10,
-    position,
-    zone,
-    toMin: Math.round((currentWeight - minWeight) * 10) / 10,
-    toMax: Math.round((maxWeight - currentWeight) * 10) / 10
-  };
-}
-function calcDataFreshness(records) {
-  if (records.length === 0) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const last = sorted[sorted.length - 1];
-  const now = /* @__PURE__ */ new Date();
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const lastDate = /* @__PURE__ */ new Date(last.dt + "T00:00:00");
-  const todayDate = /* @__PURE__ */ new Date(today + "T00:00:00");
-  const daysSince = Math.round((todayDate - lastDate) / 864e5);
-  let level = "today";
-  if (daysSince >= 7) level = "veryStale";
-  else if (daysSince >= 3) level = "stale";
-  else if (daysSince >= 1) level = "recent";
-  return {
-    daysSince,
-    lastDate: last.dt,
-    lastWeight: last.wt,
-    level
-  };
-}
-function calcMultiPeriodRate(records) {
-  if (records.length < 2) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const latest = sorted[sorted.length - 1];
-  const latestDate = /* @__PURE__ */ new Date(latest.dt + "T00:00:00");
-  const windows = [7, 30, 90];
-  const periods = windows.map((days2) => {
-    const cutoff = new Date(latestDate);
-    cutoff.setDate(cutoff.getDate() - days2);
-    const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
-    let closest = null;
-    let closestDist = Infinity;
-    for (const r of sorted) {
-      const dist = Math.abs(/* @__PURE__ */ new Date(r.dt + "T00:00:00") - cutoff);
-      if (dist < closestDist && r.dt <= latest.dt) {
-        closestDist = dist;
-        closest = r;
-      }
-    }
-    if (!closest || closest.dt === latest.dt) {
-      return { days: days2, change: 0, weeklyRate: 0, hasData: false };
-    }
-    const actualDays = Math.max(1, Math.round((latestDate - /* @__PURE__ */ new Date(closest.dt + "T00:00:00")) / 864e5));
-    const change = Math.round((latest.wt - closest.wt) * 10) / 10;
-    const weeklyRate = Math.round(change / actualDays * 7 * 10) / 10;
-    return { days: days2, change, weeklyRate, hasData: true };
-  });
-  return { periods, latestWeight: latest.wt };
-}
-function calcRecordMilestone(recordCount) {
-  const milestones = [10, 25, 50, 100, 200, 365, 500, 750, 1e3];
-  let reached = null;
-  let next = null;
-  for (const m of milestones) {
-    if (recordCount === m) {
-      reached = m;
-    }
-    if (m > recordCount && next === null) {
-      next = m;
-    }
-  }
-  if (next === null) {
-    const nextBig = Math.ceil((recordCount + 1) / 500) * 500;
-    next = nextBig;
-    if (recordCount === nextBig - 500 && recordCount > 1e3) {
-      reached = recordCount;
-    }
-  }
-  return {
-    reached,
-    current: recordCount,
-    next,
-    remaining: next - recordCount
-  };
-}
-function generateAICoachReport(records, profile, goalWeight) {
-  if (records.length < 2) {
-    return {
-      score: 0,
-      grade: "new",
-      advices: ["start"],
-      weeklyReport: null,
-      prediction: null,
-      highlights: [],
-      risks: []
-    };
-  }
-  const advices = [];
-  const highlights = [];
-  const risks = [];
-  let score = 50;
-  const trend = calcWeightTrend(records);
-  const weeklyRate = calcWeeklyRate(records);
-  const hasGoal = Number.isFinite(goalWeight) && goalWeight > 0;
-  const latest = records[records.length - 1].wt;
-  const wantsLoss = hasGoal && goalWeight < latest;
-  const wantsGain = hasGoal && goalWeight > latest;
-  if (trend === "down" && wantsLoss) {
-    score += 15;
-    highlights.push("trendMatchGoal");
-  } else if (trend === "up" && wantsGain) {
-    score += 15;
-    highlights.push("trendMatchGoal");
-  } else if (trend === "down" && wantsGain) {
-    score -= 10;
-    risks.push("trendAgainstGoal");
-  } else if (trend === "up" && wantsLoss) {
-    score -= 10;
-    risks.push("trendAgainstGoal");
-  } else if (!trend && (wantsLoss || wantsGain)) {
-    score -= 5;
-    risks.push("flatTrend");
-  }
-  if (weeklyRate) {
-    const absRate = Math.abs(weeklyRate.weeklyRate);
-    if (absRate > 1) {
-      risks.push("rapidChange");
-      advices.push("slowDown");
-      score -= 10;
-    } else if (absRate >= 0.2 && absRate <= 0.7 && wantsLoss && weeklyRate.weeklyRate < 0) {
-      highlights.push("healthyPace");
-      score += 10;
-    }
-  }
-  const streak = calcStreak(records);
-  if (streak >= 14) {
-    score += 15;
-    highlights.push("greatStreak");
-  } else if (streak >= 7) {
-    score += 8;
-    highlights.push("goodStreak");
-  } else if (streak <= 2 && records.length > 7) {
-    risks.push("inconsistent");
-    advices.push("buildHabit");
-    score -= 5;
-  }
-  const stability = calcWeightStability(records);
-  if (stability) {
-    if (stability.score >= 70) {
-      highlights.push("stableWeight");
-      score += 5;
-    } else if (stability.score < 30) {
-      risks.push("highVolatility");
-      advices.push("stabilize");
-    }
-  }
-  const plateau = calcWeightPlateau(records);
-  if (plateau && plateau.isPlateau) {
-    risks.push("plateau");
-    advices.push("breakPlateau");
-    score -= 5;
-  }
-  if (hasGoal) {
-    const progress = calcGoalProgress(records, goalWeight);
-    if (progress && progress.percent >= 90) {
-      highlights.push("nearGoal");
-      score += 10;
-    }
-    const prediction2 = calcGoalPrediction(records, goalWeight);
-    if (prediction2 && !prediction2.achieved && !prediction2.insufficient && !prediction2.noTrend) {
-      if (prediction2.days <= 30) {
-        highlights.push("goalSoon");
-      }
-    }
-  }
-  if (profile.heightCm) {
-    const bmi = calculateBMI(latest, profile.heightCm);
-    if (bmi < 18.5) {
-      advices.push("underweight");
-    } else if (bmi >= 30) {
-      advices.push("obeseRange");
-    }
-  }
-  const dowAvg = calcDayOfWeekAvg(records);
-  if (dowAvg) {
-    const avgs = dowAvg.avgs.filter((a) => a !== null);
-    if (avgs.length > 0 && Math.max(...avgs) - Math.min(...avgs) > 1) {
-      advices.push("weekendPattern");
-    }
-  }
-  score = Math.max(0, Math.min(100, score));
-  const grade = score >= 85 ? "excellent" : score >= 70 ? "good" : score >= 50 ? "fair" : score >= 30 ? "needsWork" : "critical";
-  const weeklyReport = generateWeeklyReport(records, goalWeight, profile);
-  const prediction = hasGoal ? calcGoalPrediction(records, goalWeight) : null;
-  return {
-    score,
-    grade,
-    advices,
-    weeklyReport,
-    prediction,
-    highlights,
-    risks
-  };
-}
-function generateWeeklyReport(records, goalWeight, profile) {
-  if (records.length < 3) return null;
-  const now = /* @__PURE__ */ new Date();
-  const oneWeekAgo = new Date(now.getTime() - 7 * 864e5).toISOString().slice(0, 10);
-  const twoWeeksAgo = new Date(now.getTime() - 14 * 864e5).toISOString().slice(0, 10);
-  const thisWeek = records.filter((r) => r.dt >= oneWeekAgo);
-  const lastWeek = records.filter((r) => r.dt >= twoWeeksAgo && r.dt < oneWeekAgo);
-  if (thisWeek.length === 0) return null;
-  const thisAvg = thisWeek.reduce((s, r) => s + r.wt, 0) / thisWeek.length;
-  const lastAvg = lastWeek.length ? lastWeek.reduce((s, r) => s + r.wt, 0) / lastWeek.length : null;
-  const weekChange = lastAvg !== null ? thisAvg - lastAvg : null;
-  const thisMin = Math.min(...thisWeek.map((r) => r.wt));
-  const thisMax = Math.max(...thisWeek.map((r) => r.wt));
-  return {
-    avg: Math.round(thisAvg * 10) / 10,
-    change: weekChange !== null ? Math.round(weekChange * 10) / 10 : null,
-    min: thisMin,
-    max: thisMax,
-    entries: thisWeek.length,
-    range: Math.round((thisMax - thisMin) * 10) / 10
-  };
-}
-function calcDashboardSummary(records, heightCm) {
-  if (records.length === 0) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const latest = sorted[sorted.length - 1];
-  const prev = sorted.length >= 2 ? sorted[sorted.length - 2] : null;
-  const change = prev ? Math.round((latest.wt - prev.wt) * 10) / 10 : 0;
-  let bmi = null;
-  if (heightCm && heightCm > 0) {
-    const hm = heightCm / 100;
-    bmi = Math.round(latest.wt / (hm * hm) * 10) / 10;
-  }
-  const now = /* @__PURE__ */ new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const dates = new Set(sorted.map((r) => r.dt));
-  let streak = 0;
-  const d = new Date(now);
-  if (!dates.has(todayStr)) {
-    d.setDate(d.getDate() - 1);
-    const yStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    if (!dates.has(yStr)) return { weight: latest.wt, change, bmi, streak: 0, date: latest.dt };
-  }
-  while (true) {
-    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    if (dates.has(ds)) {
-      streak++;
-      d.setDate(d.getDate() - 1);
-    } else {
-      break;
-    }
-  }
-  return { weight: latest.wt, change, bmi, streak, date: latest.dt };
-}
-function getRecentEntries(records, count = 5) {
-  if (records.length === 0) return [];
-  const sorted = [...records].sort((a, b) => b.dt.localeCompare(a.dt));
-  return sorted.slice(0, count).map((r, i) => {
-    const prev = sorted[i + 1];
-    return {
-      dt: r.dt,
-      wt: r.wt,
-      change: prev ? Math.round((r.wt - prev.wt) * 10) / 10 : null,
-      source: r.source || "manual"
-    };
-  });
-}
-function calcMonthlyAverages(records, numMonths = 6) {
-  if (records.length === 0) return [];
-  const now = /* @__PURE__ */ new Date();
-  const months2 = [];
-  for (let i = numMonths - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const y = d.getFullYear();
-    const m = d.getMonth();
-    const prefix = `${y}-${String(m + 1).padStart(2, "0")}`;
-    const inMonth = records.filter((r) => r.dt.startsWith(prefix));
-    if (inMonth.length === 0) {
-      months2.push({ year: y, month: m, label: prefix, avg: null, count: 0, min: null, max: null });
-    } else {
-      const weights = inMonth.map((r) => r.wt);
-      const sum = weights.reduce((s, w) => s + w, 0);
-      months2.push({
-        year: y,
-        month: m,
-        label: prefix,
-        avg: Math.round(sum / weights.length * 10) / 10,
-        count: weights.length,
-        min: Math.round(Math.min(...weights) * 10) / 10,
-        max: Math.round(Math.max(...weights) * 10) / 10
-      });
-    }
-  }
-  return months2;
-}
-function calcLongTermProgress(records) {
-  if (records.length < 2) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const latest = sorted[sorted.length - 1];
-  const latestDate = /* @__PURE__ */ new Date(latest.dt + "T00:00:00");
-  const periods = [
-    { label: "1m", days: 30 },
-    { label: "3m", days: 90 },
-    { label: "6m", days: 180 },
-    { label: "1y", days: 365 },
-    { label: "all", days: null }
-  ];
-  const result = periods.map((p) => {
-    let target;
-    if (p.days === null) {
-      target = sorted[0];
-    } else {
-      const cutoff = new Date(latestDate);
-      cutoff.setDate(cutoff.getDate() - p.days);
-      let closest = null;
-      let closestDiff = Infinity;
-      for (const r of sorted) {
-        const diff = Math.abs(/* @__PURE__ */ new Date(r.dt + "T00:00:00") - cutoff);
-        if (diff < closestDiff) {
-          closestDiff = diff;
-          closest = r;
-        }
-      }
-      if (closestDiff > 15 * 864e5) {
-        return { label: p.label, days: p.days, pastWeight: null, change: null, pctChange: null, hasData: false };
-      }
-      target = closest;
-    }
-    const change = Math.round((latest.wt - target.wt) * 10) / 10;
-    const pctChange = Math.round(change / target.wt * 1e3) / 10;
-    return {
-      label: p.label,
-      days: p.days,
-      pastWeight: target.wt,
-      change,
-      pctChange,
-      hasData: true
-    };
-  });
-  return { current: latest.wt, date: latest.dt, periods: result };
-}
-function calcWeightFluctuation(records) {
-  if (records.length < 2) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const latest = sorted[sorted.length - 1];
-  const latestDate = /* @__PURE__ */ new Date(latest.dt + "T00:00:00");
-  const windows = [
-    { label: "7d", days: 7 },
-    { label: "30d", days: 30 }
-  ];
-  const periods = windows.map((w) => {
-    const cutoff = new Date(latestDate);
-    cutoff.setDate(cutoff.getDate() - w.days);
-    const cutoffStr = localDateStr(cutoff);
-    const inRange = sorted.filter((r) => r.dt >= cutoffStr);
-    if (inRange.length < 2) return { label: w.label, days: w.days, min: null, max: null, range: null, position: null, hasData: false };
-    const weights = inRange.map((r) => r.wt);
-    const min = Math.round(Math.min(...weights) * 10) / 10;
-    const max = Math.round(Math.max(...weights) * 10) / 10;
-    const range = Math.round((max - min) * 10) / 10;
-    const position = range > 0 ? Math.round((latest.wt - min) / range * 100) : 50;
-    return { label: w.label, days: w.days, min, max, range, position, hasData: true };
-  });
-  return { latest: latest.wt, periods };
-}
-function calcWeightAnomalies(records, threshold = 3) {
-  if (records.length < 5) return [];
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const anomalies = [];
-  for (let i = 2; i < sorted.length - 2; i++) {
-    const neighbors = [sorted[i - 2], sorted[i - 1], sorted[i + 1], sorted[i + 2]];
-    const avg = neighbors.reduce((s, r) => s + r.wt, 0) / neighbors.length;
-    const diff = Math.round(Math.abs(sorted[i].wt - avg) * 10) / 10;
-    if (diff >= threshold) {
-      anomalies.push({
-        dt: sorted[i].dt,
-        wt: sorted[i].wt,
-        expected: Math.round(avg * 10) / 10,
-        diff
-      });
-    }
-  }
-  return anomalies.sort((a, b) => b.diff - a.diff);
-}
-function calcSuccessRate(records) {
-  if (records.length < 2) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  let down = 0, same = 0, up = 0;
-  for (let i = 1; i < sorted.length; i++) {
-    const diff = sorted[i].wt - sorted[i - 1].wt;
-    if (diff < -0.05) down++;
-    else if (diff > 0.05) up++;
-    else same++;
-  }
-  const total = sorted.length - 1;
-  const successRate = Math.round((down + same) / total * 100);
-  const recent = sorted.slice(-31);
-  let rDown = 0, rSame = 0;
-  for (let i = 1; i < recent.length; i++) {
-    const diff = recent[i].wt - recent[i - 1].wt;
-    if (diff < -0.05) rDown++;
-    else if (Math.abs(diff) <= 0.05) rSame++;
-  }
-  const rTotal = recent.length - 1;
-  const recentRate = rTotal > 0 ? Math.round((rDown + rSame) / rTotal * 100) : null;
-  return { total, down, same, up, successRate, recentRate };
-}
-function calcRecordingRate(records) {
-  if (records.length < 2) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const firstDate = /* @__PURE__ */ new Date(sorted[0].dt + "T00:00:00");
-  const lastDate = /* @__PURE__ */ new Date(sorted[sorted.length - 1].dt + "T00:00:00");
-  const totalDays = Math.round((lastDate - firstDate) / 864e5) + 1;
-  const uniqueDates = new Set(sorted.map((r) => r.dt));
-  const recordedDays = uniqueDates.size;
-  const rate = Math.round(recordedDays / totalDays * 100);
-  const weeks = [];
-  for (let w = 3; w >= 0; w--) {
-    const weekEnd = new Date(lastDate);
-    weekEnd.setDate(weekEnd.getDate() - w * 7);
-    const weekStart = new Date(weekEnd);
-    weekStart.setDate(weekStart.getDate() - 6);
-    let recorded = 0;
-    let total = 0;
-    for (let d = new Date(weekStart); d <= weekEnd; d.setDate(d.getDate() + 1)) {
-      const ds = localDateStr(d);
-      if (ds >= sorted[0].dt) {
-        total++;
-        if (uniqueDates.has(ds)) recorded++;
-      }
-    }
-    weeks.push({ start: localDateStr(weekStart), recorded, total });
-  }
-  return { totalDays, recordedDays, rate, weeks };
-}
-function calcMilestoneHistory(records) {
-  if (records.length < 2) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const startWt = sorted[0].wt;
-  const latestWt = sorted[sorted.length - 1].wt;
-  const direction = latestWt <= startWt ? "down" : "up";
-  const startDate = /* @__PURE__ */ new Date(sorted[0].dt + "T00:00:00");
-  const milestones = [];
-  const reached = /* @__PURE__ */ new Set();
-  if (direction === "down") {
-    const startFloor = Math.floor(startWt);
-    for (const r of sorted) {
-      const floorWt = Math.floor(r.wt);
-      for (let kg = startFloor; kg >= floorWt; kg--) {
-        if (kg < startWt && !reached.has(kg)) {
-          reached.add(kg);
-          const days2 = Math.round((/* @__PURE__ */ new Date(r.dt + "T00:00:00") - startDate) / 864e5);
-          milestones.push({ kg, date: r.dt, daysFromStart: days2 });
-        }
-      }
-    }
-  } else {
-    const startCeil = Math.ceil(startWt);
-    for (const r of sorted) {
-      const ceilWt = Math.ceil(r.wt);
-      for (let kg = startCeil; kg <= ceilWt; kg++) {
-        if (kg > startWt && !reached.has(kg)) {
-          reached.add(kg);
-          const days2 = Math.round((/* @__PURE__ */ new Date(r.dt + "T00:00:00") - startDate) / 864e5);
-          milestones.push({ kg, date: r.dt, daysFromStart: days2 });
-        }
-      }
-    }
-  }
-  return { direction, startWt, latestWt, milestones };
-}
-function calcWeightJourney(records) {
-  if (records.length < 7) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const avgs = [];
-  for (let i = 0; i < sorted.length; i++) {
-    const start = Math.max(0, i - 3);
-    const end = Math.min(sorted.length - 1, i + 3);
-    let sum = 0, count = 0;
-    for (let j = start; j <= end; j++) {
-      sum += sorted[j].wt;
-      count++;
-    }
-    avgs.push({ dt: sorted[i].dt, avg: Math.round(sum / count * 10) / 10 });
-  }
-  const THRESHOLD = 0.3;
-  const phases = [];
-  let phaseStart = 0;
-  let phaseType = "maintain";
-  for (let i = 1; i < avgs.length; i++) {
-    const change = avgs[i].avg - avgs[phaseStart].avg;
-    let currentType;
-    if (change < -THRESHOLD) currentType = "loss";
-    else if (change > THRESHOLD) currentType = "gain";
-    else currentType = "maintain";
-    if (currentType !== phaseType && i - phaseStart >= 3) {
-      phases.push({
-        type: phaseType,
-        startDate: avgs[phaseStart].dt,
-        endDate: avgs[i - 1].dt,
-        startWt: avgs[phaseStart].avg,
-        endWt: avgs[i - 1].avg,
-        change: Math.round((avgs[i - 1].avg - avgs[phaseStart].avg) * 10) / 10,
-        days: Math.round((/* @__PURE__ */ new Date(avgs[i - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(avgs[phaseStart].dt + "T00:00:00")) / 864e5)
-      });
-      phaseStart = i;
-      phaseType = currentType;
-    }
-  }
-  phases.push({
-    type: phaseType,
-    startDate: avgs[phaseStart].dt,
-    endDate: avgs[avgs.length - 1].dt,
-    startWt: avgs[phaseStart].avg,
-    endWt: avgs[avgs.length - 1].avg,
-    change: Math.round((avgs[avgs.length - 1].avg - avgs[phaseStart].avg) * 10) / 10,
-    days: Math.round((/* @__PURE__ */ new Date(avgs[avgs.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(avgs[phaseStart].dt + "T00:00:00")) / 864e5)
-  });
-  const totalChange = Math.round((sorted[sorted.length - 1].wt - sorted[0].wt) * 10) / 10;
-  return { phases, totalChange };
-}
-function calcGoalScenarios(records, goalWeight) {
-  if (records.length < 1 || !Number.isFinite(goalWeight) || goalWeight <= 0) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const current = sorted[sorted.length - 1].wt;
-  const remaining = Math.round(Math.abs(current - goalWeight) * 10) / 10;
-  if (remaining < 0.1) return null;
-  const direction = current > goalWeight ? -1 : 1;
-  const paces = [
-    { label: "gentle", rate: 0.25 },
-    { label: "moderate", rate: 0.5 },
-    { label: "aggressive", rate: 1 }
-  ];
-  const today = /* @__PURE__ */ new Date();
-  const scenarios = paces.map((p) => {
-    const weeks = Math.ceil(remaining / p.rate);
-    const targetDate = new Date(today);
-    targetDate.setDate(targetDate.getDate() + weeks * 7);
-    const dateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, "0")}-${String(targetDate.getDate()).padStart(2, "0")}`;
-    return {
-      pace: p.rate * direction,
-      label: p.label,
-      weeks,
-      date: dateStr
-    };
-  });
-  return { current, goal: goalWeight, remaining, scenarios };
-}
-function calcStreakCalendar(records, numWeeks = 12) {
-  const dateSet = new Set(records.map((r) => r.dt));
-  const today = /* @__PURE__ */ new Date();
-  const todayStr = localDateStr(today);
-  const start = new Date(today);
-  start.setDate(start.getDate() - (numWeeks * 7 - 1) - start.getDay());
-  const weeks = [];
-  let totalRecorded = 0;
-  let totalDays = 0;
-  const d = new Date(start);
-  while (d <= today) {
-    const week = [];
-    for (let dow = 0; dow < 7 && d <= today; dow++) {
-      const ds = localDateStr(d);
-      const recorded = dateSet.has(ds);
-      if (recorded) totalRecorded++;
-      totalDays++;
-      week.push({ date: ds, recorded, isToday: ds === todayStr });
-      d.setDate(d.getDate() + 1);
-    }
-    weeks.push(week);
-  }
-  return { weeks, totalRecorded, totalDays };
-}
-function calcMovingAvgCrossover(records) {
-  if (!records || records.length < 30) {
-    return { crossovers: [], currentTrend: "neutral", shortMA: null, longMA: null };
-  }
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  function movingAvg(arr, idx, window2) {
-    const start = Math.max(0, idx - window2 + 1);
-    const slice = arr.slice(start, idx + 1);
-    return slice.reduce((s, r) => s + r.wt, 0) / slice.length;
-  }
-  const crossovers = [];
-  let prevShort = null;
-  let prevLong = null;
-  for (let i = 29; i < sorted.length; i++) {
-    const shortMA = movingAvg(sorted, i, 7);
-    const longMA = movingAvg(sorted, i, 30);
-    if (prevShort !== null && prevLong !== null) {
-      const prevDiff = prevShort - prevLong;
-      const currDiff = shortMA - longMA;
-      if (prevDiff >= 0 && currDiff < 0) {
-        crossovers.push({ date: sorted[i].dt, type: "golden", shortMA: +shortMA.toFixed(2), longMA: +longMA.toFixed(2) });
-      } else if (prevDiff <= 0 && currDiff > 0) {
-        crossovers.push({ date: sorted[i].dt, type: "death", shortMA: +shortMA.toFixed(2), longMA: +longMA.toFixed(2) });
-      }
-    }
-    prevShort = shortMA;
-    prevLong = longMA;
-  }
-  const lastShort = movingAvg(sorted, sorted.length - 1, 7);
-  const lastLong = movingAvg(sorted, sorted.length - 1, 30);
-  const currentTrend = lastShort < lastLong ? "downtrend" : lastShort > lastLong ? "uptrend" : "neutral";
-  return {
-    crossovers: crossovers.slice(-10),
-    currentTrend,
-    shortMA: +lastShort.toFixed(2),
-    longMA: +lastLong.toFixed(2)
-  };
-}
-function calcPredictionAccuracy(records) {
-  if (!records || records.length < 14) {
-    return { accuracy: null, avgError: null, predictions: [], rating: "insufficient" };
-  }
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const predictions = [];
-  for (let i = 7; i < sorted.length; i++) {
-    const window2 = sorted.slice(i - 7, i);
-    const n = window2.length;
-    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-    for (let j = 0; j < n; j++) {
-      sumX += j;
-      sumY += window2[j].wt;
-      sumXY += j * window2[j].wt;
-      sumX2 += j * j;
-    }
-    const denom = n * sumX2 - sumX * sumX;
-    if (denom === 0) continue;
-    const slope = (n * sumXY - sumX * sumY) / denom;
-    const intercept = (sumY - slope * sumX) / n;
-    const predicted = +(intercept + slope * n).toFixed(2);
-    const actual = sorted[i].wt;
-    const error = +Math.abs(predicted - actual).toFixed(2);
-    predictions.push({ date: sorted[i].dt, predicted, actual, error });
-  }
-  if (!predictions.length) {
-    return { accuracy: null, avgError: null, predictions: [], rating: "insufficient" };
-  }
-  const avgError = +(predictions.reduce((s, p) => s + p.error, 0) / predictions.length).toFixed(2);
-  const withinThreshold = predictions.filter((p) => p.error <= 0.5).length;
-  const accuracy = +(withinThreshold / predictions.length * 100).toFixed(1);
-  const rating = accuracy >= 80 ? "excellent" : accuracy >= 60 ? "good" : accuracy >= 40 ? "fair" : "poor";
-  return {
-    accuracy,
-    avgError,
-    predictions: predictions.slice(-10),
-    rating
-  };
-}
-function calcConsistencyScore(records, goalWeight) {
-  if (!records || records.length < 7) {
-    return { score: null, components: { recording: 0, stability: 0, momentum: 0 }, grade: "N/A" };
-  }
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const today = localDateStr();
-  const cutoff = /* @__PURE__ */ new Date();
-  cutoff.setDate(cutoff.getDate() - 30);
-  const cutoffStr = localDateStr(cutoff);
-  const recent = sorted.filter((r) => r.dt >= cutoffStr && r.dt <= today);
-  const dateSet = new Set(recent.map((r) => r.dt));
-  const totalDays = Math.min(30, Math.max(
-    1,
-    Math.ceil((/* @__PURE__ */ new Date(today + "T00:00:00") - /* @__PURE__ */ new Date(cutoffStr + "T00:00:00")) / 864e5) + 1
-  ));
-  const recordingScore = Math.min(100, Math.round(dateSet.size / totalDays * 100));
-  let stabilityScore = 50;
-  if (recent.length >= 3) {
-    const weights = recent.map((r) => r.wt);
-    const mean = weights.reduce((s, w) => s + w, 0) / weights.length;
-    const variance = weights.reduce((s, w) => s + (w - mean) ** 2, 0) / weights.length;
-    const cv = mean > 0 ? Math.sqrt(variance) / mean : 0;
-    stabilityScore = Math.min(100, Math.max(0, Math.round((1 - cv / 0.03) * 100)));
-  }
-  let momentumScore = 50;
-  if (recent.length >= 2 && Number.isFinite(goalWeight) && goalWeight > 0) {
-    const first = recent[0].wt;
-    const last = recent[recent.length - 1].wt;
-    const needed = goalWeight - first;
-    const actual = last - first;
-    if (Math.abs(needed) > 0.1) {
-      const progress = actual / needed;
-      momentumScore = Math.min(100, Math.max(0, Math.round(progress * 100)));
-    } else {
-      momentumScore = 100;
-    }
-  }
-  const score = Math.round(recordingScore * 0.4 + stabilityScore * 0.3 + momentumScore * 0.3);
-  const grade = score >= 90 ? "S" : score >= 80 ? "A" : score >= 70 ? "B" : score >= 50 ? "C" : "D";
-  return {
-    score,
-    components: {
-      recording: recordingScore,
-      stability: stabilityScore,
-      momentum: momentumScore
-    },
-    grade
-  };
-}
-function calcWeightRangeSummary(records) {
-  if (!records || records.length < 2) {
-    return { periods: [] };
-  }
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const today = localDateStr();
-  function periodStats(days2, label) {
-    let subset;
-    if (days2 === 0) {
-      subset = sorted;
-    } else {
-      const cutoff = /* @__PURE__ */ new Date();
-      cutoff.setDate(cutoff.getDate() - days2);
-      const cutoffStr = localDateStr(cutoff);
-      subset = sorted.filter((r) => r.dt >= cutoffStr && r.dt <= today);
-    }
-    if (subset.length < 2) return null;
-    const weights = subset.map((r) => r.wt);
-    const min = Math.min(...weights);
-    const max = Math.max(...weights);
-    const avg = +(weights.reduce((s, w) => s + w, 0) / weights.length).toFixed(1);
-    return { label, days: days2, min: +min.toFixed(1), max: +max.toFixed(1), range: +(max - min).toFixed(1), avg, count: subset.length };
-  }
-  const periods = [
-    periodStats(7, "7d"),
-    periodStats(30, "30d"),
-    periodStats(90, "90d"),
-    periodStats(0, "all")
-  ].filter(Boolean);
-  return { periods };
-}
-function calcTrendStreak(records) {
-  if (!records || records.length < 2) {
-    return { direction: null, count: 0, totalChange: 0, startDate: null, endDate: null };
-  }
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  let count = 1;
-  let dir = null;
-  for (let i = sorted.length - 1; i > 0; i--) {
-    const diff = sorted[i].wt - sorted[i - 1].wt;
-    const thisDir = diff < -0.05 ? "down" : diff > 0.05 ? "up" : "flat";
-    if (dir === null) {
-      dir = thisDir;
-      count = 1;
-      continue;
-    }
-    if (thisDir === dir) {
-      count++;
-    } else {
-      break;
-    }
-  }
-  if (dir === null) dir = "flat";
-  const endIdx = sorted.length - 1;
-  const startIdx = Math.max(0, endIdx - count);
-  const totalChange = +(sorted[endIdx].wt - sorted[startIdx].wt).toFixed(2);
-  return {
-    direction: dir,
-    count,
-    totalChange,
-    startDate: sorted[startIdx].dt,
-    endDate: sorted[endIdx].dt
-  };
-}
-function calcBMITrend(records) {
-  if (!records || records.length < 2) {
-    return { points: [], change: 0, direction: "neutral", current: null, min: null, max: null };
-  }
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const points = sorted.filter((r) => r.bmi != null && Number.isFinite(r.bmi)).map((r) => ({ dt: r.dt, bmi: +r.bmi.toFixed(1) }));
-  if (points.length < 2) {
-    return { points: [], change: 0, direction: "neutral", current: null, min: null, max: null };
-  }
-  const current = points[points.length - 1].bmi;
-  const first = points[0].bmi;
-  const change = +(current - first).toFixed(1);
-  const direction = change < -0.1 ? "down" : change > 0.1 ? "up" : "neutral";
-  const bmis = points.map((p) => p.bmi);
-  return {
-    points: points.slice(-30),
-    change,
-    direction,
-    current,
-    min: +Math.min(...bmis).toFixed(1),
-    max: +Math.max(...bmis).toFixed(1)
-  };
-}
-function calcWeeklySummaryComparison(records) {
-  if (!records || records.length < 2) {
-    return { thisWeek: null, lastWeek: null, diffs: null };
-  }
-  const today = /* @__PURE__ */ new Date();
-  const dayOfWeek = today.getDay();
-  const thisWeekStart = new Date(today);
-  thisWeekStart.setDate(today.getDate() - (dayOfWeek + 6) % 7);
-  thisWeekStart.setHours(0, 0, 0, 0);
-  const lastWeekStart = new Date(thisWeekStart);
-  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-  const thisWeekStr = localDateStr(thisWeekStart);
-  const lastWeekStr = localDateStr(lastWeekStart);
-  const thisWeekEndStr = localDateStr(today);
-  const thisWeekRecs = records.filter((r) => r.dt >= thisWeekStr && r.dt <= thisWeekEndStr);
-  const lastWeekRecs = records.filter((r) => r.dt >= lastWeekStr && r.dt < thisWeekStr);
-  function weekStats(recs) {
-    if (recs.length === 0) return null;
-    const weights = recs.map((r) => r.wt);
-    const min = +Math.min(...weights).toFixed(1);
-    const max = +Math.max(...weights).toFixed(1);
-    const avg = +(weights.reduce((s, w) => s + w, 0) / weights.length).toFixed(1);
-    return { avg, min, max, count: recs.length, range: +(max - min).toFixed(1) };
-  }
-  const tw = weekStats(thisWeekRecs);
-  const lw = weekStats(lastWeekRecs);
-  if (!tw || !lw) {
-    return { thisWeek: tw, lastWeek: lw, diffs: null };
-  }
-  return {
-    thisWeek: tw,
-    lastWeek: lw,
-    diffs: {
-      avg: +(tw.avg - lw.avg).toFixed(1),
-      min: +(tw.min - lw.min).toFixed(1),
-      max: +(tw.max - lw.max).toFixed(1),
-      count: tw.count - lw.count,
-      range: +(tw.range - lw.range).toFixed(1)
-    }
-  };
-}
-function calcGoalProgressRing(records, goalWeight) {
-  if (!records || records.length < 1 || !Number.isFinite(goalWeight) || goalWeight <= 0) {
-    return null;
-  }
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const startWeight = sorted[0].wt;
-  const currentWeight = sorted[sorted.length - 1].wt;
-  const totalToLose = startWeight - goalWeight;
-  if (Math.abs(totalToLose) < 0.1) {
-    return { percent: 100, startWeight, currentWeight, goalWeight, lost: 0, remaining: 0, weeklyRate: 0, estimatedWeeks: 0, onTrack: true };
-  }
-  const lost = startWeight - currentWeight;
-  const direction = totalToLose > 0 ? 1 : -1;
-  const progress = lost * direction / Math.abs(totalToLose);
-  const percent = Math.min(100, Math.max(0, Math.round(progress * 100)));
-  const remaining = +Math.abs(currentWeight - goalWeight).toFixed(1);
-  let weeklyRate = 0;
-  if (sorted.length >= 7) {
-    const fourWeeksAgo = /* @__PURE__ */ new Date();
-    fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
-    const cutoffStr = `${fourWeeksAgo.getFullYear()}-${String(fourWeeksAgo.getMonth() + 1).padStart(2, "0")}-${String(fourWeeksAgo.getDate()).padStart(2, "0")}`;
-    const recent = sorted.filter((r) => r.dt >= cutoffStr);
-    if (recent.length >= 2) {
-      const firstR = recent[0].wt;
-      const lastR = recent[recent.length - 1].wt;
-      const daySpan = Math.max(1, Math.ceil((/* @__PURE__ */ new Date(recent[recent.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(recent[0].dt + "T00:00:00")) / 864e5));
-      weeklyRate = +((firstR - lastR) / daySpan * 7).toFixed(2);
-    }
-  }
-  const estimatedWeeks = weeklyRate * direction > 0.05 ? Math.ceil(remaining / Math.abs(weeklyRate)) : null;
-  const onTrack = weeklyRate * direction > 0;
-  return {
-    percent,
-    startWeight: +startWeight.toFixed(1),
-    currentWeight: +currentWeight.toFixed(1),
-    goalWeight: +goalWeight,
-    lost: +(lost * direction).toFixed(1),
-    remaining,
-    weeklyRate: +weeklyRate.toFixed(2),
-    estimatedWeeks,
-    onTrack
-  };
-}
-function calcBodyFatTrend(records) {
-  if (!records || records.length < 1) {
-    return { points: [], change: 0, direction: "neutral", current: null, min: null, max: null, avg: null };
-  }
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const points = sorted.filter((r) => r.bf != null && Number.isFinite(Number(r.bf)) && Number(r.bf) > 0).map((r) => ({ dt: r.dt, bf: +Number(r.bf).toFixed(1) }));
-  if (points.length < 2) {
-    return { points: [], change: 0, direction: "neutral", current: points.length === 1 ? points[0].bf : null, min: null, max: null, avg: null };
-  }
-  const current = points[points.length - 1].bf;
-  const first = points[0].bf;
-  const change = +(current - first).toFixed(1);
-  const direction = change < -0.1 ? "down" : change > 0.1 ? "up" : "neutral";
-  const bfs = points.map((p) => p.bf);
-  const avg = +(bfs.reduce((s, v) => s + v, 0) / bfs.length).toFixed(1);
-  return {
-    points: points.slice(-30),
-    change,
-    direction,
-    current,
-    min: +Math.min(...bfs).toFixed(1),
-    max: +Math.max(...bfs).toFixed(1),
-    avg
-  };
-}
-function calcDailyTarget(records, goalWeight) {
-  if (!records || records.length < 7 || !Number.isFinite(goalWeight) || goalWeight <= 0) {
-    return null;
-  }
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const current = sorted[sorted.length - 1].wt;
-  const remaining = goalWeight - current;
-  if (Math.abs(remaining) < 0.1) {
-    return { target: +goalWeight.toFixed(1), current: +current.toFixed(1), diff: 0, pace: 0, isAbove: false, isBelow: false, onTarget: true };
-  }
-  const direction = remaining > 0 ? 1 : -1;
-  const idealPace = 0.5 * direction;
-  const weekAgo = /* @__PURE__ */ new Date();
-  weekAgo.setDate(weekAgo.getDate() - 7);
-  const weekAgoStr = `${weekAgo.getFullYear()}-${String(weekAgo.getMonth() + 1).padStart(2, "0")}-${String(weekAgo.getDate()).padStart(2, "0")}`;
-  const recentStart = sorted.find((r) => r.dt >= weekAgoStr) || sorted[Math.max(0, sorted.length - 7)];
-  const daysSinceRef = Math.max(1, Math.ceil(
-    (/* @__PURE__ */ new Date(sorted[sorted.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(recentStart.dt + "T00:00:00")) / 864e5
-  ));
-  const dailyIdeal = idealPace / 7;
-  const target = +(recentStart.wt + dailyIdeal * daysSinceRef).toFixed(1);
-  const diff = +(current - target).toFixed(1);
-  const isAbove = diff > 0.1;
-  const isBelow = diff < -0.1;
-  const onTarget = Math.abs(diff) <= 0.1;
-  return {
-    target,
-    current: +current.toFixed(1),
-    diff,
-    pace: +idealPace.toFixed(2),
-    isAbove,
-    isBelow,
-    onTarget
-  };
-}
-function calcMonthPhaseAvg(records) {
-  if (!records || records.length < 14) return null;
-  const phases = [
-    { label: "early", days: "1-7", sums: 0, counts: 0, weights: [] },
-    { label: "mid", days: "8-14", sums: 0, counts: 0, weights: [] },
-    { label: "late", days: "15-21", sums: 0, counts: 0, weights: [] },
-    { label: "end", days: "22-31", sums: 0, counts: 0, weights: [] }
-  ];
-  for (const r of records) {
-    const day = parseInt(r.dt.slice(8), 10);
-    let idx;
-    if (day <= 7) idx = 0;
-    else if (day <= 14) idx = 1;
-    else if (day <= 21) idx = 2;
-    else idx = 3;
-    phases[idx].sums += r.wt;
-    phases[idx].counts += 1;
-    phases[idx].weights.push(r.wt);
-  }
-  const result = phases.map((p, i) => ({
-    label: p.label,
-    days: p.days,
-    avg: p.counts > 0 ? +(p.sums / p.counts).toFixed(1) : null,
-    count: p.counts,
-    change: null
-  }));
-  if (result[0].avg !== null) {
-    for (let i = 0; i < result.length; i++) {
-      if (result[i].avg !== null) {
-        result[i].change = +(result[i].avg - result[0].avg).toFixed(2);
-      }
-    }
-  }
-  const avgs = result.filter((r) => r.avg !== null).map((r) => r.avg);
-  const maxVar = avgs.length > 1 ? Math.max(...avgs) - Math.min(...avgs) : 0;
-  return {
-    phases: result,
-    hasPattern: maxVar > 0.3
-  };
-}
-function calcStreakFreezeInfo(records) {
-  if (!records || records.length < 2) {
-    return { freezesEarned: 0, freezesUsed: 0, freezesAvailable: 0, currentStreak: records?.length || 0, longestStreak: records?.length || 0 };
-  }
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const dateSet = new Set(sorted.map((r) => r.dt));
-  let currentStreak = 1;
-  let longestStreak = 1;
-  let totalConsecutiveDays = 0;
-  let freezesUsed = 0;
-  let streak = 1;
-  let frozeInCurrentStreak = false;
-  for (let i = 1; i < sorted.length; i++) {
-    const prev = /* @__PURE__ */ new Date(sorted[i - 1].dt + "T00:00:00");
-    const curr = /* @__PURE__ */ new Date(sorted[i].dt + "T00:00:00");
-    const diffDays = Math.round((curr - prev) / 864e5);
-    if (diffDays === 1) {
-      streak++;
-    } else if (diffDays === 2 && !frozeInCurrentStreak) {
-      const freezesAtPoint = Math.floor(streak / 7);
-      if (freezesAtPoint > 0) {
-        freezesUsed++;
-        frozeInCurrentStreak = true;
-        streak++;
-      } else {
-        totalConsecutiveDays += streak;
-        longestStreak = Math.max(longestStreak, streak);
-        streak = 1;
-        frozeInCurrentStreak = false;
-      }
-    } else {
-      totalConsecutiveDays += streak;
-      longestStreak = Math.max(longestStreak, streak);
-      streak = 1;
-      frozeInCurrentStreak = false;
-    }
-  }
-  totalConsecutiveDays += streak;
-  longestStreak = Math.max(longestStreak, streak);
-  currentStreak = streak;
-  const freezesEarned = Math.floor(totalConsecutiveDays / 7);
-  const freezesAvailable = Math.max(0, freezesEarned - freezesUsed);
-  return {
-    freezesEarned,
-    freezesUsed,
-    freezesAvailable,
-    currentStreak,
-    longestStreak
-  };
-}
-function calcRecentWeightBars(records, goalWeight = 0, count = 7) {
-  if (!records || records.length < 2) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const recent = sorted.slice(-count);
-  const weights = recent.map((r) => r.wt);
-  if (goalWeight > 0) weights.push(goalWeight);
-  const min = Math.min(...weights) - 0.5;
-  const max = Math.max(...weights) + 0.5;
-  const range = max - min || 1;
-  const bars = recent.map((r, i) => {
-    const prev = i > 0 ? recent[i - 1].wt : sorted.length > count ? sorted[sorted.length - count - 1]?.wt : null;
-    const change = prev !== null ? +(r.wt - prev).toFixed(1) : null;
-    return {
-      dt: r.dt,
-      wt: r.wt,
-      change,
-      pct: +((r.wt - min) / range * 100).toFixed(1)
-    };
-  });
-  const goalPct = goalWeight > 0 ? +((goalWeight - min) / range * 100).toFixed(1) : null;
-  return { bars, min, max, goalPct };
-}
-function calcWeightAnniversary(records) {
-  if (!records || records.length < 2) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const startDate = sorted[0].dt;
-  const startWeight = sorted[0].wt;
-  const currentWeight = sorted[sorted.length - 1].wt;
-  const totalChange = +(currentWeight - startWeight).toFixed(1);
-  const start = /* @__PURE__ */ new Date(startDate + "T00:00:00");
-  const latest = /* @__PURE__ */ new Date(sorted[sorted.length - 1].dt + "T00:00:00");
-  const trackingDays = Math.round((latest - start) / 864e5);
-  const milestoneDefs = [
-    { label: "1week", days: 7 },
-    { label: "1month", days: 30 },
-    { label: "3months", days: 90 },
-    { label: "6months", days: 180 },
-    { label: "1year", days: 365 },
-    { label: "2years", days: 730 }
-  ];
-  const milestones = milestoneDefs.map((m) => {
-    const reached = trackingDays >= m.days;
-    let weightAtMilestone = null;
-    let changeAtMilestone = null;
-    if (reached) {
-      const targetDate = new Date(start);
-      targetDate.setDate(targetDate.getDate() + m.days);
-      const targetStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, "0")}-${String(targetDate.getDate()).padStart(2, "0")}`;
-      let closest = sorted[0];
-      let closestDiff = Infinity;
-      for (const r of sorted) {
-        const diff = Math.abs(/* @__PURE__ */ new Date(r.dt + "T00:00:00") - targetDate);
-        if (diff < closestDiff) {
-          closestDiff = diff;
-          closest = r;
-        }
-      }
-      weightAtMilestone = closest.wt;
-      changeAtMilestone = +(closest.wt - startWeight).toFixed(1);
-    }
-    return {
-      label: m.label,
-      days: m.days,
-      reached,
-      weightAtMilestone,
-      changeAtMilestone
-    };
-  });
-  return {
-    trackingDays,
-    startDate,
-    startWeight,
-    currentWeight,
-    totalChange,
-    milestones
-  };
-}
-function calcDailyChangeDist(records) {
-  if (!records || records.length < 3) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const changes = [];
-  for (let i = 1; i < sorted.length; i++) {
-    const prev = /* @__PURE__ */ new Date(sorted[i - 1].dt + "T00:00:00");
-    const curr = /* @__PURE__ */ new Date(sorted[i].dt + "T00:00:00");
-    const daysDiff = Math.round((curr - prev) / 864e5);
-    if (daysDiff >= 1 && daysDiff <= 2) {
-      changes.push(+(sorted[i].wt - sorted[i - 1].wt).toFixed(2));
-    }
-  }
-  if (changes.length < 3) return null;
-  const bucketSize = 0.5;
-  const minChange = Math.min(...changes);
-  const maxChange = Math.max(...changes);
-  const startBucket = Math.floor(minChange / bucketSize) * bucketSize;
-  const endBucket = Math.ceil(maxChange / bucketSize) * bucketSize;
-  const buckets = [];
-  for (let b = startBucket; b < endBucket; b += bucketSize) {
-    const bMin = +b.toFixed(1);
-    const bMax = +(b + bucketSize).toFixed(1);
-    const count = changes.filter((c) => c >= bMin && c < bMax).length;
-    buckets.push({
-      label: `${bMin >= 0 ? "+" : ""}${bMin}`,
-      min: bMin,
-      max: bMax,
-      count,
-      pct: +(count / changes.length * 100).toFixed(1)
-    });
-  }
-  const sortedChanges = [...changes].sort((a, b) => a - b);
-  const medianChange = sortedChanges.length % 2 === 0 ? +((sortedChanges[sortedChanges.length / 2 - 1] + sortedChanges[sortedChanges.length / 2]) / 2).toFixed(2) : +sortedChanges[Math.floor(sortedChanges.length / 2)].toFixed(2);
-  const avgChange = +(changes.reduce((s, c) => s + c, 0) / changes.length).toFixed(2);
-  const p10 = sortedChanges[Math.floor(sortedChanges.length * 0.1)];
-  const p90 = sortedChanges[Math.floor(sortedChanges.length * 0.9)];
-  return {
-    buckets,
-    avgChange,
-    medianChange,
-    normalRange: { low: +p10.toFixed(2), high: +p90.toFixed(2) },
-    totalChanges: changes.length
-  };
-}
-function calcGoalStreak(records, goalWeight) {
-  if (!records || records.length < 2 || !Number.isFinite(goalWeight) || goalWeight <= 0) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const current = sorted[sorted.length - 1].wt;
-  const direction = current > goalWeight ? "lose" : current < goalWeight ? "gain" : "achieved";
-  if (direction === "achieved") {
-    return { streak: 1, direction: "achieved", goalWeight, closestToGoal: current, currentDist: 0 };
-  }
-  let streak = 1;
-  let closestToGoal = current;
-  let closestDist = Math.abs(current - goalWeight);
-  for (let i = sorted.length - 2; i >= 0; i--) {
-    const prevDist = Math.abs(sorted[i].wt - goalWeight);
-    const nextDist = Math.abs(sorted[i + 1].wt - goalWeight);
-    if (prevDist >= nextDist - 0.2) {
-      streak++;
-      if (Math.abs(sorted[i].wt - goalWeight) < closestDist) {
-        closestDist = Math.abs(sorted[i].wt - goalWeight);
-        closestToGoal = sorted[i].wt;
-      }
-    } else {
-      break;
-    }
-  }
-  return {
-    streak,
-    direction,
-    goalWeight,
-    closestToGoal: +closestToGoal.toFixed(1),
-    currentDist: +Math.abs(current - goalWeight).toFixed(1)
-  };
-}
-function calcThenVsNow(records, days2 = 7) {
-  if (!records || records.length < days2 * 2) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const first = sorted.slice(0, days2);
-  const last = sorted.slice(-days2);
-  const calcGroup = (group) => {
-    const weights = group.map((r) => r.wt);
-    const avg = +(weights.reduce((s, w) => s + w, 0) / weights.length).toFixed(1);
-    return {
-      avg,
-      min: +Math.min(...weights).toFixed(1),
-      max: +Math.max(...weights).toFixed(1),
-      count: group.length,
-      period: `${group[0].dt} ~ ${group[group.length - 1].dt}`
-    };
-  };
-  const thenData = calcGroup(first);
-  const nowData = calcGroup(last);
-  return {
-    then: thenData,
-    now: nowData,
-    diff: +(nowData.avg - thenData.avg).toFixed(1)
-  };
-}
-function calcQuickWeightPresets(records) {
-  if (!records || records.length === 0) return [];
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const last = sorted[sorted.length - 1].wt;
-  const presets = /* @__PURE__ */ new Map();
-  presets.set(last.toFixed(1), { label: "last", weight: +last.toFixed(1) });
-  if (sorted.length >= 3) {
-    const recent3 = sorted.slice(-3);
-    const avg3 = +(recent3.reduce((s, r) => s + r.wt, 0) / 3).toFixed(1);
-    if (!presets.has(avg3.toFixed(1))) {
-      presets.set(avg3.toFixed(1), { label: "avg3", weight: avg3 });
-    }
-  }
-  if (sorted.length >= 2) {
-    const prev = sorted[sorted.length - 2].wt;
-    const trend = last - prev;
-    const predicted = +(last + trend).toFixed(1);
-    if (predicted >= 20 && predicted <= 300 && !presets.has(predicted.toFixed(1))) {
-      presets.set(predicted.toFixed(1), { label: "trend", weight: predicted });
-    }
-  }
-  return [...presets.values()].sort((a, b) => a.weight - b.weight);
-}
-function calcRecordCompleteness(records) {
-  if (!records || records.length === 0) return null;
-  let withBodyFat = 0;
-  let withNote = 0;
-  let withTag = 0;
-  for (const r of records) {
-    if (r.bf != null && Number(r.bf) > 0) withBodyFat++;
-    if (r.note && r.note.trim().length > 0) withNote++;
-    if (r.note && /#\w+/.test(r.note)) withTag++;
-  }
-  const total = records.length;
-  const bodyFatPct = Math.round(withBodyFat / total * 100);
-  const notePct = Math.round(withNote / total * 100);
-  const tagPct = Math.round(withTag / total * 100);
-  const completePct = Math.round((withBodyFat + withNote) / (total * 2) * 100);
-  let level;
-  if (completePct >= 75) level = "excellent";
-  else if (completePct >= 50) level = "good";
-  else if (completePct >= 25) level = "fair";
-  else level = "basic";
-  return { total, withBodyFat, withNote, withTag, completePct, bodyFatPct, notePct, tagPct, level };
-}
-function calcWeightPace(records, goalWeight) {
-  if (!records || records.length < 7 || !goalWeight || goalWeight <= 0) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const recent = sorted.slice(-14);
-  if (recent.length < 7) return null;
-  const first = recent[0];
-  const last = recent[recent.length - 1];
-  const daysDiff = Math.max(1, Math.round((/* @__PURE__ */ new Date(last.dt + "T00:00:00") - /* @__PURE__ */ new Date(first.dt + "T00:00:00")) / 864e5));
-  const totalChange = last.wt - first.wt;
-  const weeklyRate = +(totalChange / daysDiff * 7).toFixed(2);
-  const currentWt = last.wt;
-  const direction = currentWt > goalWeight ? "lose" : currentWt < goalWeight ? "gain" : "achieved";
-  if (direction === "achieved") {
-    return { weeklyRate, direction, pace: "maintaining", healthyMin: 0, healthyMax: 0 };
-  }
-  let healthyMin, healthyMax, pace;
-  if (direction === "lose") {
-    healthyMin = -1;
-    healthyMax = -0.5;
-    if (weeklyRate < healthyMin) pace = "too_fast";
-    else if (weeklyRate >= healthyMin && weeklyRate <= healthyMax) pace = "healthy";
-    else pace = "too_slow";
-  } else {
-    healthyMin = 0.25;
-    healthyMax = 0.5;
-    if (weeklyRate > healthyMax) pace = "too_fast";
-    else if (weeklyRate < 0.1) pace = "too_slow";
-    else if (weeklyRate >= healthyMin) pace = "healthy";
-    else pace = "too_slow";
-  }
-  return { weeklyRate, direction, pace, healthyMin, healthyMax };
-}
-function calcWeightSmoothness(records) {
-  if (!records || records.length < 7) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const recent = sorted.slice(-30);
-  if (recent.length < 7) return null;
-  const n = recent.length;
-  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-  for (let i = 0; i < n; i++) {
-    sumX += i;
-    sumY += recent[i].wt;
-    sumXY += i * recent[i].wt;
-    sumX2 += i * i;
-  }
-  const trendSlope = +((n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX)).toFixed(4);
-  const intercept = (sumY - trendSlope * sumX) / n;
-  let totalNoise = 0;
-  for (let i = 0; i < n; i++) {
-    const expected = intercept + trendSlope * i;
-    totalNoise += Math.abs(recent[i].wt - expected);
-  }
-  const avgDailyNoise = +(totalNoise / n).toFixed(3);
-  const score = Math.max(0, Math.min(100, Math.round(100 - avgDailyNoise / 0.6 * 100)));
-  let rating;
-  if (score >= 90) rating = "very_smooth";
-  else if (score >= 70) rating = "smooth";
-  else if (score >= 50) rating = "normal";
-  else if (score >= 30) rating = "noisy";
-  else rating = "erratic";
-  return { score, avgDailyNoise, trendSlope, rating };
-}
-function calcPeriodBreakdown(records, numMonths = 3) {
-  if (!records || records.length < 2) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const groups = /* @__PURE__ */ new Map();
-  for (const r of sorted) {
-    const ym = r.dt.slice(0, 7);
-    if (!groups.has(ym)) groups.set(ym, []);
-    groups.get(ym).push(r.wt);
-  }
-  const allMonths = [...groups.keys()].sort();
-  const recentMonths = allMonths.slice(-numMonths);
-  if (recentMonths.length === 0) return null;
-  const months2 = [];
-  let prevAvg = null;
-  const firstIdx = allMonths.indexOf(recentMonths[0]);
-  if (firstIdx > 0) {
-    const prevWeights = groups.get(allMonths[firstIdx - 1]);
-    prevAvg = +(prevWeights.reduce((s, w) => s + w, 0) / prevWeights.length).toFixed(1);
-  }
-  for (const ym of recentMonths) {
-    const weights = groups.get(ym);
-    const avg = +(weights.reduce((s, w) => s + w, 0) / weights.length).toFixed(1);
-    const min = +Math.min(...weights).toFixed(1);
-    const max = +Math.max(...weights).toFixed(1);
-    const change = prevAvg !== null ? +(avg - prevAvg).toFixed(1) : null;
-    months2.push({ yearMonth: ym, avg, min, max, count: weights.length, change });
-    prevAvg = avg;
-  }
-  return { months: months2 };
-}
-function calcMotivationLevel(records) {
-  if (!records || records.length < 2) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const today = /* @__PURE__ */ new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  let streakDays = 0;
-  const dateSet = new Set(sorted.map((r) => r.dt));
-  for (let d = 0; d < 60; d++) {
-    const checkDate = new Date(today);
-    checkDate.setDate(checkDate.getDate() - d);
-    const ds = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, "0")}-${String(checkDate.getDate()).padStart(2, "0")}`;
-    if (dateSet.has(ds)) {
-      streakDays++;
-    } else if (d > 0) {
-      break;
-    }
-  }
-  const recent = sorted.slice(-7);
-  let trendDirection = "stable";
-  if (recent.length >= 3) {
-    const firstHalf = recent.slice(0, Math.floor(recent.length / 2));
-    const secondHalf = recent.slice(Math.floor(recent.length / 2));
-    const avgFirst = firstHalf.reduce((s, r) => s + r.wt, 0) / firstHalf.length;
-    const avgSecond = secondHalf.reduce((s, r) => s + r.wt, 0) / secondHalf.length;
-    const diff = avgSecond - avgFirst;
-    if (diff < -0.2) trendDirection = "losing";
-    else if (diff > 0.2) trendDirection = "gaining";
-  }
-  const last7dates = /* @__PURE__ */ new Set();
-  for (let d = 0; d < 7; d++) {
-    const checkDate = new Date(today);
-    checkDate.setDate(checkDate.getDate() - d);
-    const ds = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, "0")}-${String(checkDate.getDate()).padStart(2, "0")}`;
-    if (dateSet.has(ds)) last7dates.add(ds);
-  }
-  const weeklyConsistency = last7dates.size;
-  let level = 1;
-  if (streakDays >= 7) level += 2;
-  else if (streakDays >= 3) level += 1;
-  if (weeklyConsistency >= 5) level += 1;
-  if (trendDirection === "losing" || trendDirection === "stable") level += 1;
-  level = Math.min(5, Math.max(1, level));
-  const isImproving = trendDirection === "losing";
-  return { level, streakDays, trendDirection, isImproving };
-}
-function calcWeightBand(records) {
-  if (!records || records.length < 5) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const recent = sorted.slice(-14);
-  if (recent.length < 5) return null;
-  const weights = recent.map((r) => r.wt);
-  const n = weights.length;
-  const mean = +(weights.reduce((s, w) => s + w, 0) / n).toFixed(1);
-  const variance = weights.reduce((s, w) => s + (w - mean) ** 2, 0) / n;
-  const stdDev = +Math.sqrt(variance).toFixed(2);
-  const low = +(mean - stdDev).toFixed(1);
-  const high = +(mean + stdDev).toFixed(1);
-  const bandwidth = +(high - low).toFixed(1);
-  return { mean, low, high, stdDev, readings: n, bandwidth };
-}
-function calcBestWeighDay(records) {
-  if (!records || records.length < 14) return null;
-  const dayTotals = Array.from({ length: 7 }, () => ({ sum: 0, count: 0 }));
-  for (const r of records) {
-    const d = /* @__PURE__ */ new Date(r.dt + "T00:00:00");
-    const dow = d.getDay();
-    dayTotals[dow].sum += r.wt;
-    dayTotals[dow].count++;
-  }
-  const days2 = dayTotals.map((d, i) => ({
-    day: i,
-    avg: d.count > 0 ? +(d.sum / d.count).toFixed(1) : null,
-    count: d.count
-  })).filter((d) => d.avg !== null);
-  if (days2.length < 3) return null;
-  const minAvg = Math.min(...days2.map((d) => d.avg));
-  const maxAvg = Math.max(...days2.map((d) => d.avg));
-  const bestDay = days2.find((d) => d.avg === minAvg).day;
-  const worstDay = days2.find((d) => d.avg === maxAvg).day;
-  for (const d of days2) {
-    d.diffFromBest = +(d.avg - minAvg).toFixed(1);
-  }
-  return { days: days2, bestDay, worstDay };
-}
-function calcMiniSparkline(records, count = 10) {
-  if (!records || records.length < 3) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const recent = sorted.slice(-count);
-  if (recent.length < 3) return null;
-  const weights = recent.map((r) => r.wt);
-  const min = Math.min(...weights);
-  const max = Math.max(...weights);
-  const range = max - min || 1;
-  const points = weights.map((w, i) => ({
-    x: Math.round(i / (weights.length - 1) * 100),
-    y: Math.round(100 - (w - min) / range * 100)
-  }));
-  const svgPath = "M" + points.map((p) => `${p.x},${p.y}`).join(" L");
-  const firstAvg = weights.slice(0, Math.floor(weights.length / 2)).reduce((s, w) => s + w, 0) / Math.floor(weights.length / 2);
-  const lastAvg = weights.slice(Math.floor(weights.length / 2)).reduce((s, w) => s + w, 0) / (weights.length - Math.floor(weights.length / 2));
-  const diff = lastAvg - firstAvg;
-  const trend = diff < -0.2 ? "down" : diff > 0.2 ? "up" : "flat";
-  return { points, min: +min.toFixed(1), max: +max.toFixed(1), trend, svgPath };
-}
-function calcEntrySummary(records) {
-  if (!records || records.length < 2) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const latest = sorted[sorted.length - 1];
-  const prev = sorted[sorted.length - 2];
-  const vsYesterday = +(latest.wt - prev.wt).toFixed(1);
-  const recentExcluding = sorted.slice(-8, -1);
-  const weekAvg = +(recentExcluding.reduce((s, r) => s + r.wt, 0) / recentExcluding.length).toFixed(1);
-  const vsWeekAvg = +(latest.wt - weekAvg).toFixed(1);
-  const allTimeBest = +Math.min(...sorted.map((r) => r.wt)).toFixed(1);
-  const isNewBest = latest.wt <= allTimeBest;
-  return {
-    latest: { dt: latest.dt, wt: +latest.wt.toFixed(1) },
-    vsYesterday,
-    vsWeekAvg,
-    allTimeBest,
-    isNewBest
-  };
-}
-function calcGoalDistance(records, goalWeight) {
-  if (!records || records.length < 2 || !goalWeight || goalWeight <= 0) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const current = sorted[sorted.length - 1].wt;
-  const start = sorted[0].wt;
-  const remaining = +(current - goalWeight).toFixed(1);
-  if (Math.abs(remaining) < 0.1) {
-    return { current: +current.toFixed(1), goal: goalWeight, remaining: 0, progressPct: 100, direction: "achieved", etaDays: 0 };
-  }
-  const direction = current > goalWeight ? "lose" : "gain";
-  const totalJourney = Math.abs(start - goalWeight);
-  const covered = totalJourney - Math.abs(remaining);
-  const progressPct = totalJourney > 0 ? Math.max(0, Math.min(100, Math.round(covered / totalJourney * 100))) : 0;
-  let etaDays = null;
-  const recent = sorted.slice(-14);
-  if (recent.length >= 7) {
-    const daysDiff = Math.max(1, Math.round((new Date(recent[recent.length - 1].dt) - new Date(recent[0].dt)) / 864e5));
-    const dailyRate = (recent[recent.length - 1].wt - recent[0].wt) / daysDiff;
-    if (direction === "lose" && dailyRate < -0.01 || direction === "gain" && dailyRate > 0.01) {
-      etaDays = Math.round(Math.abs(remaining) / Math.abs(dailyRate));
-      if (etaDays > 730) etaDays = null;
-    }
-  }
-  return { current: +current.toFixed(1), goal: goalWeight, remaining: +Math.abs(remaining).toFixed(1), progressPct, direction, etaDays };
-}
-function calcTimeSlotPattern(records) {
-  if (!records || records.length < 5) return null;
-  const slots = {
-    morning: { count: 0, totalWt: 0 },
-    afternoon: { count: 0, totalWt: 0 },
-    evening: { count: 0, totalWt: 0 },
-    night: { count: 0, totalWt: 0 }
-  };
-  let totalWithTime = 0;
-  for (const r of records) {
-    if (!r.time) continue;
-    const hour = parseInt(r.time.split(":")[0], 10);
-    if (isNaN(hour)) continue;
-    totalWithTime++;
-    let slot;
-    if (hour >= 5 && hour < 12) slot = "morning";
-    else if (hour >= 12 && hour < 18) slot = "afternoon";
-    else if (hour >= 18 && hour < 22) slot = "evening";
-    else slot = "night";
-    slots[slot].count++;
-    slots[slot].totalWt += r.wt;
-  }
-  if (totalWithTime < 3) return null;
-  const result = Object.entries(slots).map(([name, data]) => ({
-    name,
-    count: data.count,
-    pct: Math.round(data.count / totalWithTime * 100),
-    avgWt: data.count > 0 ? +(data.totalWt / data.count).toFixed(1) : null
-  }));
-  const preferredSlot = result.reduce((best, s) => s.count > best.count ? s : best, result[0]).name;
-  return { slots: result, preferredSlot, totalWithTime };
-}
-function calcStreakBadges(records) {
-  if (!records || records.length < 2) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const dateSet = new Set(sorted.map((r) => r.dt));
-  const dates = [...dateSet].sort();
-  let longestStreak = 1;
-  let currentRun = 1;
-  for (let i = 1; i < dates.length; i++) {
-    const prev = /* @__PURE__ */ new Date(dates[i - 1] + "T00:00:00");
-    const curr = /* @__PURE__ */ new Date(dates[i] + "T00:00:00");
-    const diffDays = Math.round((curr - prev) / 864e5);
-    if (diffDays === 1) {
-      currentRun++;
-      longestStreak = Math.max(longestStreak, currentRun);
-    } else {
-      currentRun = 1;
-    }
-  }
-  let currentStreak = 1;
-  for (let i = dates.length - 1; i > 0; i--) {
-    const curr = /* @__PURE__ */ new Date(dates[i] + "T00:00:00");
-    const prev = /* @__PURE__ */ new Date(dates[i - 1] + "T00:00:00");
-    const diffDays = Math.round((curr - prev) / 864e5);
-    if (diffDays === 1) {
-      currentStreak++;
-    } else {
-      break;
-    }
-  }
-  const milestones = [3, 7, 14, 30, 60, 90];
-  const icons = ["\u{1F525}", "\u2B50", "\u{1F4AA}", "\u{1F3C6}", "\u{1F48E}", "\u{1F451}"];
-  const badges = milestones.map((days2, i) => ({
-    days: days2,
-    earned: longestStreak >= days2,
-    icon: icons[i]
-  }));
-  return { badges, longestStreak, currentStreak };
-}
-function calcProgressTimeline(records, goalWeight) {
-  if (!records || records.length < 3) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const startWt = sorted[0].wt;
-  const currentWt = sorted[sorted.length - 1].wt;
-  const events = [];
-  events.push({ dt: sorted[0].dt, wt: +startWt.toFixed(1), type: "start" });
-  const direction = goalWeight && goalWeight > 0 ? startWt > goalWeight ? -1 : 1 : currentWt < startWt ? -1 : 1;
-  const milestonesHit = /* @__PURE__ */ new Set();
-  let bestWt = sorted[0].wt;
-  let bestDt = sorted[0].dt;
-  for (const r of sorted.slice(1)) {
-    if (r.wt < bestWt) {
-      bestWt = r.wt;
-      bestDt = r.dt;
-    }
-    const kgFromStart = Math.floor(Math.abs(r.wt - startWt));
-    if (kgFromStart > 0) {
-      for (let k = 1; k <= kgFromStart && k <= 20; k++) {
-        const mKey = direction === -1 ? -k : k;
-        if (!milestonesHit.has(mKey)) {
-          milestonesHit.add(mKey);
-          const mWt = +(startWt + mKey).toFixed(1);
-          events.push({ dt: r.dt, wt: mWt, type: "milestone" });
-        }
-      }
-    }
-  }
-  if (bestWt < startWt && bestWt < currentWt) {
-    events.push({ dt: bestDt, wt: +bestWt.toFixed(1), type: "best" });
-  }
-  events.push({ dt: sorted[sorted.length - 1].dt, wt: +currentWt.toFixed(1), type: "current" });
-  events.sort((a, b) => a.dt.localeCompare(b.dt));
-  if (events.length > 8) {
-    const start = events[0];
-    const current = events[events.length - 1];
-    const best = events.find((e) => e.type === "best");
-    const milestones = events.filter((e) => e.type === "milestone");
-    const kept = [start];
-    if (best) kept.push(best);
-    const step = Math.max(1, Math.floor(milestones.length / 5));
-    for (let i = 0; i < milestones.length; i += step) {
-      if (kept.length < 7) kept.push(milestones[i]);
-    }
-    kept.push(current);
-    kept.sort((a, b) => a.dt.localeCompare(b.dt));
-    return { events: kept, totalChange: +(currentWt - startWt).toFixed(1) };
-  }
-  return { events, totalChange: +(currentWt - startWt).toFixed(1) };
-}
-function calcForecastConfidence(records) {
-  if (!records || records.length < 10) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const recent = sorted.slice(-14);
-  if (recent.length < 7) return null;
-  const current = recent[recent.length - 1].wt;
-  const n = recent.length;
-  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-  for (let i = 0; i < n; i++) {
-    sumX += i;
-    sumY += recent[i].wt;
-    sumXY += i * recent[i].wt;
-    sumX2 += i * i;
-  }
-  const dailyRate = +((n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX)).toFixed(4);
-  const intercept = (sumY - dailyRate * sumX) / n;
-  let ssRes = 0, ssTot = 0;
-  const mean = sumY / n;
-  for (let i = 0; i < n; i++) {
-    const predicted = intercept + dailyRate * i;
-    ssRes += (recent[i].wt - predicted) ** 2;
-    ssTot += (recent[i].wt - mean) ** 2;
-  }
-  const r2 = ssTot > 0 ? Math.max(0, 1 - ssRes / ssTot) : 0;
-  const confidence = Math.round(r2 * 100);
-  const forecast7 = +(current + dailyRate * 7).toFixed(1);
-  const forecast30 = +(current + dailyRate * 30).toFixed(1);
-  return { current: +current.toFixed(1), forecast7, forecast30, dailyRate, confidence };
-}
-function calcWeightZones(records, goalWeight) {
-  if (!records || records.length < 3 || !goalWeight || goalWeight <= 0) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const margin = Math.max(0.5, goalWeight * 0.01);
-  const low = goalWeight - margin;
-  const high = goalWeight + margin;
-  let below = 0, at = 0, above = 0;
-  for (const r of sorted) {
-    if (r.wt < low) below++;
-    else if (r.wt > high) above++;
-    else at++;
-  }
-  const total = sorted.length;
-  const recent = sorted.slice(-30);
-  let rBelow = 0, rAt = 0, rAbove = 0;
-  for (const r of recent) {
-    if (r.wt < low) rBelow++;
-    else if (r.wt > high) rAbove++;
-    else rAt++;
-  }
-  const rTotal = recent.length;
-  return {
-    zones: {
-      below: { count: below, pct: Math.round(below / total * 100) },
-      at: { count: at, pct: Math.round(at / total * 100) },
-      above: { count: above, pct: Math.round(above / total * 100) }
-    },
-    recent30: {
-      below: { count: rBelow, pct: Math.round(rBelow / rTotal * 100) },
-      at: { count: rAt, pct: Math.round(rAt / rTotal * 100) },
-      above: { count: rAbove, pct: Math.round(rAbove / rTotal * 100) }
-    },
-    margin: +margin.toFixed(1),
-    goal: goalWeight,
-    total
-  };
-}
-function calcWeightChangeRate(records) {
-  if (!records || records.length < 14) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const windowSize = 7;
-  const rates = [];
-  for (let i = windowSize; i < sorted.length; i += windowSize) {
-    const start = sorted[i - windowSize];
-    const end = sorted[i];
-    const daysDiff = (new Date(end.dt) - new Date(start.dt)) / 864e5;
-    if (daysDiff <= 0) continue;
-    const rate = +((end.wt - start.wt) / daysDiff * 7).toFixed(2);
-    rates.push({
-      endDt: end.dt,
-      rate,
-      direction: rate < -0.1 ? "losing" : rate > 0.1 ? "gaining" : "stable"
-    });
-  }
-  if (rates.length === 0) return null;
-  const recent = rates.slice(-8);
-  const maxAbs = Math.max(...recent.map((r) => Math.abs(r.rate)), 0.1);
-  const avgRate = +(recent.reduce((s, r) => s + r.rate, 0) / recent.length).toFixed(2);
-  return {
-    windows: recent,
-    maxAbsRate: +maxAbs.toFixed(2),
-    avgRate,
-    trend: avgRate < -0.1 ? "losing" : avgRate > 0.1 ? "gaining" : "stable"
-  };
-}
-function calcWeighInConsistency(records) {
-  if (!records || records.length < 5) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const gaps = [];
-  for (let i = 1; i < sorted.length; i++) {
-    const days2 = Math.round((new Date(sorted[i].dt) - new Date(sorted[i - 1].dt)) / 864e5);
-    if (days2 > 0) gaps.push(days2);
-  }
-  if (gaps.length < 3) return null;
-  const avgInterval = +(gaps.reduce((s, g) => s + g, 0) / gaps.length).toFixed(1);
-  const sortedGaps = [...gaps].sort((a, b) => a - b);
-  const medianInterval = sortedGaps[Math.floor(sortedGaps.length / 2)];
-  const cadence = medianInterval <= 1.5 ? 1 : medianInterval <= 3 ? 2 : medianInterval <= 5 ? 3 : 7;
-  const tolerance = cadence <= 2 ? 1 : 2;
-  let regularGaps = 0;
-  for (const g of gaps) {
-    if (Math.abs(g - cadence) <= tolerance) regularGaps++;
-  }
-  const score = Math.round(regularGaps / gaps.length * 100);
-  let cadenceLabel;
-  if (cadence === 1) cadenceLabel = "daily";
-  else if (cadence === 2) cadenceLabel = "every_other_day";
-  else if (cadence === 3) cadenceLabel = "every_few_days";
-  else cadenceLabel = "weekly";
-  return {
-    avgInterval,
-    medianInterval,
-    cadence,
-    cadenceLabel,
-    score,
-    totalGaps: gaps.length,
-    regularGaps
-  };
-}
-function calcPlateauPeriods(records) {
-  if (!records || records.length < 7) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const band = 0.5;
-  const minReadings = 7;
-  const plateaus = [];
-  let start = 0;
-  while (start < sorted.length) {
-    let end = start;
-    let sum = sorted[start].wt;
-    let count = 1;
-    let mean = sum;
-    while (end + 1 < sorted.length) {
-      const nextWt = sorted[end + 1].wt;
-      const newSum = sum + nextWt;
-      const newMean = newSum / (count + 1);
-      let allInBand = Math.abs(nextWt - newMean) <= band;
-      if (allInBand) {
-        for (let j = start; j <= end; j++) {
-          if (Math.abs(sorted[j].wt - newMean) > band) {
-            allInBand = false;
-            break;
-          }
-        }
-      }
-      if (allInBand) {
-        end++;
-        sum = newSum;
-        count++;
-        mean = newMean;
-      } else {
-        break;
-      }
-    }
-    if (count >= minReadings) {
-      const days2 = Math.round((new Date(sorted[end].dt) - new Date(sorted[start].dt)) / 864e5);
-      plateaus.push({
-        startDt: sorted[start].dt,
-        endDt: sorted[end].dt,
-        days: Math.max(days2, 1),
-        avgWt: +mean.toFixed(1),
-        readings: count
-      });
-      start = end + 1;
-    } else {
-      start++;
-    }
-  }
-  if (plateaus.length === 0) return null;
-  const longestDays = Math.max(...plateaus.map((p) => p.days));
-  const lastRecord = sorted[sorted.length - 1];
-  const current = plateaus.length > 0 && plateaus[plateaus.length - 1].endDt === lastRecord.dt;
-  return { plateaus, current, longestDays };
-}
-function calcWeightPercentileRank(records) {
-  if (!records || records.length < 5) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const current = sorted[sorted.length - 1].wt;
-  const weights = sorted.map((r) => r.wt).sort((a, b) => a - b);
-  const n = weights.length;
-  const belowCount = weights.filter((w) => w < current).length;
-  const equalCount = weights.filter((w) => w === current).length;
-  const percentile = Math.round((belowCount + 0.5 * equalCount) / n * 100);
-  const q1 = weights[Math.floor(n * 0.25)];
-  const median = weights[Math.floor(n * 0.5)];
-  const q3 = weights[Math.floor(n * 0.75)];
-  return {
-    percentile,
-    current: +current.toFixed(1),
-    min: +weights[0].toFixed(1),
-    max: +weights[n - 1].toFixed(1),
-    q1: +q1.toFixed(1),
-    median: +median.toFixed(1),
-    q3: +q3.toFixed(1),
-    totalReadings: n
-  };
-}
-function calcWeightTrendArrow(records) {
-  if (!records || records.length < 3) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const recent = sorted.slice(-7);
-  if (recent.length < 3) return null;
-  const first = recent[0].wt;
-  const last = recent[recent.length - 1].wt;
-  const change = +(last - first).toFixed(1);
-  const days2 = Math.max(1, Math.round((new Date(recent[recent.length - 1].dt) - new Date(recent[0].dt)) / 864e5));
-  const dailyChange = change / days2;
-  let arrow;
-  if (dailyChange > 0.12) arrow = "up2";
-  else if (dailyChange > 0.04) arrow = "up1";
-  else if (dailyChange < -0.12) arrow = "down2";
-  else if (dailyChange < -0.04) arrow = "down1";
-  else arrow = "flat";
-  return { arrow, change, days: days2 };
-}
-function calcBodyCompositionBreakdown(records) {
-  if (!records || records.length < 2) return null;
-  const withBf = records.filter((r) => r.bf != null && r.bf > 0 && r.bf < 100).sort((a, b) => a.dt.localeCompare(b.dt));
-  if (withBf.length < 2) return null;
-  const first = withBf[0];
-  const latest = withBf[withBf.length - 1];
-  const firstFat = +(first.wt * first.bf / 100).toFixed(1);
-  const firstLean = +(first.wt - firstFat).toFixed(1);
-  const latestFat = +(latest.wt * latest.bf / 100).toFixed(1);
-  const latestLean = +(latest.wt - latestFat).toFixed(1);
-  return {
-    current: {
-      dt: latest.dt,
-      wt: +latest.wt.toFixed(1),
-      bf: +latest.bf.toFixed(1),
-      fatMass: latestFat,
-      leanMass: latestLean
-    },
-    first: {
-      dt: first.dt,
-      wt: +first.wt.toFixed(1),
-      bf: +first.bf.toFixed(1),
-      fatMass: firstFat,
-      leanMass: firstLean
-    },
-    fatChange: +(latestFat - firstFat).toFixed(1),
-    leanChange: +(latestLean - firstLean).toFixed(1),
-    entries: withBf.length
-  };
-}
-function calcWeeklyReportCard(records, goalWeight) {
-  if (!records || records.length < 3) return null;
-  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
-  const latest = sorted[sorted.length - 1];
-  const latestDate = new Date(latest.dt);
-  const weekAgo = new Date(latestDate);
-  weekAgo.setDate(weekAgo.getDate() - 6);
-  const weekStr = weekAgo.toISOString().slice(0, 10);
-  const weekRecords = sorted.filter((r) => r.dt >= weekStr);
-  if (weekRecords.length < 1) return null;
-  const daysWithRecords = new Set(weekRecords.map((r) => r.dt)).size;
-  const consistency = Math.round(daysWithRecords / 7 * 100);
-  let goalProgress = 50;
-  if (goalWeight && goalWeight > 0 && weekRecords.length >= 2) {
-    const weekStart = weekRecords[0].wt;
-    const weekEnd = weekRecords[weekRecords.length - 1].wt;
-    const change = weekEnd - weekStart;
-    const needed = goalWeight - weekStart;
-    if (Math.abs(needed) < 0.3) {
-      goalProgress = 100;
-    } else if (needed < 0 && change < 0 || needed > 0 && change > 0) {
-      const ratio = Math.min(Math.abs(change / needed), 1);
-      goalProgress = 60 + Math.round(ratio * 40);
-    } else if (Math.abs(change) < 0.3) {
-      goalProgress = 40;
-    } else {
-      goalProgress = Math.max(0, 30 - Math.round(Math.abs(change) * 10));
-    }
-  }
-  let stability = 50;
-  if (weekRecords.length >= 2) {
-    const wts = weekRecords.map((r) => r.wt);
-    const mean = wts.reduce((s, w) => s + w, 0) / wts.length;
-    const variance = wts.reduce((s, w) => s + (w - mean) ** 2, 0) / wts.length;
-    const stdDev = Math.sqrt(variance);
-    stability = Math.max(0, Math.min(100, Math.round((1.5 - stdDev) / 1.5 * 100)));
-  }
-  const score = Math.round(consistency * 0.4 + goalProgress * 0.35 + stability * 0.25);
-  let grade;
-  if (score >= 90) grade = "A";
-  else if (score >= 70) grade = "B";
-  else if (score >= 50) grade = "C";
-  else if (score >= 30) grade = "D";
-  else grade = "F";
-  return { grade, score, consistency, goalProgress, stability, weekRecords: daysWithRecords };
-}
-function calcNoteWordFrequency(records, topN = 10) {
-  if (!records || records.length < 1) return null;
-  const withNotes = records.filter((r) => r.note && r.note.trim().length > 0);
-  if (withNotes.length < 2) return null;
-  const stopWords = /* @__PURE__ */ new Set([
-    "the",
-    "a",
-    "an",
-    "is",
-    "was",
-    "are",
-    "were",
-    "be",
-    "been",
-    "to",
-    "of",
-    "in",
-    "for",
-    "and",
-    "on",
-    "at",
-    "it",
-    "by",
-    "with",
-    "as",
-    "or",
-    "but",
-    "not",
-    "no",
-    "so",
-    "if",
-    "my",
-    "i",
-    "me",
-    "we",
-    "he",
-    "she",
-    "they",
-    "this",
-    "that",
-    "from",
-    "had",
-    "has",
-    "have",
-    "\u306E",
-    "\u306F",
-    "\u304C",
-    "\u3092",
-    "\u306B",
-    "\u3067",
-    "\u3068",
-    "\u3082",
-    "\u305F",
-    "\u3066",
-    "\u3057",
-    "\u306A",
-    "\u3060",
-    "\u3059\u308B",
-    "\u3057\u305F",
-    "\u3067\u3059",
-    "\u307E\u3059",
-    "\u306A\u3044",
-    "\u3042\u308B",
-    "\u3044\u308B",
-    "\u3053\u3068",
-    "\u3082\u306E",
-    "\u305D\u306E",
-    "\u3053\u306E"
-  ]);
-  const freq = {};
-  for (const r of withNotes) {
-    const cleaned = r.note.replace(/#\w+/g, "").trim();
-    const words = cleaned.split(/[\s,、。.!?！？\-/]+/).filter((w) => w.length >= 2 && !stopWords.has(w.toLowerCase()));
-    for (const w of words) {
-      const key = w.toLowerCase();
-      freq[key] = (freq[key] || 0) + 1;
-    }
-  }
-  const sorted = Object.entries(freq).filter(([, count]) => count >= 2).sort((a, b) => b[1] - a[1]).slice(0, topN).map(([text, count]) => ({ text, count }));
-  if (sorted.length === 0) return null;
-  return {
-    words: sorted,
-    totalNotes: withNotes.length,
-    totalWords: Object.values(freq).reduce((s, c) => s + c, 0)
-  };
-}
 
 // src/i18n.js
 var translations = {
@@ -4829,15 +2271,12 @@ var translations = {
     "status.listening": "\u805E\u304D\u53D6\u308A\u4E2D",
     "status.storageError": "\u7AEF\u672B\u5185\u4FDD\u5B58\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002\u30D6\u30E9\u30A6\u30B6\u306E\u4FDD\u5B58\u8A2D\u5B9A\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "status.photoReady": "\u5199\u771F\u3092\u8AAD\u307F\u8FBC\u307F\u307E\u3057\u305F\u3002\u5019\u88DC\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
-    "status.photoAnalyzing": "\u5199\u771F\u3092\u89E3\u6790\u4E2D\u2026",
     "status.photoNoDetection": "\u5199\u771F\u304B\u3089\u6570\u5024\u3092\u691C\u51FA\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u624B\u5165\u529B\u3067\u4F53\u91CD\u3092\u8A2D\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "status.voiceError": "\u97F3\u58F0\u5165\u529B\u3092\u958B\u59CB\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u30DE\u30A4\u30AF\u6A29\u9650\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
-    "status.voiceNoSpeech": "\u97F3\u58F0\u304C\u691C\u51FA\u3055\u308C\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u3082\u3046\u4E00\u5EA6\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002",
     "status.exported": "\u7AEF\u672B\u5185\u30C7\u30FC\u30BF\u3092\u66F8\u304D\u51FA\u3057\u307E\u3057\u305F\u3002",
     "status.reset": "\u7AEF\u672B\u5185\u30C7\u30FC\u30BF\u3092\u524A\u9664\u3057\u307E\u3057\u305F\u3002",
     "status.permissionDenied": "\u5FC5\u8981\u306A\u6A29\u9650\u304C\u8A31\u53EF\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002\u8A2D\u5B9A\u30A2\u30D7\u30EA\u304B\u3089\u5199\u771F\u307E\u305F\u306F\u30DE\u30A4\u30AF\u306E\u6A29\u9650\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "confirm.reset": "\u4FDD\u5B58\u6E08\u307F\u30D7\u30ED\u30D5\u30A3\u30FC\u30EB\u3068\u4F53\u91CD\u8A18\u9332\u3092\u3059\u3079\u3066\u524A\u9664\u3057\u307E\u3059\u3002\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F",
-    "confirm.resetFinal": "\u3053\u306E\u64CD\u4F5C\u306F\u53D6\u308A\u6D88\u305B\u307E\u305B\u3093\u3002\u672C\u5F53\u306B\u5168\u30C7\u30FC\u30BF\u3092\u524A\u9664\u3057\u307E\u3059\u304B\uFF1F",
     "confirm.deleteRecord": "\u3053\u306E\u8A18\u9332\u3092\u524A\u9664\u3057\u307E\u3059\u304B\uFF1F",
     "lang.ja": "\u65E5\u672C\u8A9E",
     "lang.en": "English",
@@ -4850,13 +2289,11 @@ var translations = {
     "quick.lastWeight": "\u524D\u56DE\u306E\u4F53\u91CD",
     "section.records": "\u8A18\u9332\u4E00\u89A7",
     "records.empty": "\u307E\u3060\u8A18\u9332\u304C\u3042\u308A\u307E\u305B\u3093",
-    "records.emptyHint": "\u4F53\u91CD\u3092\u8A18\u9332\u3057\u3066\u3001\u5909\u5316\u3092\u898B\u3048\u308B\u5316\u3057\u307E\u3057\u3087\u3046",
     "records.delete": "\u524A\u9664",
     "records.deleted": "\u8A18\u9332\u3092\u524A\u9664\u3057\u307E\u3057\u305F",
     "records.showAll": "\u3059\u3079\u3066\u8868\u793A",
     "records.showLess": "\u9589\u3058\u308B",
     "records.search": "\u65E5\u4ED8\u30FB\u30E1\u30E2\u30FB\u4F53\u91CD\u3067\u691C\u7D22",
-    "records.searchMinRecords": "\u691C\u7D22\u306F4\u4EF6\u4EE5\u4E0A\u306E\u8A18\u9332\u304C\u3042\u308B\u5834\u5408\u306B\u5229\u7528\u3067\u304D\u307E\u3059",
     "records.searchResult": "{count}\u4EF6\u304C\u30D2\u30C3\u30C8",
     "records.best": "\u6700\u4F4E\u4F53\u91CD\u8A18\u9332",
     "records.highest": "\u6700\u9AD8\u4F53\u91CD\u8A18\u9332",
@@ -4870,8 +2307,7 @@ var translations = {
     "import.csv": "CSV\u30A4\u30F3\u30DD\u30FC\u30C8",
     "import.csv.success": "{count}\u4EF6\u306E\u30C7\u30FC\u30BF\u3092\u30A4\u30F3\u30DD\u30FC\u30C8\u3057\u307E\u3057\u305F",
     "import.csv.errors": "{count}\u4EF6\u306E\u30A8\u30E9\u30FC\u304C\u3042\u308A\u307E\u3057\u305F",
-    "import.csv.empty": "\u30A4\u30F3\u30DD\u30FC\u30C8\u3067\u304D\u308B\u30C7\u30FC\u30BF\u304C\u3042\u308A\u307E\u305B\u3093\u3067\u3057\u305F\u3002CSV\u306B\u306F\u65E5\u4ED8\u3068\u4F53\u91CD\u306E\u5217\u304C\u5FC5\u8981\u3067\u3059\u3002",
-    "import.error": "\u30D5\u30A1\u30A4\u30EB\u306E\u8AAD\u307F\u8FBC\u307F\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002\u5225\u306E\u30D5\u30A1\u30A4\u30EB\u3092\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002",
+    "import.csv.empty": "\u30A4\u30F3\u30DD\u30FC\u30C8\u3067\u304D\u308B\u30C7\u30FC\u30BF\u304C\u3042\u308A\u307E\u305B\u3093\u3067\u3057\u305F",
     "import.csv.confirm": "{count}\u4EF6\u306E\u30C7\u30FC\u30BF\u3092\u30A4\u30F3\u30DD\u30FC\u30C8\u3057\u307E\u3059\u304B\uFF1F\u65E2\u5B58\u306E\u540C\u3058\u65E5\u4ED8\u306E\u30C7\u30FC\u30BF\u306F\u4E0A\u66F8\u304D\u3055\u308C\u307E\u3059\u3002",
     "export.header.date": "\u65E5\u4ED8",
     "export.header.weight": "\u4F53\u91CD (kg)",
@@ -4940,7 +2376,6 @@ var translations = {
     "wdwe.weekday": "\u5E73\u65E5\u5E73\u5747",
     "wdwe.weekend": "\u9031\u672B\u5E73\u5747",
     "wdwe.diff": "\u5DEE",
-    "wdwe.vs": "vs",
     "wdwe.heavier.weekend": "\u9031\u672B\u304C\u3084\u3084\u91CD\u3044\u50BE\u5411",
     "wdwe.heavier.weekday": "\u5E73\u65E5\u304C\u3084\u3084\u91CD\u3044\u50BE\u5411",
     "wdwe.heavier.similar": "\u5E73\u65E5\u30FB\u9031\u672B\u3067\u307B\u307C\u540C\u3058",
@@ -4948,8 +2383,6 @@ var translations = {
     "error.render": "\u63CF\u753B\u30A8\u30E9\u30FC",
     "error.reload": "\u518D\u8AAD\u307F\u8FBC\u307F",
     "error.resetData": "\u30C7\u30FC\u30BF\u30EA\u30BB\u30C3\u30C8",
-    "error.resetConfirm": "\u3059\u3079\u3066\u306E\u30C7\u30FC\u30BF\u3092\u524A\u9664\u3057\u307E\u3059\u304B\uFF1F\u3053\u306E\u64CD\u4F5C\u306F\u53D6\u308A\u6D88\u305B\u307E\u305B\u3093\u3002",
-    "error.storageQuota": "\u30B9\u30C8\u30EC\u30FC\u30B8\u5BB9\u91CF\u304C\u4E0D\u8DB3\u3057\u3066\u3044\u307E\u3059\u3002\u4E0D\u8981\u306A\u30C7\u30FC\u30BF\u3092\u524A\u9664\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     "rainbow.congrats": "\u304A\u3081\u3067\u3068\u3046\uFF01\u4F53\u91CD\u304C\u6E1B\u308A\u307E\u3057\u305F\uFF01",
     "milestone.allTimeLow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01\uFF08-{diff}kg\uFF09",
     "milestone.roundNumber": "{value}kg\u3092\u4E0B\u56DE\u308A\u307E\u3057\u305F\uFF01",
@@ -5030,7 +2463,7 @@ var translations = {
     "motivation.streak3": "3\u65E5\u9023\u7D9A\u8A18\u9332\uFF01\u3053\u306E\u8ABF\u5B50\u3067\u7D9A\u3051\u307E\u3057\u3087\u3046",
     "motivation.streak7": "1\u9031\u9593\u9023\u7D9A\uFF01\u7D20\u6674\u3089\u3057\u3044\u7FD2\u6163\u3067\u3059",
     "motivation.streak14": "2\u9031\u9593\u9023\u7D9A\uFF01\u3042\u306A\u305F\u306E\u52AA\u529B\u306F\u78BA\u5B9F\u306B\u6210\u679C\u306B",
-    "motivation.streak30": "1\u30F6\u6708\u9023\u7D9A\uFF01\u3059\u3054\u3044\u7D99\u7D9A\u529B\u3067\u3059",
+    "motivation.streak30": "1\u30F6\u6708\u9023\u7D9A\uFF01\u5727\u5012\u7684\u306A\u7D99\u7D9A\u529B\u3067\u3059",
     "motivation.trendDown": "\u6E1B\u5C11\u50BE\u5411\u3067\u3059\u3002\u826F\u3044\u8ABF\u5B50\uFF01",
     "motivation.newRecord": "\u65B0\u3057\u3044\u6700\u4F4E\u4F53\u91CD\u3092\u8A18\u9332\uFF01",
     "motivation.goalClose": "\u76EE\u6A19\u307E\u3067\u3042\u3068\u5C11\u3057\uFF01\u9811\u5F35\u308A\u307E\u3057\u3087\u3046",
@@ -5095,7 +2528,7 @@ var translations = {
     "camera.cancel": "\u30AD\u30E3\u30F3\u30BB\u30EB",
     "camera.photo": "\u30D5\u30A9\u30C8\u30E9\u30A4\u30D6\u30E9\u30EA",
     "camera.picture": "\u30AB\u30E1\u30E9",
-    "record.dailyLimit": "1\u65E51\u56DE\u8A18\u9332\u3067\u304D\u307E\u3059\uFF08\u540C\u65E5\u306F\u4E0A\u66F8\u304D\uFF09",
+    "record.dailyLimit": "1\u65E510\u56DE\u307E\u3067\u4F53\u91CD\u3092\u8A18\u9332\u3067\u304D\u307E\u3059\uFF08\u540C\u65E5\u306F\u4E0A\u66F8\u304D\uFF09",
     "entry.note": "\u30E1\u30E2",
     "entry.noteHint": "\u98DF\u4E8B\u30FB\u904B\u52D5\u306A\u3069\uFF08100\u6587\u5B57\u307E\u3067\uFF09",
     "rate.title": "\u9031\u9593\u30DA\u30FC\u30B9",
@@ -5126,7 +2559,6 @@ var translations = {
     "note.tag.stress": "\u30B9\u30C8\u30EC\u30B9",
     "note.tag.sleep": "\u7761\u7720\u4E0D\u8DB3",
     "note.tag.alcohol": "\u98F2\u9152",
-    "records.noMatch": "\u8A72\u5F53\u3059\u308B\u8A18\u9332\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093",
     "records.dateRange": "\u671F\u9593\u3067\u7D5E\u308A\u8FBC\u307F",
     "records.from": "\u958B\u59CB\u65E5",
     "records.to": "\u7D42\u4E86\u65E5",
@@ -5245,7 +2677,7 @@ var translations = {
     "dowChange.title": "\u66DC\u65E5\u5225 \u4F53\u91CD\u5909\u5316",
     "dowChange.best": "\u6700\u3082\u6E1B\u308B\u66DC\u65E5: {day}\uFF08\u5E73\u5747 {avg}kg\uFF09",
     "dowChange.worst": "\u6700\u3082\u5897\u3048\u308B\u66DC\u65E5: {day}\uFF08\u5E73\u5747 +{avg}kg\uFF09",
-    "dowChange.hint": "\u66DC\u65E5\u3054\u3068\u306E\u4F53\u91CD\u5909\u5316\u306E\u5E73\u5747",
+    "dowChange.hint": "\u9023\u7D9A\u3057\u305F\u65E5\u306E\u4F53\u91CD\u5909\u5316\u3092\u66DC\u65E5\u5225\u306B\u96C6\u8A08",
     "pr.title": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u8A18\u9332",
     "pr.allTimeLow": "\u904E\u53BB\u6700\u8EFD\u91CF: {weight}kg\uFF08{date}\uFF09",
     "pr.biggestDrop": "\u6700\u5927\u65E5\u6B21\u6E1B\u5C11: -{drop}kg\uFF08{date}\uFF09",
@@ -5290,522 +2722,16 @@ var translations = {
     "streakReward.master": "\u30DE\u30B9\u30BF\u30FC",
     "streakReward.legend": "\u30EC\u30B8\u30A7\u30F3\u30C9",
     "streakReward.hint": "\u6BCE\u65E5\u8A18\u9332\u3057\u3066\u6B21\u306E\u30D0\u30C3\u30B8\u3092\u76EE\u6307\u305D\u3046\uFF01",
-    "forecast.title": "\u4F53\u91CD\u4E88\u6E2C",
-    "forecast.days": "{days}\u65E5\u5F8C",
-    "forecast.predicted": "{wt}kg",
-    "forecast.range": "{low} ~ {high}kg",
-    "forecast.confidence": "\u4FE1\u983C\u5EA6",
-    "forecast.high": "\u9AD8\u3044",
-    "forecast.medium": "\u4E2D\u7A0B\u5EA6",
-    "forecast.low": "\u4F4E\u3044",
-    "forecast.rate": "\u9031{rate}kg",
-    "forecast.hint": "\u904E\u53BB{n}\u4EF6\u306E\u30C7\u30FC\u30BF\u306B\u57FA\u3065\u304F\u4E88\u6E2C\uFF0895%\u4FE1\u983C\u533A\u9593\uFF09",
-    "progress.title": "\u9032\u6357\u30B5\u30DE\u30EA\u30FC",
-    "progress.period": "{from} \u301C {to}\uFF08{days}\u65E5\u9593\u30FB{count}\u4EF6\uFF09",
-    "progress.firstHalf": "\u524D\u534A\u5E73\u5747",
-    "progress.secondHalf": "\u5F8C\u534A\u5E73\u5747",
-    "progress.change": "\u5909\u5316",
-    "progress.totalChange": "\u5408\u8A08\u5909\u52D5: {change}kg",
-    "progress.improving": "\u6539\u5584\u50BE\u5411\u3067\u3059\uFF01",
-    "progress.gaining": "\u5897\u52A0\u50BE\u5411\u3067\u3059",
-    "progress.stable": "\u5B89\u5B9A\u3057\u3066\u3044\u307E\u3059",
-    "progress.moreStable": "\u5B89\u5B9A\u5EA6\u304C\u5411\u4E0A\u3057\u3066\u3044\u307E\u3059",
-    "progress.lessStable": "\u5909\u52D5\u304C\u5927\u304D\u304F\u306A\u3063\u3066\u3044\u307E\u3059",
-    "timeline.title": "\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3",
-    "timeline.low": "\u6700\u4F4E\u4F53\u91CD\u66F4\u65B0: {wt}kg",
-    "timeline.mark": "{mark}kg\u3092\u7A81\u7834",
-    "timeline.bmi.normal": "BMI\u6A19\u6E96\u30BE\u30FC\u30F3\u306B\u5230\u9054",
-    "timeline.bmi.change": "BMI\u30BE\u30FC\u30F3\u5909\u66F4: {from} \u2192 {to}",
-    "timeline.hint": "\u76F4\u8FD1{count}\u4EF6\u306E\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3",
-    "volatility.title": "\u4F53\u91CD\u5909\u52D5\u6307\u6570",
-    "volatility.overall": "\u5168\u4F53: \xB1{val}kg/\u65E5",
-    "volatility.recent": "\u76F4\u8FD1: \xB1{val}kg/\u65E5",
-    "volatility.max": "\u6700\u5927\u5909\u52D5: {val}kg",
-    "volatility.low": "\u5B89\u5B9A",
-    "volatility.moderate": "\u666E\u901A",
-    "volatility.high": "\u5909\u52D5\u5927",
-    "volatility.increasing": "\u5909\u52D5\u304C\u5897\u52A0\u4E2D",
-    "volatility.decreasing": "\u5909\u52D5\u304C\u6E1B\u5C11\u4E2D",
-    "volatility.stable": "\u5909\u52D5\u306F\u5B89\u5B9A",
-    "volatility.hint": "\u65E5\u3005\u306E\u4F53\u91CD\u5909\u52D5\u306F\u81EA\u7136\u306A\u3053\u3068\u3067\u3059",
-    "compare.title": "\u671F\u9593\u6BD4\u8F03",
-    "compare.weekly": "\u9031\u9593\u6BD4\u8F03",
-    "compare.monthly": "\u6708\u9593\u6BD4\u8F03",
-    "compare.thisWeek": "\u4ECA\u9031",
-    "compare.lastWeek": "\u5148\u9031",
-    "compare.thisMonth": "\u4ECA\u6708",
-    "compare.lastMonth": "\u5148\u6708",
-    "compare.avg": "\u5E73\u5747: {val}kg",
-    "compare.diff": "\u5DEE: {val}kg",
-    "compare.noData": "\u30C7\u30FC\u30BF\u4E0D\u8DB3",
-    "compare.records": "{n}\u4EF6",
-    "countdown.title": "\u76EE\u6A19\u30AB\u30A6\u30F3\u30C8\u30C0\u30A6\u30F3",
-    "countdown.remaining": "\u3042\u3068{val}kg",
-    "countdown.reached": "\u76EE\u6A19\u9054\u6210\uFF01\u304A\u3081\u3067\u3068\u3046\u3054\u3056\u3044\u307E\u3059\uFF01",
-    "countdown.eta": "\u4E88\u60F3\u5230\u9054\u65E5: \u7D04{days}\u65E5\u5F8C",
-    "countdown.noEta": "\u30C8\u30EC\u30F3\u30C9\u30C7\u30FC\u30BF\u4E0D\u8DB3",
-    "countdown.pct": "\u9054\u6210\u7387: {pct}%",
-    "countdown.current": "\u73FE\u5728: {wt}kg \u2192 \u76EE\u6A19: {goal}kg",
-    "bodyComp.title": "\u4F53\u7D44\u6210\u5206\u6790",
-    "bodyComp.bf": "\u4F53\u8102\u80AA\u7387: {first}% \u2192 {latest}% ({change}%)",
-    "bodyComp.fatMass": "\u8102\u80AA\u91CF: {change}kg",
-    "bodyComp.leanMass": "\u9664\u8102\u80AA\u91CF: {change}kg",
-    "bodyComp.fatLoss": "\u8102\u80AA\u304C\u6E1B\u5C11\u4E2D",
-    "bodyComp.muscleGain": "\u7B4B\u8089\u304C\u5897\u52A0\u4E2D",
-    "bodyComp.recomp": "\u4F53\u7D44\u6210\u6539\u5584\u4E2D\uFF08\u30EA\u30B3\u30F3\u30D7\uFF09",
-    "bodyComp.decline": "\u6CE8\u610F\u304C\u5FC5\u8981\u3067\u3059",
-    "bodyComp.mixed": "\u5909\u52D5\u4E2D",
-    "bodyComp.hint": "{n}\u4EF6\u306E\u4F53\u8102\u80AA\u30C7\u30FC\u30BF\u306B\u57FA\u3065\u304F\u5206\u6790",
-    "share.title": "\u30B5\u30DE\u30EA\u30FC\u5171\u6709",
-    "share.btn": "\u30C6\u30AD\u30B9\u30C8\u3092\u30B3\u30D4\u30FC",
-    "share.copied": "\u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F\uFF01",
-    "share.period": "\u671F\u9593: {from} \u301C {to}\uFF08{days}\u65E5\u9593\uFF09",
-    "share.weight": "\u4F53\u91CD: {first}kg \u2192 {latest}kg\uFF08{change}kg\uFF09",
-    "share.range": "\u7BC4\u56F2: {min}kg \u301C {max}kg\uFF08\u5E73\u5747 {avg}kg\uFF09",
-    "share.bmi": "BMI: {bmi}\uFF08{zone}\uFF09",
-    "share.records": "\u8A18\u9332\u6570: {n}\u4EF6",
-    "share.footer": "\u2014 Rainbow\u4F53\u91CD\u7BA1\u7406\u3067\u8A18\u9332",
-    "quickNote.label": "\u3088\u304F\u4F7F\u3046\u30E1\u30E2",
-    "quickNote.none": "\u30E1\u30E2\u5C65\u6B74\u306A\u3057",
-    "dupes.title": "\u30C7\u30FC\u30BF\u54C1\u8CEA\u30C1\u30A7\u30C3\u30AF",
-    "dupes.duplicate": "{date}: {count}\u4EF6\u306E\u91CD\u8907\u8A18\u9332",
-    "dupes.suspicious": "{weight}kg\u304C{count}\u65E5\u9593\u9023\u7D9A\uFF08{from}\u301C{to}\uFF09",
-    "dupes.clean": "\u554F\u984C\u306A\u3057",
-    "validate.largeDiff": "\u524D\u56DE\uFF08{previous}kg\u3001{date}\uFF09\u304B\u3089{diff}kg\u4EE5\u4E0A\u306E\u5909\u52D5\u3067\u3059\u3002\u5165\u529B\u5024\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
-    "validate.outsideRange": "\u5165\u529B\u5024\u304C\u904E\u53BB\u306E\u8A18\u9332\u7BC4\u56F2\uFF08{min}\u301C{max}kg\uFF09\u3092\u5927\u304D\u304F\u8D85\u3048\u3066\u3044\u307E\u3059\u3002",
-    "validate.goalWeight": "\u76EE\u6A19\u4F53\u91CD\u306F20\u301C300kg\u306E\u7BC4\u56F2\u3067\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
-    "validate.title": "\u5165\u529B\u78BA\u8A8D",
-    "weeklyAvg.title": "\u9031\u9593\u5E73\u5747\u63A8\u79FB",
-    "weeklyAvg.week": "{start}\u301C",
-    "weeklyAvg.avg": "\u5E73\u5747 {avg}kg",
-    "weeklyAvg.noData": "\u30C7\u30FC\u30BF\u306A\u3057",
-    "weeklyAvg.count": "{count}\u4EF6",
-    "weeklyAvg.change": "\u5148\u9031\u6BD4 {change}kg",
-    "recCal.title": "\u4ECA\u6708\u306E\u8A18\u9332\u30AB\u30EC\u30F3\u30C0\u30FC",
-    "recCal.rate": "\u8A18\u9332\u7387 {rate}%\uFF08{count}/{total}\u65E5\uFF09",
-    "recCal.sun": "\u65E5",
-    "recCal.mon": "\u6708",
-    "recCal.tue": "\u706B",
-    "recCal.wed": "\u6C34",
-    "recCal.thu": "\u6728",
-    "recCal.fri": "\u91D1",
-    "recCal.sat": "\u571F",
-    "trend.stable": "\u5B89\u5B9A\u3057\u3066\u3044\u307E\u3059",
-    "trend.recent": "\u76F4\u8FD13\u56DE\u5E73\u5747 {avg}kg",
-    "tagStats.title": "\u30BF\u30B0\u4F7F\u7528\u72B6\u6CC1",
-    "tagStats.count": "{count}\u56DE\uFF08{pct}%\uFF09",
-    "tagStats.avgChange": "\u5E73\u5747\u5909\u52D5 {change}kg",
-    "tagStats.none": "\u30BF\u30B0\u4ED8\u304D\u8A18\u9332\u304C\u3042\u308A\u307E\u305B\u3093",
-    "ideal.title": "\u9069\u6B63\u4F53\u91CD\u30EC\u30F3\u30B8",
-    "ideal.range": "{min}\u301C{max}kg\uFF08BMI 18.5\u301C24.9\uFF09",
-    "ideal.current": "\u73FE\u5728 {weight}kg\uFF08BMI {bmi}\uFF09",
-    "ideal.center": "\u6A19\u6E96\u4E2D\u592E {mid}kg\uFF08BMI 22\uFF09",
-    "ideal.underweight": "\u4F4E\u4F53\u91CD\u57DF",
-    "ideal.normal": "\u6A19\u6E96\u57DF",
-    "ideal.overweight": "\u904E\u4F53\u91CD\u57DF",
-    "ideal.obese": "\u80A5\u6E80\u57DF",
-    "fresh.today": "\u4ECA\u65E5\u306E\u8A18\u9332\u6E08\u307F",
-    "fresh.recent": "{days}\u65E5\u524D\u306B\u8A18\u9332\uFF08{weight}kg\uFF09",
-    "fresh.stale": "{days}\u65E5\u9593\u672A\u8A18\u9332\u3067\u3059\u3002\u4ECA\u65E5\u306E\u4F53\u91CD\u3092\u8A18\u9332\u3057\u307E\u3057\u3087\u3046\uFF01",
-    "fresh.veryStale": "{days}\u65E5\u9593\u672A\u8A18\u9332\u3067\u3059\u3002\u8A18\u9332\u3092\u518D\u958B\u3057\u307E\u3057\u3087\u3046\uFF01",
-    "multiRate.title": "\u671F\u9593\u5225\u5909\u5316\u30DA\u30FC\u30B9",
-    "multiRate.days": "\u904E\u53BB{days}\u65E5",
-    "multiRate.change": "{change}kg",
-    "multiRate.weekly": "\u9031\u3042\u305F\u308A {rate}kg",
-    "multiRate.noData": "\u2014",
-    "milestone.reached": "{count}\u56DE\u76EE\u306E\u8A18\u9332\u9054\u6210\uFF01",
-    "milestone.next": "\u6B21\u306E\u76EE\u6A19: {next}\u56DE\uFF08\u3042\u3068{remaining}\u56DE\uFF09",
-    "ai.title": "AI\u30B3\u30FC\u30C1",
-    "ai.subtitle": "\u3042\u306A\u305F\u306E\u30C7\u30FC\u30BF\u3092\u5206\u6790\u3057\u3001\u30D1\u30FC\u30BD\u30CA\u30E9\u30A4\u30BA\u3055\u308C\u305F\u30A2\u30C9\u30D0\u30A4\u30B9\u3092\u63D0\u4F9B\u3057\u307E\u3059",
-    "ai.score": "\u7DCF\u5408\u30B9\u30B3\u30A2",
-    "ai.grade.excellent": "\u7D20\u6674\u3089\u3057\u3044\uFF01",
-    "ai.grade.good": "\u826F\u3044\u8ABF\u5B50",
-    "ai.grade.fair": "\u307E\u305A\u307E\u305A",
-    "ai.grade.needsWork": "\u6539\u5584\u306E\u4F59\u5730\u3042\u308A",
-    "ai.grade.critical": "\u8981\u6CE8\u610F",
-    "ai.grade.new": "\u30C7\u30FC\u30BF\u53CE\u96C6\u4E2D",
-    "ai.weeklyReport": "\u4ECA\u9031\u306E\u30EC\u30DD\u30FC\u30C8",
-    "ai.weeklyAvg": "\u4ECA\u9031\u306E\u5E73\u5747",
-    "ai.weeklyChange": "\u5148\u9031\u6BD4",
-    "ai.weeklyRange": "\u5909\u52D5\u5E45",
-    "ai.weeklyEntries": "\u8A18\u9332\u56DE\u6570",
-    "ai.highlights": "\u30CF\u30A4\u30E9\u30A4\u30C8",
-    "ai.risks": "\u6CE8\u610F\u30DD\u30A4\u30F3\u30C8",
-    "ai.advice": "\u30A2\u30C9\u30D0\u30A4\u30B9",
-    "ai.highlight.trendMatchGoal": "\u{1F4C8} \u30C8\u30EC\u30F3\u30C9\u304C\u76EE\u6A19\u306B\u5411\u304B\u3063\u3066\u3044\u307E\u3059\uFF01\u3053\u306E\u8ABF\u5B50\u3092\u7DAD\u6301\u3057\u307E\u3057\u3087\u3046",
-    "ai.highlight.healthyPace": "\u26A1 \u5065\u5EB7\u7684\u306A\u30DA\u30FC\u30B9\u3067\u6E1B\u91CF\u3067\u304D\u3066\u3044\u307E\u3059\uFF08\u90310.2\u301C0.7kg\uFF09",
-    "ai.highlight.greatStreak": "\u{1F525} 2\u9031\u9593\u4EE5\u4E0A\u9023\u7D9A\u8A18\u9332\u4E2D\uFF01\u7D20\u6674\u3089\u3057\u3044\u7FD2\u6163\u3067\u3059",
-    "ai.highlight.goodStreak": "\u2728 1\u9031\u9593\u4EE5\u4E0A\u9023\u7D9A\u8A18\u9332\u4E2D\uFF01\u826F\u3044\u8ABF\u5B50\u3067\u3059",
-    "ai.highlight.stableWeight": "\u2696\uFE0F \u4F53\u91CD\u304C\u5B89\u5B9A\u3057\u3066\u3044\u307E\u3059\u3002\u826F\u3044\u30B3\u30F3\u30C8\u30ED\u30FC\u30EB\u3067\u3059",
-    "ai.highlight.nearGoal": "\u{1F3AF} \u76EE\u6A19\u4F53\u91CD\u307E\u3067\u3042\u3068\u5C11\u3057\uFF01\u30B4\u30FC\u30EB\u304C\u898B\u3048\u3066\u3044\u307E\u3059",
-    "ai.highlight.goalSoon": "\u{1F3C1} \u3042\u30681\u30F6\u6708\u4EE5\u5185\u306B\u76EE\u6A19\u9054\u6210\u306E\u898B\u8FBC\u307F\u3067\u3059",
-    "ai.risk.trendAgainstGoal": "\u26A0\uFE0F \u73FE\u5728\u306E\u30C8\u30EC\u30F3\u30C9\u306F\u76EE\u6A19\u3068\u9006\u65B9\u5411\u3067\u3059",
-    "ai.risk.flatTrend": "\u{1F4C8} \u4F53\u91CD\u304C\u6A2A\u3070\u3044\u3067\u3059\u3002\u76EE\u6A19\u306B\u5411\u3051\u3066\u98DF\u4E8B\u3084\u904B\u52D5\u3092\u898B\u76F4\u3057\u307E\u3057\u3087\u3046",
-    "ai.risk.rapidChange": "\u26A0\uFE0F \u4F53\u91CD\u5909\u52D5\u304C\u6025\u6FC0\u3067\u3059\uFF08\u90311kg\u4EE5\u4E0A\uFF09",
-    "ai.risk.inconsistent": "\u{1F4DD} \u8A18\u9332\u306E\u983B\u5EA6\u304C\u4F4E\u4E0B\u3057\u3066\u3044\u307E\u3059",
-    "ai.risk.highVolatility": "\u{1F4CA} \u4F53\u91CD\u306E\u5909\u52D5\u304C\u5927\u304D\u3044\u3067\u3059",
-    "ai.risk.plateau": "\u{1F504} \u505C\u6EDE\u671F\u306B\u5165\u3063\u3066\u3044\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059",
-    "ai.advice.start": "\u{1F31F} \u307E\u305A\u306F\u6BCE\u65E5\u306E\u8A18\u9332\u3092\u7FD2\u6163\u306B\u3057\u307E\u3057\u3087\u3046\u30023\u65E5\u9593\u306E\u9023\u7D9A\u8A18\u9332\u3092\u76EE\u6307\u3057\u3066\u304F\u3060\u3055\u3044",
-    "ai.advice.slowDown": "\u{1F422} \u5909\u52D5\u30DA\u30FC\u30B9\u304C\u901F\u3059\u304E\u307E\u3059\u3002\u6025\u306A\u5909\u5316\u306F\u4F53\u306B\u8CA0\u62C5\u304C\u304B\u304B\u308B\u305F\u3081\u3001\u3086\u3063\u304F\u308A\u9032\u3081\u307E\u3057\u3087\u3046",
-    "ai.advice.buildHabit": "\u{1F4C5} \u6BCE\u65E5\u540C\u3058\u6642\u9593\u306B\u6E2C\u5B9A\u3059\u308B\u7FD2\u6163\u3092\u3064\u3051\u308B\u3068\u3001\u3088\u308A\u6B63\u78BA\u306A\u30C7\u30FC\u30BF\u304C\u5F97\u3089\u308C\u307E\u3059",
-    "ai.advice.stabilize": "\u{1F3AF} \u98DF\u4E8B\u3084\u904B\u52D5\u306E\u30D1\u30BF\u30FC\u30F3\u3092\u4E00\u5B9A\u306B\u4FDD\u3064\u3053\u3068\u3067\u3001\u4F53\u91CD\u306E\u5909\u52D5\u3092\u6291\u3048\u3089\u308C\u307E\u3059",
-    "ai.advice.breakPlateau": "\u{1F4AA} \u505C\u6EDE\u671F\u3092\u6253\u7834\u3059\u308B\u306B\u306F\u3001\u904B\u52D5\u5185\u5BB9\u3084\u98DF\u4E8B\u3092\u5C11\u3057\u5909\u3048\u3066\u307F\u307E\u3057\u3087\u3046",
-    "ai.advice.underweight": "\u{1F34E} BMI\u304C\u4F4E\u3081\u3067\u3059\u3002\u6804\u990A\u30D0\u30E9\u30F3\u30B9\u3092\u610F\u8B58\u3057\u3066\u3001\u5065\u5EB7\u7684\u306B\u4F53\u91CD\u3092\u5897\u3084\u3057\u307E\u3057\u3087\u3046",
-    "ai.advice.obeseRange": "\u{1F957} BMI\u304C\u9AD8\u3081\u3067\u3059\u3002\u307E\u305A\u306F\u90310.5kg\u306E\u6E1B\u91CF\u3092\u76EE\u6A19\u306B\u3001\u7121\u7406\u306E\u306A\u3044\u30DA\u30FC\u30B9\u3067\u53D6\u308A\u7D44\u307F\u307E\u3057\u3087\u3046",
-    "ai.advice.weekendPattern": "\u{1F4CA} \u66DC\u65E5\u306B\u3088\u308B\u4F53\u91CD\u5DEE\u304C\u5927\u304D\u3044\u3067\u3059\u3002\u9031\u672B\u306E\u98DF\u751F\u6D3B\u3092\u898B\u76F4\u3059\u3068\u826F\u3044\u304B\u3082\u3057\u308C\u307E\u305B\u3093",
-    "ai.prediction.title": "AI\u4E88\u6E2C",
-    "ai.prediction.goalDays": "\u76EE\u6A19\u5230\u9054\u307E\u3067\u7D04{days}\u65E5",
-    "ai.prediction.goalDate": "\u4E88\u60F3\u9054\u6210\u65E5: {date}",
-    "ai.prediction.achieved": "\u{1F389} \u76EE\u6A19\u9054\u6210\u6E08\u307F\uFF01",
-    "ai.prediction.noTrend": "\u30C8\u30EC\u30F3\u30C9\u30C7\u30FC\u30BF\u304C\u4E0D\u8DB3\u3057\u3066\u3044\u307E\u3059",
-    "ai.prediction.insufficient": "\u73FE\u5728\u306E\u30DA\u30FC\u30B9\u3067\u306F\u76EE\u6A19\u9054\u6210\u304C\u96E3\u3057\u3044\u3067\u3059\u3002\u30DA\u30FC\u30B9\u3092\u898B\u76F4\u3057\u307E\u3057\u3087\u3046",
-    "dash.weight": "\u6700\u65B0\u4F53\u91CD",
-    "dash.change": "\u524D\u56DE\u6BD4",
-    "dash.bmi": "BMI",
-    "dash.streak": "\u9023\u7D9A\u8A18\u9332",
-    "dash.days": "{n}\u65E5",
-    "dash.noRecord": "\u672A\u8A18\u9332",
-    "recent.title": "\u76F4\u8FD1\u306E\u8A18\u9332",
-    "monthAvg.title": "\u6708\u5225\u5E73\u5747\u4F53\u91CD",
-    "monthAvg.noData": "\u30C7\u30FC\u30BF\u306A\u3057",
-    "monthAvg.label": "{m}\u6708",
-    "ltp.title": "\u9577\u671F\u30D7\u30ED\u30B0\u30EC\u30B9",
-    "ltp.1m": "1\u30F6\u6708\u524D",
-    "ltp.3m": "3\u30F6\u6708\u524D",
-    "ltp.6m": "6\u30F6\u6708\u524D",
-    "ltp.1y": "1\u5E74\u524D",
-    "ltp.all": "\u958B\u59CB\u6642",
-    "fluct.title": "\u4F53\u91CD\u5909\u52D5\u5E45",
-    "fluct.7d": "\u76F4\u8FD17\u65E5",
-    "fluct.30d": "\u76F4\u8FD130\u65E5",
-    "fluct.range": "\u5E45",
-    "anomaly.title": "\u7570\u5E38\u5024\u691C\u51FA",
-    "anomaly.entry": "{date}\u306E\u8A18\u9332 {wt}kg\uFF08\u4E88\u6E2C: {expected}kg\u3001\u5DEE: {diff}kg\uFF09",
-    "anomaly.hint": "\u5165\u529B\u30DF\u30B9\u306E\u53EF\u80FD\u6027\u304C\u3042\u308B\u30C7\u30FC\u30BF\u3067\u3059",
-    "success.title": "\u6210\u529F\u7387",
-    "success.rate": "\u6E1B\u5C11\u30FB\u7DAD\u6301\u3057\u305F\u5272\u5408",
-    "success.recent": "\u76F4\u8FD130\u56DE",
-    "success.down": "\u6E1B\u5C11",
-    "success.same": "\u7DAD\u6301",
-    "success.up": "\u5897\u52A0",
-    "recRate.title": "\u8A18\u9332\u7387",
-    "recRate.summary": "{recorded}\u65E5 / {total}\u65E5",
-    "recRate.weeks": "\u76F4\u8FD14\u9031\u9593",
-    "msHist.title": "\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3\u5C65\u6B74",
-    "msHist.reached": "{kg}kg\u9054\u6210 \u2014 {date}\uFF08{days}\u65E5\u76EE\uFF09",
-    "msHist.down": "\u6E1B\u91CF\u306E\u8ECC\u8DE1",
-    "msHist.up": "\u5897\u91CF\u306E\u8ECC\u8DE1",
-    "journey.title": "\u4F53\u91CD\u30B8\u30E3\u30FC\u30CB\u30FC",
-    "journey.loss": "\u6E1B\u91CF\u671F",
-    "journey.gain": "\u5897\u91CF\u671F",
-    "journey.maintain": "\u7DAD\u6301\u671F",
-    "journey.total": "\u5168\u4F53\u5909\u5316",
-    "scroll.top": "\u30C8\u30C3\u30D7\u3078\u623B\u308B",
-    "scenario.title": "\u76EE\u6A19\u9054\u6210\u30B7\u30CA\u30EA\u30AA",
-    "scenario.gentle": "\u3086\u308B\u3084\u304B",
-    "scenario.moderate": "\u6A19\u6E96",
-    "scenario.aggressive": "\u7A4D\u6975\u7684",
-    "scenario.weeks": "{weeks}\u9031\u9593",
-    "scenario.perWeek": "/\u9031",
-    "a11y.skipToEntry": "\u5165\u529B\u30D5\u30A9\u30FC\u30E0\u3078\u30B9\u30AD\u30C3\u30D7",
-    "streakCal.title": "\u8A18\u9332\u30AB\u30EC\u30F3\u30C0\u30FC\uFF0812\u9031\u9593\uFF09",
-    "streakCal.summary": "{recorded}\u65E5 / {total}\u65E5 \u8A18\u9332\u6E08\u307F",
-    "cross.title": "\u30C8\u30EC\u30F3\u30C9\u8EE2\u63DB\u30B7\u30B0\u30CA\u30EB",
-    "cross.current": "\u73FE\u5728\u306E\u30C8\u30EC\u30F3\u30C9",
-    "cross.uptrend": "\u4E0A\u6607\u50BE\u5411\uFF08\u77ED\u671FMA > \u9577\u671FMA\uFF09",
-    "cross.downtrend": "\u4E0B\u964D\u50BE\u5411\uFF08\u77ED\u671FMA < \u9577\u671FMA\uFF09",
-    "cross.neutral": "\u6A2A\u3070\u3044",
-    "cross.shortMA": "7\u65E5\u79FB\u52D5\u5E73\u5747",
-    "cross.longMA": "30\u65E5\u79FB\u52D5\u5E73\u5747",
-    "cross.golden": "\u30B4\u30FC\u30EB\u30C7\u30F3\u30AF\u30ED\u30B9\uFF08\u4E0B\u964D\u8EE2\u63DB\uFF09",
-    "cross.death": "\u30C7\u30C3\u30C9\u30AF\u30ED\u30B9\uFF08\u4E0A\u6607\u8EE2\u63DB\uFF09",
-    "cross.nodata": "30\u4EF6\u4EE5\u4E0A\u306E\u8A18\u9332\u304C\u5FC5\u8981\u3067\u3059",
-    "cross.none": "\u8EE2\u63DB\u30B7\u30B0\u30CA\u30EB\u306A\u3057",
-    "pred.title": "\u4E88\u6E2C\u7CBE\u5EA6",
-    "pred.accuracy": "\u7684\u4E2D\u7387\uFF08\xB10.5kg\u4EE5\u5185\uFF09",
-    "pred.avgError": "\u5E73\u5747\u8AA4\u5DEE",
-    "pred.excellent": "\u512A\u79C0",
-    "pred.good": "\u826F\u597D",
-    "pred.fair": "\u666E\u901A",
-    "pred.poor": "\u8981\u6539\u5584",
-    "pred.nodata": "14\u4EF6\u4EE5\u4E0A\u306E\u8A18\u9332\u304C\u5FC5\u8981\u3067\u3059",
-    "pred.recent": "\u6700\u8FD1\u306E\u4E88\u6E2C",
-    "pred.predicted": "\u4E88\u6E2C",
-    "pred.actual": "\u5B9F\u6E2C",
-    "cscore.title": "\u7D99\u7D9A\u30B9\u30B3\u30A2",
-    "cscore.recording": "\u8A18\u9332\u306E\u898F\u5247\u6027",
-    "cscore.stability": "\u4F53\u91CD\u306E\u5B89\u5B9A\u6027",
-    "cscore.momentum": "\u76EE\u6A19\u3078\u306E\u9032\u6357",
-    "cscore.grade": "\u7DCF\u5408\u8A55\u4FA1",
-    "cscore.nodata": "7\u4EF6\u4EE5\u4E0A\u306E\u8A18\u9332\u304C\u5FC5\u8981\u3067\u3059",
-    "wrange.title": "\u4F53\u91CD\u30EC\u30F3\u30B8",
-    "wrange.min": "\u6700\u5C0F",
-    "wrange.max": "\u6700\u5927",
-    "wrange.range": "\u5E45",
-    "wrange.avg": "\u5E73\u5747",
-    "wrange.7d": "7\u65E5",
-    "wrange.30d": "30\u65E5",
-    "wrange.90d": "90\u65E5",
-    "wrange.all": "\u5168\u671F\u9593",
-    "tstreak.title": "\u30C8\u30EC\u30F3\u30C9\u9023\u7D9A\u8A18\u9332",
-    "tstreak.down": "\u{1F4C9} {count}\u56DE\u9023\u7D9A\u3067\u6E1B\u5C11\u4E2D",
-    "tstreak.up": "\u{1F4C8} {count}\u56DE\u9023\u7D9A\u3067\u5897\u52A0\u4E2D",
-    "tstreak.flat": "\u27A1\uFE0F {count}\u56DE\u9023\u7D9A\u3067\u6A2A\u3070\u3044",
-    "tstreak.change": "\u5909\u52D5",
-    "tstreak.period": "\u671F\u9593",
-    "bmiTrend.title": "BMI\u63A8\u79FB",
-    "bmiTrend.current": "\u73FE\u5728",
-    "bmiTrend.change": "\u5909\u5316",
-    "bmiTrend.range": "\u7BC4\u56F2",
-    "bmiTrend.down": "\u6539\u5584\u50BE\u5411",
-    "bmiTrend.up": "\u4E0A\u6607\u50BE\u5411",
-    "bmiTrend.neutral": "\u5B89\u5B9A",
-    "bmiTrend.nodata": "BMI\u30C7\u30FC\u30BF\u304C\u4E0D\u8DB3\u3057\u3066\u3044\u307E\u3059",
-    "wcomp.title": "\u4ECA\u9031 vs \u5148\u9031",
-    "wcomp.thisWeek": "\u4ECA\u9031",
-    "wcomp.lastWeek": "\u5148\u9031",
-    "wcomp.diff": "\u5DEE\u5206",
-    "wcomp.avg": "\u5E73\u5747",
-    "wcomp.min": "\u6700\u5C0F",
-    "wcomp.max": "\u6700\u5927",
-    "wcomp.count": "\u8A18\u9332\u6570",
-    "wcomp.nodata": "\u4E21\u9031\u306E\u30C7\u30FC\u30BF\u304C\u5FC5\u8981\u3067\u3059",
-    "gring.title": "\u76EE\u6A19\u30D7\u30ED\u30B0\u30EC\u30B9",
-    "gring.lost": "\u9054\u6210\u6E08\u307F",
-    "gring.remaining": "\u6B8B\u308A",
-    "gring.rate": "\u9031\u9593\u30DA\u30FC\u30B9",
-    "gring.eta": "\u63A8\u5B9A {weeks}\u9031\u9593\u5F8C",
-    "gring.onTrack": "\u9806\u8ABF",
-    "gring.offTrack": "\u30DA\u30FC\u30B9\u898B\u76F4\u3057",
-    "gring.done": "\u76EE\u6A19\u9054\u6210\uFF01",
-    "bfTrend.title": "\u4F53\u8102\u80AA\u7387\u63A8\u79FB",
-    "bfTrend.current": "\u73FE\u5728",
-    "bfTrend.change": "\u5909\u5316",
-    "bfTrend.avg": "\u5E73\u5747",
-    "bfTrend.range": "\u7BC4\u56F2",
-    "bfTrend.down": "\u6E1B\u5C11\u50BE\u5411",
-    "bfTrend.up": "\u5897\u52A0\u50BE\u5411",
-    "bfTrend.neutral": "\u5B89\u5B9A",
-    "bfTrend.nodata": "\u4F53\u8102\u80AA\u30C7\u30FC\u30BF\u304C\u4E0D\u8DB3\u3057\u3066\u3044\u307E\u3059",
-    "dtarget.title": "\u4ECA\u65E5\u306E\u76EE\u6A19\u4F53\u91CD",
-    "dtarget.target": "\u76EE\u6A19",
-    "dtarget.current": "\u73FE\u5728",
-    "dtarget.above": "\u76EE\u6A19\u3088\u308A {diff}kg \u4E0A",
-    "dtarget.below": "\u76EE\u6A19\u3088\u308A {diff}kg \u4E0B",
-    "dtarget.onTarget": "\u76EE\u6A19\u901A\u308A\uFF01",
-    "dtarget.pace": "\u9031 {pace}kg \u30DA\u30FC\u30B9",
-    "mphase.title": "\u6708\u5185\u30D1\u30BF\u30FC\u30F3",
-    "mphase.early": "\u4E0A\u65EC (1-7\u65E5)",
-    "mphase.mid": "\u4E2D\u65EC (8-14\u65E5)",
-    "mphase.late": "\u4E0B\u65EC (15-21\u65E5)",
-    "mphase.end": "\u6708\u672B (22-31\u65E5)",
-    "mphase.avg": "\u5E73\u5747",
-    "mphase.change": "\u5DEE",
-    "mphase.pattern": "\u6708\u5185\u306E\u5909\u52D5\u30D1\u30BF\u30FC\u30F3\u3042\u308A",
-    "mphase.noPattern": "\u5B89\u5B9A\u3057\u305F\u6708\u5185\u63A8\u79FB",
-    "mphase.records": "\u4EF6",
-    "sfreeze.title": "\u30B9\u30C8\u30EA\u30FC\u30AF\u30D5\u30EA\u30FC\u30BA",
-    "sfreeze.earned": "\u7372\u5F97\u6E08\u307F",
-    "sfreeze.used": "\u4F7F\u7528\u6E08\u307F",
-    "sfreeze.available": "\u5229\u7528\u53EF\u80FD",
-    "sfreeze.current": "\u73FE\u5728\u306E\u9023\u7D9A\u8A18\u9332",
-    "sfreeze.longest": "\u6700\u9577\u9023\u7D9A\u8A18\u9332",
-    "sfreeze.days": "\u65E5",
-    "sfreeze.info": "7\u65E5\u9023\u7D9A\u8A18\u9332\u30671\u56DE\u5206\u306E\u30D5\u30EA\u30FC\u30BA\u3092\u7372\u5F97",
-    "rbars.title": "\u6700\u8FD1\u306E\u4F53\u91CD\u63A8\u79FB",
-    "rbars.goal": "\u76EE\u6A19",
-    "anniv.title": "\u8A18\u9332\u306E\u6B69\u307F",
-    "anniv.tracking": "\u8A18\u9332\u958B\u59CB\u304B\u3089 {days}\u65E5\u76EE",
-    "anniv.start": "\u958B\u59CB\u6642",
-    "anniv.total": "\u5408\u8A08\u5909\u5316",
-    "anniv.1week": "1\u9031\u9593",
-    "anniv.1month": "1\u30F6\u6708",
-    "anniv.3months": "3\u30F6\u6708",
-    "anniv.6months": "\u534A\u5E74",
-    "anniv.1year": "1\u5E74",
-    "anniv.2years": "2\u5E74",
-    "anniv.reached": "\u9054\u6210",
-    "anniv.upcoming": "\u307E\u3082\u306A\u304F",
-    "tfc.title": "\u4F53\u91CD\u4E88\u6E2C\uFF0814\u65E5\u9593\uFF09",
-    "tfc.trend": "\u50BE\u5411",
-    "tfc.perWeek": "\u9031\u3042\u305F\u308A",
-    "tfc.in7days": "7\u65E5\u5F8C",
-    "tfc.in14days": "14\u65E5\u5F8C",
-    "tfc.losing": "\u6E1B\u5C11\u4E2D",
-    "tfc.gaining": "\u5897\u52A0\u4E2D",
-    "tfc.stable": "\u5B89\u5B9A",
-    "cdist.title": "\u65E5\u3005\u306E\u5909\u52D5\u5206\u5E03",
-    "cdist.avg": "\u5E73\u5747\u5909\u52D5",
-    "cdist.median": "\u4E2D\u592E\u5024",
-    "cdist.normal": "\u901A\u5E38\u7BC4\u56F2",
-    "cdist.to": "\u301C",
-    "gstreak.title": "\u76EE\u6A19\u9023\u7D9A\u8A18\u9332",
-    "gstreak.days": "\u65E5\u9023\u7D9A\u3067\u76EE\u6A19\u306B\u8FD1\u3065\u3044\u3066\u3044\u307E\u3059",
-    "gstreak.dist": "\u76EE\u6A19\u307E\u3067",
-    "gstreak.closest": "\u6700\u63A5\u8FD1",
-    "gstreak.achieved": "\u76EE\u6A19\u9054\u6210\u4E2D\uFF01",
-    "tvn.title": "\u30D3\u30D5\u30A9\u30FC\uFF06\u30A2\u30D5\u30BF\u30FC",
-    "tvn.then": "\u6700\u521D\u306E7\u65E5",
-    "tvn.now": "\u76F4\u8FD1\u306E7\u65E5",
-    "tvn.avg": "\u5E73\u5747",
-    "tvn.range": "\u7BC4\u56F2",
-    "tvn.change": "\u5909\u5316",
-    "preset.last": "\u524D\u56DE",
-    "preset.avg3": "3\u65E5\u5E73\u5747",
-    "preset.trend": "\u4E88\u6E2C",
-    "rcomp.title": "\u8A18\u9332\u306E\u5145\u5B9F\u5EA6",
-    "rcomp.total": "\u7DCF\u8A18\u9332\u6570",
-    "rcomp.bodyFat": "\u4F53\u8102\u80AA\u7387\u3042\u308A",
-    "rcomp.note": "\u30E1\u30E2\u3042\u308A",
-    "rcomp.tag": "\u30BF\u30B0\u3042\u308A",
-    "rcomp.level.excellent": "\u7D20\u6674\u3089\u3057\u3044\uFF01",
-    "rcomp.level.good": "\u826F\u3044\u8A18\u9332\u3067\u3059",
-    "rcomp.level.fair": "\u307E\u305A\u307E\u305A",
-    "rcomp.level.basic": "\u3082\u3063\u3068\u8A73\u3057\u304F\u8A18\u9332\u3057\u3088\u3046",
-    "rcomp.tip": "\u4F53\u8102\u80AA\u7387\u3084\u30E1\u30E2\u3092\u8FFD\u52A0\u3059\u308B\u3068\u3001\u3088\u308A\u8A73\u7D30\u306A\u5206\u6790\u304C\u3067\u304D\u307E\u3059",
-    "wpace.title": "\u5909\u5316\u30DA\u30FC\u30B9",
-    "wpace.weekly": "\u9031",
-    "wpace.healthy": "\u5065\u5EB7\u7684\u306A\u30DA\u30FC\u30B9",
-    "wpace.too_fast": "\u901F\u3059\u304E",
-    "wpace.healthy_pace": "\u5065\u5EB7\u7684",
-    "wpace.too_slow": "\u3086\u3063\u304F\u308A",
-    "wpace.maintaining": "\u7DAD\u6301\u4E2D",
-    "wpace.range": "\u63A8\u5968: {min}\u301C{max} kg/\u9031",
-    "wsm.title": "\u6E2C\u5B9A\u306E\u5B89\u5B9A\u5EA6",
-    "wsm.score": "\u30B9\u30B3\u30A2",
-    "wsm.noise": "\u5E73\u5747\u30CE\u30A4\u30BA",
-    "wsm.very_smooth": "\u975E\u5E38\u306B\u5B89\u5B9A",
-    "wsm.smooth": "\u5B89\u5B9A",
-    "wsm.normal": "\u666E\u901A",
-    "wsm.noisy": "\u3070\u3089\u3064\u304D\u3042\u308A",
-    "wsm.erratic": "\u4E0D\u5B89\u5B9A",
-    "wsm.tip": "\u6BCE\u65E5\u540C\u3058\u6761\u4EF6\u3067\u6E2C\u5B9A\u3059\u308B\u3068\u30B9\u30B3\u30A2\u304C\u4E0A\u304C\u308A\u307E\u3059",
-    "pbd.title": "\u6708\u5225\u30B5\u30DE\u30EA\u30FC",
-    "pbd.avg": "\u5E73\u5747",
-    "pbd.range": "\u7BC4\u56F2",
-    "pbd.count": "\u8A18\u9332\u6570",
-    "pbd.change": "\u524D\u6708\u6BD4",
-    "motiv.title": "\u30E2\u30C1\u30D9\u30FC\u30B7\u30E7\u30F3",
-    "motiv.streak": "{days}\u65E5\u9023\u7D9A\u8A18\u9332\u4E2D",
-    "motiv.level1": "\u307E\u305A\u8A18\u9332\u3092\u59CB\u3081\u307E\u3057\u3087\u3046\uFF01",
-    "motiv.level2": "\u3044\u3044\u8ABF\u5B50\u3001\u7D9A\u3051\u307E\u3057\u3087\u3046",
-    "motiv.level3": "\u9806\u8ABF\u306B\u9032\u3093\u3067\u3044\u307E\u3059",
-    "motiv.level4": "\u7D20\u6674\u3089\u3057\u3044\u7D99\u7D9A\u529B\uFF01",
-    "motiv.level5": "\u5B8C\u74A7\uFF01\u6700\u9AD8\u306E\u72B6\u614B\u3067\u3059",
-    "motiv.trend.losing": "\u4F53\u91CD\u304C\u6E1B\u5C11\u50BE\u5411",
-    "motiv.trend.gaining": "\u4F53\u91CD\u304C\u5897\u52A0\u50BE\u5411",
-    "motiv.trend.stable": "\u4F53\u91CD\u304C\u5B89\u5B9A\u3057\u3066\u3044\u307E\u3059",
-    "wband.title": "\u4F53\u91CD\u306E\u4FE1\u983C\u533A\u9593",
-    "wband.range": "\u63A8\u5B9A\u7BC4\u56F2",
-    "wband.mean": "\u5E73\u5747",
-    "wband.spread": "\u3070\u3089\u3064\u304D",
-    "wband.tip": "\u65E5\u3005\u306E\u5909\u52D5\u306F\u6B63\u5E38\u3067\u3059\u3002\u3053\u306E\u7BC4\u56F2\u5185\u306F\u8AA4\u5DEE\u306E\u7BC4\u56F2\u3067\u3059",
-    "bwd.title": "\u66DC\u65E5\u5225\u30D1\u30BF\u30FC\u30F3",
-    "bwd.best": "\u6700\u8EFD\u91CF\u65E5",
-    "bwd.days.0": "\u65E5",
-    "bwd.days.1": "\u6708",
-    "bwd.days.2": "\u706B",
-    "bwd.days.3": "\u6C34",
-    "bwd.days.4": "\u6728",
-    "bwd.days.5": "\u91D1",
-    "bwd.days.6": "\u571F",
-    "spark.title": "\u6700\u8FD1\u306E\u30C8\u30EC\u30F3\u30C9",
-    "spark.up": "\u4E0A\u6607\u4E2D",
-    "spark.down": "\u4E0B\u964D\u4E2D",
-    "spark.flat": "\u6A2A\u3070\u3044",
-    "esum.title": "\u6700\u65B0\u306E\u8A18\u9332",
-    "esum.vsPrev": "\u524D\u56DE\u6BD4",
-    "esum.vsWeek": "\u9031\u5E73\u5747\u6BD4",
-    "esum.best": "\u81EA\u5DF1\u30D9\u30B9\u30C8",
-    "esum.newBest": "\u65B0\u8A18\u9332\uFF01",
-    "gdist.title": "\u76EE\u6A19\u307E\u3067\u306E\u8DDD\u96E2",
-    "gdist.remaining": "\u3042\u3068",
-    "gdist.eta": "\u5230\u9054\u4E88\u5B9A",
-    "gdist.days": "\u7D04{days}\u65E5",
-    "gdist.achieved": "\u76EE\u6A19\u9054\u6210\uFF01",
-    "gdist.noEta": "\u30DA\u30FC\u30B9\u8A08\u6E2C\u4E2D",
-    "tslot.title": "\u8A18\u9332\u6642\u9593\u5E2F",
-    "tslot.morning": "\u671D (5-11\u6642)",
-    "tslot.afternoon": "\u663C (12-17\u6642)",
-    "tslot.evening": "\u591C (18-21\u6642)",
-    "tslot.night": "\u6DF1\u591C (22-4\u6642)",
-    "tslot.preferred": "\u3088\u304F\u8A18\u9332\u3059\u308B\u6642\u9593\u5E2F",
-    "sbadge.title": "\u9023\u7D9A\u8A18\u9332\u30D0\u30C3\u30B8",
-    "sbadge.longest": "\u6700\u9577\u9023\u7D9A",
-    "sbadge.current": "\u73FE\u5728\u306E\u9023\u7D9A",
-    "sbadge.days": "{n}\u65E5",
-    "sbadge.locked": "\u672A\u9054\u6210",
-    "ptl.title": "\u4F53\u91CD\u306E\u8ECC\u8DE1",
-    "ptl.start": "\u958B\u59CB",
-    "ptl.milestone": "\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3",
-    "ptl.best": "\u81EA\u5DF1\u30D9\u30B9\u30C8",
-    "ptl.current": "\u73FE\u5728",
-    "ptl.total": "\u5408\u8A08\u5909\u5316",
-    "fconf.title": "\u4F53\u91CD\u4E88\u6E2C",
-    "fconf.7day": "7\u65E5\u5F8C",
-    "fconf.30day": "30\u65E5\u5F8C",
-    "fconf.confidence": "\u4FE1\u983C\u5EA6",
-    "fconf.rate": "\u65E5\u5909\u5316\u7387",
-    "wz.title": "\u4F53\u91CD\u30BE\u30FC\u30F3\u5206\u5E03",
-    "wz.below": "\u76EE\u6A19\u4EE5\u4E0B",
-    "wz.at": "\u76EE\u6A19\u4ED8\u8FD1",
-    "wz.above": "\u76EE\u6A19\u4EE5\u4E0A",
-    "wz.recent": "\u76F4\u8FD130\u4EF6",
-    "wz.all": "\u5168\u671F\u9593",
-    "wz.margin": "\u8A31\u5BB9\u7BC4\u56F2",
-    "wcr.title": "\u4F53\u91CD\u5909\u5316\u30DA\u30FC\u30B9\u63A8\u79FB",
-    "wcr.losing": "\u6E1B\u5C11\u4E2D",
-    "wcr.gaining": "\u5897\u52A0\u4E2D",
-    "wcr.stable": "\u5B89\u5B9A",
-    "wcr.avg": "\u5E73\u5747",
-    "wcr.perWeek": "/\u9031",
-    "wic.title": "\u8A08\u6E2C\u30EA\u30BA\u30E0",
-    "wic.daily": "\u6BCE\u65E5",
-    "wic.every_other_day": "1\u65E5\u304A\u304D",
-    "wic.every_few_days": "\u6570\u65E5\u304A\u304D",
-    "wic.weekly": "\u90311\u56DE",
-    "wic.cadence": "\u30EA\u30BA\u30E0",
-    "wic.score": "\u898F\u5247\u6027",
-    "wic.avgInterval": "\u5E73\u5747\u9593\u9694",
-    "wic.days": "\u65E5",
-    "plat.title": "\u505C\u6EDE\u671F\u306E\u691C\u51FA",
-    "plat.count": "\u691C\u51FA\u6570",
-    "plat.longest": "\u6700\u9577",
-    "plat.days": "\u65E5\u9593",
-    "plat.current": "\u73FE\u5728\u505C\u6EDE\u4E2D",
-    "plat.none": "\u505C\u6EDE\u671F\u306A\u3057",
-    "plat.around": "\u7D04",
-    "wpr.title": "\u4F53\u91CD\u30D1\u30FC\u30BB\u30F3\u30BF\u30A4\u30EB",
-    "wpr.rank": "\u9806\u4F4D",
-    "wpr.lower": "\u306E\u8A18\u9332\u3088\u308A\u4F4E\u3044",
-    "wpr.median": "\u4E2D\u592E\u5024",
-    "wpr.range": "\u5168\u7BC4\u56F2",
-    "wta.title": "\u30C8\u30EC\u30F3\u30C9\u77E2\u5370",
-    "wta.up2": "\u6025\u4E0A\u6607",
-    "wta.up1": "\u4E0A\u6607\u50BE\u5411",
-    "wta.flat": "\u5B89\u5B9A",
-    "wta.down1": "\u4E0B\u964D\u50BE\u5411",
-    "wta.down2": "\u6025\u4E0B\u964D",
-    "wta.inDays": "\u65E5\u9593\u3067",
-    "bcb.title": "\u4F53\u7D44\u6210\u306E\u5909\u5316",
-    "bcb.fatMass": "\u8102\u80AA\u91CF",
-    "bcb.leanMass": "\u9664\u8102\u80AA\u91CF",
-    "bcb.now": "\u73FE\u5728",
-    "bcb.start": "\u958B\u59CB\u6642",
-    "bcb.change": "\u5909\u5316",
-    "wrc.title": "\u4ECA\u9031\u306E\u6210\u7E3E",
-    "wrc.consistency": "\u8A18\u9332\u306E\u7D99\u7D9A",
-    "wrc.goal": "\u76EE\u6A19\u3078\u306E\u9032\u6357",
-    "wrc.stability": "\u5B89\u5B9A\u6027",
-    "wrc.days": "\u65E5\u8A18\u9332",
-    "nwf.title": "\u30CE\u30FC\u30C8\u983B\u51FA\u30EF\u30FC\u30C9",
-    "nwf.notes": "\u4EF6\u306E\u30CE\u30FC\u30C8",
-    "nwf.times": "\u56DE",
-    "gm.title": "\u76EE\u6A19\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3",
-    "gm.reached": "\u9054\u6210",
-    "gm.remaining": "\u672A\u9054",
-    "gm.start": "\u958B\u59CB",
-    "gm.goal": "\u76EE\u6A19"
+    "tab.input": "\u5165\u529B",
+    "tab.graph": "\u30B0\u30E9\u30D5",
+    "tab.calendar": "\u30AB\u30EC\u30F3\u30C0\u30FC",
+    "tab.settings": "\u8A2D\u5B9A",
+    "tab.records": "\u5C65\u6B74",
+    "nav.home": "\u30DB\u30FC\u30E0",
+    "nav.entry": "\u8A18\u9332",
+    "nav.chart": "\u63A8\u79FB",
+    "nav.records": "\u4E00\u89A7",
+    "nav.settings": "\u8A2D\u5B9A"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -5922,15 +2848,12 @@ var translations = {
     "status.listening": "Listening",
     "status.storageError": "Saving on this device failed. Check browser storage settings.",
     "status.photoReady": "Photo loaded. Review detected candidates.",
-    "status.photoAnalyzing": "Analyzing photo\u2026",
     "status.photoNoDetection": "No weight detected from photo. Please enter the value manually.",
     "status.voiceError": "Unable to start voice input. Check microphone permission.",
-    "status.voiceNoSpeech": "No speech detected. Please try again.",
     "status.exported": "On-device data exported.",
     "status.reset": "On-device data deleted.",
     "status.permissionDenied": "A required permission is missing. Check photo or microphone access in Settings.",
     "confirm.reset": "Delete all saved profile and weight records from this device?",
-    "confirm.resetFinal": "This action cannot be undone. Are you sure you want to delete all data?",
     "confirm.deleteRecord": "Delete this record?",
     "lang.ja": "\u65E5\u672C\u8A9E",
     "lang.en": "English",
@@ -5943,13 +2866,11 @@ var translations = {
     "quick.lastWeight": "Last weight",
     "section.records": "Records",
     "records.empty": "No records yet",
-    "records.emptyHint": "Start tracking your weight to visualize your progress",
     "records.delete": "Delete",
     "records.deleted": "Record deleted",
     "records.showAll": "Show all",
     "records.showLess": "Show less",
     "records.search": "Search by date, note, or weight",
-    "records.searchMinRecords": "Search requires at least 4 records",
     "records.searchResult": "{count} results",
     "records.best": "Lowest weight",
     "records.highest": "Highest weight",
@@ -5963,8 +2884,7 @@ var translations = {
     "import.csv": "Import CSV",
     "import.csv.success": "Imported {count} records",
     "import.csv.errors": "{count} errors occurred",
-    "import.csv.empty": "No importable data found. CSV must have date and weight columns.",
-    "import.error": "Failed to read file. Please try a different file.",
+    "import.csv.empty": "No importable data found",
     "import.csv.confirm": "Import {count} records? Existing records on the same dates will be overwritten.",
     "export.header.date": "Date",
     "export.header.weight": "Weight (kg)",
@@ -5981,7 +2901,7 @@ var translations = {
     "bodyFat.count": "{count} records",
     "freshness.today": "Recorded today \u2713",
     "freshness.yesterday": "No record since yesterday",
-    "freshness.days": "No records for {days} days",
+    "freshness.days": "No record for {days} days",
     "freshness.nudge": "Time to record today's weight!",
     "streak.longest": "Longest streak: {days} days",
     "rainbow.congrats": "Congrats! Weight decreased!",
@@ -6034,7 +2954,6 @@ var translations = {
     "wdwe.weekday": "Weekday avg",
     "wdwe.weekend": "Weekend avg",
     "wdwe.diff": "Diff",
-    "wdwe.vs": "vs",
     "wdwe.heavier.weekend": "Slightly heavier on weekends",
     "wdwe.heavier.weekday": "Slightly heavier on weekdays",
     "wdwe.heavier.similar": "Similar on weekdays and weekends",
@@ -6042,8 +2961,6 @@ var translations = {
     "error.render": "Render Error",
     "error.reload": "Reload",
     "error.resetData": "Reset Data",
-    "error.resetConfirm": "Delete all data? This cannot be undone.",
-    "error.storageQuota": "Storage is full. Please delete unnecessary data.",
     "milestone.allTimeLow": "New all-time low! (-{diff}kg)",
     "milestone.roundNumber": "Dropped below {value}kg!",
     "milestone.bmiCrossing": "BMI dropped below {threshold}!",
@@ -6123,7 +3040,7 @@ var translations = {
     "motivation.streak3": "3-day streak! Keep it going",
     "motivation.streak7": "1-week streak! Great habit",
     "motivation.streak14": "2-week streak! Your effort is paying off",
-    "motivation.streak30": "1-month streak! You're on a roll!",
+    "motivation.streak30": "1-month streak! Incredible consistency",
     "motivation.trendDown": "Downward trend. Nice work!",
     "motivation.newRecord": "New lowest weight recorded!",
     "motivation.goalClose": "Almost at your goal! Keep pushing",
@@ -6159,7 +3076,7 @@ var translations = {
     "calendar.fri": "Fri",
     "calendar.sat": "Sat",
     "calendar.records": "{count} records",
-    "calendar.dayUnit": " \u2014",
+    "calendar.dayUnit": ",",
     "calendar.decreased": "Decreased",
     "calendar.increased": "Increased",
     "achievement.records_1": "First record",
@@ -6188,7 +3105,7 @@ var translations = {
     "camera.cancel": "Cancel",
     "camera.photo": "Photo Library",
     "camera.picture": "Camera",
-    "record.dailyLimit": "One entry per day (same date is overwritten)",
+    "record.dailyLimit": "Up to 10 weight entries per day (same date is overwritten)",
     "rate.title": "Weekly Rate",
     "rate.value": "{rate}kg/week",
     "rate.period": "{change}kg over {days} days",
@@ -6217,7 +3134,6 @@ var translations = {
     "note.tag.stress": "Stress",
     "note.tag.sleep": "Poor Sleep",
     "note.tag.alcohol": "Alcohol",
-    "records.noMatch": "No matching records found",
     "records.dateRange": "Filter by date range",
     "records.from": "From",
     "records.to": "To",
@@ -6381,522 +3297,16 @@ var translations = {
     "streakReward.master": "Master",
     "streakReward.legend": "Legend",
     "streakReward.hint": "Record daily to earn the next badge!",
-    "forecast.title": "Weight Forecast",
-    "forecast.days": "In {days} days",
-    "forecast.predicted": "{wt}kg",
-    "forecast.range": "{low} \u2013 {high}kg",
-    "forecast.confidence": "Confidence",
-    "forecast.high": "High",
-    "forecast.medium": "Medium",
-    "forecast.low": "Low",
-    "forecast.rate": "{rate}kg/week",
-    "forecast.hint": "Based on {n} data points (95% confidence interval)",
-    "progress.title": "Progress Summary",
-    "progress.period": "{from} \u2013 {to} ({days} days, {count} records)",
-    "progress.firstHalf": "First half avg",
-    "progress.secondHalf": "Second half avg",
-    "progress.change": "Change",
-    "progress.totalChange": "Total change: {change}kg",
-    "progress.improving": "Improving!",
-    "progress.gaining": "Gaining",
-    "progress.stable": "Stable",
-    "progress.moreStable": "Stability improved",
-    "progress.lessStable": "More variable recently",
-    "timeline.title": "Milestones",
-    "timeline.low": "New all-time low: {wt}kg",
-    "timeline.mark": "Broke through {mark}kg",
-    "timeline.bmi.normal": "Reached normal BMI zone",
-    "timeline.bmi.change": "BMI zone: {from} \u2192 {to}",
-    "timeline.hint": "Last {count} milestones",
-    "volatility.title": "Weight Volatility Index",
-    "volatility.overall": "Overall: \xB1{val}kg/day",
-    "volatility.recent": "Recent: \xB1{val}kg/day",
-    "volatility.max": "Max swing: {val}kg",
-    "volatility.low": "Steady",
-    "volatility.moderate": "Normal",
-    "volatility.high": "Volatile",
-    "volatility.increasing": "Volatility increasing",
-    "volatility.decreasing": "Volatility decreasing",
-    "volatility.stable": "Volatility stable",
-    "volatility.hint": "Daily weight fluctuations are completely normal",
-    "compare.title": "Period Comparison",
-    "compare.weekly": "Weekly",
-    "compare.monthly": "Monthly",
-    "compare.thisWeek": "This week",
-    "compare.lastWeek": "Last week",
-    "compare.thisMonth": "This month",
-    "compare.lastMonth": "Last month",
-    "compare.avg": "Avg: {val}kg",
-    "compare.diff": "Diff: {val}kg",
-    "compare.noData": "No data",
-    "compare.records": "{n} records",
-    "countdown.title": "Goal Countdown",
-    "countdown.remaining": "{val}kg to go",
-    "countdown.reached": "Goal reached! Congratulations!",
-    "countdown.eta": "Estimated: ~{days} days",
-    "countdown.noEta": "Not enough trend data",
-    "countdown.pct": "Progress: {pct}%",
-    "countdown.current": "Now: {wt}kg \u2192 Goal: {goal}kg",
-    "bodyComp.title": "Body Composition",
-    "bodyComp.bf": "Body fat: {first}% \u2192 {latest}% ({change}%)",
-    "bodyComp.fatMass": "Fat mass: {change}kg",
-    "bodyComp.leanMass": "Lean mass: {change}kg",
-    "bodyComp.fatLoss": "Losing fat",
-    "bodyComp.muscleGain": "Gaining muscle",
-    "bodyComp.recomp": "Body recomposition",
-    "bodyComp.decline": "Needs attention",
-    "bodyComp.mixed": "Mixed changes",
-    "bodyComp.hint": "Based on {n} body fat records",
-    "share.title": "Share Summary",
-    "share.btn": "Copy text",
-    "share.copied": "Copied!",
-    "share.period": "Period: {from} \u2013 {to} ({days} days)",
-    "share.weight": "Weight: {first}kg \u2192 {latest}kg ({change}kg)",
-    "share.range": "Range: {min}kg \u2013 {max}kg (avg {avg}kg)",
-    "share.bmi": "BMI: {bmi} ({zone})",
-    "share.records": "Records: {n}",
-    "share.footer": "\u2014 Tracked with Rainbow Weight Log",
-    "quickNote.label": "Frequent notes",
-    "quickNote.none": "No note history",
-    "dupes.title": "Data Quality Check",
-    "dupes.duplicate": "{date}: {count} duplicate entries",
-    "dupes.suspicious": "{weight}kg repeated {count} days ({from} \u2013 {to})",
-    "dupes.clean": "No issues found",
-    "validate.largeDiff": "Weight changed by {diff}kg or more from last entry ({previous}kg on {date}). Please verify.",
-    "validate.outsideRange": "Weight is well outside your historical range ({min} \u2013 {max}kg).",
-    "validate.goalWeight": "Goal weight must be between 20 and 300 kg.",
-    "validate.title": "Entry Validation",
-    "weeklyAvg.title": "Weekly Averages",
-    "weeklyAvg.week": "{start}\u2013",
-    "weeklyAvg.avg": "Avg {avg}kg",
-    "weeklyAvg.noData": "No data",
-    "weeklyAvg.count": "{count} entries",
-    "weeklyAvg.change": "{change}kg vs prev week",
-    "recCal.title": "This Month's Recording Calendar",
-    "recCal.rate": "Recording rate: {rate}% ({count}/{total} days)",
-    "recCal.sun": "Su",
-    "recCal.mon": "Mo",
-    "recCal.tue": "Tu",
-    "recCal.wed": "We",
-    "recCal.thu": "Th",
-    "recCal.fri": "Fr",
-    "recCal.sat": "Sa",
-    "trend.stable": "Holding steady",
-    "trend.recent": "Last 3 avg: {avg}kg",
-    "tagStats.title": "Tag Usage",
-    "tagStats.count": "{count} times ({pct}%)",
-    "tagStats.avgChange": "Avg change: {change}kg",
-    "tagStats.none": "No tagged entries",
-    "ideal.title": "Ideal Weight Range",
-    "ideal.range": "{min} \u2013 {max}kg (BMI 18.5 \u2013 24.9)",
-    "ideal.current": "Current: {weight}kg (BMI {bmi})",
-    "ideal.center": "Ideal center: {mid}kg (BMI 22)",
-    "ideal.underweight": "Underweight",
-    "ideal.normal": "Normal",
-    "ideal.overweight": "Overweight",
-    "ideal.obese": "Obese",
-    "fresh.today": "Recorded today",
-    "fresh.recent": "Last recorded {days} days ago ({weight}kg)",
-    "fresh.stale": "No record for {days} days. Log today's weight!",
-    "fresh.veryStale": "No record for {days} days. Time to get back on track!",
-    "multiRate.title": "Change Rate by Period",
-    "multiRate.days": "Last {days}d",
-    "multiRate.change": "{change}kg",
-    "multiRate.weekly": "{rate}kg/week",
-    "multiRate.noData": "\u2014",
-    "milestone.reached": "{count} records reached!",
-    "milestone.next": "Next milestone: {next} (only {remaining} more)",
-    "ai.title": "AI Coach",
-    "ai.subtitle": "Personalized insights and advice based on your data",
-    "ai.score": "Overall Score",
-    "ai.grade.excellent": "Excellent!",
-    "ai.grade.good": "Good",
-    "ai.grade.fair": "Fair",
-    "ai.grade.needsWork": "Needs Work",
-    "ai.grade.critical": "Needs Attention",
-    "ai.grade.new": "Collecting Data",
-    "ai.weeklyReport": "Weekly Report",
-    "ai.weeklyAvg": "This Week Avg",
-    "ai.weeklyChange": "vs Last Week",
-    "ai.weeklyRange": "Range",
-    "ai.weeklyEntries": "Entries",
-    "ai.highlights": "Highlights",
-    "ai.risks": "Watch Out",
-    "ai.advice": "Advice",
-    "ai.highlight.trendMatchGoal": "\u{1F4C8} Your trend is heading toward your goal! Keep it up",
-    "ai.highlight.healthyPace": "\u26A1 Healthy rate of change (0.2-0.7 kg/week)",
-    "ai.highlight.greatStreak": "\u{1F525} 14+ day recording streak! Great habit",
-    "ai.highlight.goodStreak": "\u2728 7+ day recording streak! Nice consistency",
-    "ai.highlight.stableWeight": "\u2696\uFE0F Weight is stable. Good control",
-    "ai.highlight.nearGoal": "\u{1F3AF} Almost at your goal weight!",
-    "ai.highlight.goalSoon": "\u{1F3C1} On track to hit your goal within a month",
-    "ai.risk.trendAgainstGoal": "\u26A0\uFE0F Current trend is moving away from your goal",
-    "ai.risk.flatTrend": "\u{1F4C8} Weight is plateauing. Consider adjusting your diet or exercise",
-    "ai.risk.rapidChange": "\u26A0\uFE0F Rapid weight change detected (>1 kg/week)",
-    "ai.risk.inconsistent": "\u{1F4DD} Recording frequency has dropped",
-    "ai.risk.highVolatility": "\u{1F4CA} High weight fluctuation detected",
-    "ai.risk.plateau": "\u{1F504} You may be in a weight plateau",
-    "ai.advice.start": "\u{1F31F} Start by recording daily. Aim for 3 consecutive days first",
-    "ai.advice.slowDown": "\u{1F422} Rate of change is too fast. Slow and steady is healthier",
-    "ai.advice.buildHabit": "\u{1F4C5} Weigh in at the same time each day for more accurate data",
-    "ai.advice.stabilize": "\u{1F3AF} Keep diet and exercise patterns consistent to reduce fluctuations",
-    "ai.advice.breakPlateau": "\u{1F4AA} Mix up your exercise routine or adjust your diet to break through",
-    "ai.advice.underweight": "\u{1F34E} BMI is low. Focus on balanced nutrition to gain weight healthily",
-    "ai.advice.obeseRange": "\u{1F957} BMI is high. Aim for 0.5 kg/week loss at a sustainable pace",
-    "ai.advice.weekendPattern": "\u{1F4CA} Large weekday/weekend weight difference. Review weekend eating",
-    "ai.prediction.title": "AI Prediction",
-    "ai.prediction.goalDays": "~{days} days to goal",
-    "ai.prediction.goalDate": "Estimated: {date}",
-    "ai.prediction.achieved": "\u{1F389} Goal achieved!",
-    "ai.prediction.noTrend": "Not enough trend data yet",
-    "ai.prediction.insufficient": "Current pace is insufficient. Consider adjusting your approach",
-    "dash.weight": "Latest",
-    "dash.change": "Change",
-    "dash.bmi": "BMI",
-    "dash.streak": "Streak",
-    "dash.days": "{n} days",
-    "dash.noRecord": "No record",
-    "recent.title": "Recent Entries",
-    "monthAvg.title": "Monthly Averages",
-    "monthAvg.noData": "No data",
-    "monthAvg.label": "{m}",
-    "ltp.title": "Long-term Progress",
-    "ltp.1m": "1 month ago",
-    "ltp.3m": "3 months ago",
-    "ltp.6m": "6 months ago",
-    "ltp.1y": "1 year ago",
-    "ltp.all": "Start",
-    "fluct.title": "Weight Fluctuation",
-    "fluct.7d": "Last 7 days",
-    "fluct.30d": "Last 30 days",
-    "fluct.range": "Range",
-    "anomaly.title": "Anomaly Detection",
-    "anomaly.entry": "{date}: {wt}kg (expected: {expected}kg, diff: {diff}kg)",
-    "anomaly.hint": "These entries may contain data entry errors",
-    "success.title": "Success Rate",
-    "success.rate": "Days weight decreased or stayed",
-    "success.recent": "Last 30",
-    "success.down": "Down",
-    "success.same": "Same",
-    "success.up": "Up",
-    "recRate.title": "Recording Rate",
-    "recRate.summary": "{recorded} / {total} days",
-    "recRate.weeks": "Last 4 weeks",
-    "msHist.title": "Milestone History",
-    "msHist.reached": "{kg}kg reached \u2014 {date} (day {days})",
-    "msHist.down": "Weight loss journey",
-    "msHist.up": "Weight gain journey",
-    "journey.title": "Weight Journey",
-    "journey.loss": "Loss",
-    "journey.gain": "Gain",
-    "journey.maintain": "Maintain",
-    "journey.total": "Total change",
-    "scroll.top": "Back to top",
-    "scenario.title": "Goal Scenarios",
-    "scenario.gentle": "Gentle",
-    "scenario.moderate": "Moderate",
-    "scenario.aggressive": "Aggressive",
-    "scenario.weeks": "{weeks} weeks",
-    "scenario.perWeek": "/wk",
-    "a11y.skipToEntry": "Skip to entry form",
-    "streakCal.title": "Streak Calendar (12 weeks)",
-    "streakCal.summary": "{recorded} / {total} days recorded",
-    "cross.title": "Trend Crossover Signals",
-    "cross.current": "Current Trend",
-    "cross.uptrend": "Uptrend (Short MA > Long MA)",
-    "cross.downtrend": "Downtrend (Short MA < Long MA)",
-    "cross.neutral": "Neutral",
-    "cross.shortMA": "7-day MA",
-    "cross.longMA": "30-day MA",
-    "cross.golden": "Golden Cross (downtrend shift)",
-    "cross.death": "Death Cross (uptrend shift)",
-    "cross.nodata": "Need 30+ records",
-    "cross.none": "No crossover signals",
-    "pred.title": "Prediction Accuracy",
-    "pred.accuracy": "Hit Rate (within \xB10.5kg)",
-    "pred.avgError": "Avg Error",
-    "pred.excellent": "Excellent",
-    "pred.good": "Good",
-    "pred.fair": "Fair",
-    "pred.poor": "Needs Improvement",
-    "pred.nodata": "Need 14+ records",
-    "pred.recent": "Recent Predictions",
-    "pred.predicted": "Predicted",
-    "pred.actual": "Actual",
-    "cscore.title": "Consistency Score",
-    "cscore.recording": "Recording Regularity",
-    "cscore.stability": "Weight Stability",
-    "cscore.momentum": "Goal Progress",
-    "cscore.grade": "Overall Grade",
-    "cscore.nodata": "Need 7+ records",
-    "wrange.title": "Weight Range",
-    "wrange.min": "Min",
-    "wrange.max": "Max",
-    "wrange.range": "Range",
-    "wrange.avg": "Avg",
-    "wrange.7d": "7d",
-    "wrange.30d": "30d",
-    "wrange.90d": "90d",
-    "wrange.all": "All",
-    "tstreak.title": "Trend Streak",
-    "tstreak.down": "\u{1F4C9} {count} consecutive drops",
-    "tstreak.up": "\u{1F4C8} {count} consecutive rises",
-    "tstreak.flat": "\u27A1\uFE0F {count} consecutive flat",
-    "tstreak.change": "Change",
-    "tstreak.period": "Period",
-    "bmiTrend.title": "BMI Trend",
-    "bmiTrend.current": "Current",
-    "bmiTrend.change": "Change",
-    "bmiTrend.range": "Range",
-    "bmiTrend.down": "Improving",
-    "bmiTrend.up": "Rising",
-    "bmiTrend.neutral": "Stable",
-    "bmiTrend.nodata": "Insufficient BMI data",
-    "wcomp.title": "This Week vs Last Week",
-    "wcomp.thisWeek": "This Week",
-    "wcomp.lastWeek": "Last Week",
-    "wcomp.diff": "Diff",
-    "wcomp.avg": "Avg",
-    "wcomp.min": "Min",
-    "wcomp.max": "Max",
-    "wcomp.count": "Records",
-    "wcomp.nodata": "Need data for both weeks",
-    "gring.title": "Goal Progress",
-    "gring.lost": "Achieved",
-    "gring.remaining": "Remaining",
-    "gring.rate": "Weekly Pace",
-    "gring.eta": "Est. {weeks} weeks",
-    "gring.onTrack": "On Track",
-    "gring.offTrack": "Off Track",
-    "gring.done": "Goal Reached!",
-    "bfTrend.title": "Body Fat Trend",
-    "bfTrend.current": "Current",
-    "bfTrend.change": "Change",
-    "bfTrend.avg": "Average",
-    "bfTrend.range": "Range",
-    "bfTrend.down": "Decreasing",
-    "bfTrend.up": "Increasing",
-    "bfTrend.neutral": "Stable",
-    "bfTrend.nodata": "Insufficient body fat data",
-    "dtarget.title": "Today's Target Weight",
-    "dtarget.target": "Target",
-    "dtarget.current": "Current",
-    "dtarget.above": "{diff}kg above target",
-    "dtarget.below": "{diff}kg below target",
-    "dtarget.onTarget": "On Target!",
-    "dtarget.pace": "{pace}kg/week pace",
-    "mphase.title": "Monthly Patterns",
-    "mphase.early": "Early (1-7)",
-    "mphase.mid": "Mid (8-14)",
-    "mphase.late": "Late (15-21)",
-    "mphase.end": "End (22-31)",
-    "mphase.avg": "Avg",
-    "mphase.change": "Diff",
-    "mphase.pattern": "Monthly variation detected",
-    "mphase.noPattern": "Stable throughout month",
-    "mphase.records": "records",
-    "sfreeze.title": "Streak Freeze",
-    "sfreeze.earned": "Earned",
-    "sfreeze.used": "Used",
-    "sfreeze.available": "Available",
-    "sfreeze.current": "Current streak",
-    "sfreeze.longest": "Longest streak",
-    "sfreeze.days": "days",
-    "sfreeze.info": "Earn 1 freeze for every 7 consecutive days",
-    "rbars.title": "Recent Weight Trend",
-    "rbars.goal": "Goal",
-    "anniv.title": "Your Journey",
-    "anniv.tracking": "Day {days} of tracking",
-    "anniv.start": "Start",
-    "anniv.total": "Total change",
-    "anniv.1week": "1 Week",
-    "anniv.1month": "1 Month",
-    "anniv.3months": "3 Months",
-    "anniv.6months": "6 Months",
-    "anniv.1year": "1 Year",
-    "anniv.2years": "2 Years",
-    "anniv.reached": "Reached",
-    "anniv.upcoming": "Upcoming",
-    "tfc.title": "Weight Forecast (14 days)",
-    "tfc.trend": "Trend",
-    "tfc.perWeek": "per week",
-    "tfc.in7days": "In 7 days",
-    "tfc.in14days": "In 14 days",
-    "tfc.losing": "Losing",
-    "tfc.gaining": "Gaining",
-    "tfc.stable": "Stable",
-    "cdist.title": "Daily Change Distribution",
-    "cdist.avg": "Avg change",
-    "cdist.median": "Median",
-    "cdist.normal": "Normal range",
-    "cdist.to": "to",
-    "gstreak.title": "Goal Streak",
-    "gstreak.days": "consecutive days trending toward goal",
-    "gstreak.dist": "Distance to goal",
-    "gstreak.closest": "Closest",
-    "gstreak.achieved": "Goal achieved!",
-    "tvn.title": "Before & After",
-    "tvn.then": "First 7 days",
-    "tvn.now": "Last 7 days",
-    "tvn.avg": "Avg",
-    "tvn.range": "Range",
-    "tvn.change": "Change",
-    "preset.last": "Last",
-    "preset.avg3": "3-day avg",
-    "preset.trend": "Predicted",
-    "rcomp.title": "Record Completeness",
-    "rcomp.total": "Total Records",
-    "rcomp.bodyFat": "With Body Fat",
-    "rcomp.note": "With Notes",
-    "rcomp.tag": "With Tags",
-    "rcomp.level.excellent": "Excellent!",
-    "rcomp.level.good": "Good records",
-    "rcomp.level.fair": "Fair",
-    "rcomp.level.basic": "Try adding more details",
-    "rcomp.tip": "Adding body fat and notes enables richer analysis",
-    "wpace.title": "Change Pace",
-    "wpace.weekly": "week",
-    "wpace.healthy": "Healthy Pace",
-    "wpace.too_fast": "Too Fast",
-    "wpace.healthy_pace": "Healthy",
-    "wpace.too_slow": "Slow",
-    "wpace.maintaining": "Maintaining",
-    "wpace.range": "Recommended: {min}\u2013{max} kg/week",
-    "wsm.title": "Measurement Stability",
-    "wsm.score": "Score",
-    "wsm.noise": "Avg Noise",
-    "wsm.very_smooth": "Very Stable",
-    "wsm.smooth": "Stable",
-    "wsm.normal": "Normal",
-    "wsm.noisy": "Noisy",
-    "wsm.erratic": "Erratic",
-    "wsm.tip": "Weigh at the same time and conditions to improve your score",
-    "pbd.title": "Monthly Summary",
-    "pbd.avg": "Avg",
-    "pbd.range": "Range",
-    "pbd.count": "Records",
-    "pbd.change": "vs Prev",
-    "motiv.title": "Motivation",
-    "motiv.streak": "{days}-day streak",
-    "motiv.level1": "Start recording today!",
-    "motiv.level2": "Good start, keep going",
-    "motiv.level3": "Making steady progress",
-    "motiv.level4": "Great consistency!",
-    "motiv.level5": "Perfect! You're on fire",
-    "motiv.trend.losing": "Weight trending down",
-    "motiv.trend.gaining": "Weight trending up",
-    "motiv.trend.stable": "Weight is stable",
-    "wband.title": "Weight Confidence Band",
-    "wband.range": "Estimated Range",
-    "wband.mean": "Mean",
-    "wband.spread": "Spread",
-    "wband.tip": "Daily fluctuations are normal. Readings within this band are within noise",
-    "bwd.title": "Day-of-Week Pattern",
-    "bwd.best": "Lightest Day",
-    "bwd.days.0": "Sun",
-    "bwd.days.1": "Mon",
-    "bwd.days.2": "Tue",
-    "bwd.days.3": "Wed",
-    "bwd.days.4": "Thu",
-    "bwd.days.5": "Fri",
-    "bwd.days.6": "Sat",
-    "spark.title": "Recent Trend",
-    "spark.up": "Trending Up",
-    "spark.down": "Trending Down",
-    "spark.flat": "Flat",
-    "esum.title": "Latest Entry",
-    "esum.vsPrev": "vs Previous",
-    "esum.vsWeek": "vs Week Avg",
-    "esum.best": "All-time Best",
-    "esum.newBest": "New Record!",
-    "gdist.title": "Distance to Goal",
-    "gdist.remaining": "Remaining",
-    "gdist.eta": "Estimated",
-    "gdist.days": "~{days} days",
-    "gdist.achieved": "Goal Achieved!",
-    "gdist.noEta": "Measuring pace",
-    "tslot.title": "Recording Time",
-    "tslot.morning": "Morning (5-11)",
-    "tslot.afternoon": "Afternoon (12-17)",
-    "tslot.evening": "Evening (18-21)",
-    "tslot.night": "Night (22-4)",
-    "tslot.preferred": "Preferred time",
-    "sbadge.title": "Streak Badges",
-    "sbadge.longest": "Longest Streak",
-    "sbadge.current": "Current Streak",
-    "sbadge.days": "{n} days",
-    "sbadge.locked": "Locked",
-    "ptl.title": "Weight Journey",
-    "ptl.start": "Start",
-    "ptl.milestone": "Milestone",
-    "ptl.best": "Personal Best",
-    "ptl.current": "Current",
-    "ptl.total": "Total Change",
-    "fconf.title": "Weight Forecast",
-    "fconf.7day": "In 7 days",
-    "fconf.30day": "In 30 days",
-    "fconf.confidence": "Confidence",
-    "fconf.rate": "Daily rate",
-    "wz.title": "Weight Zones",
-    "wz.below": "Below goal",
-    "wz.at": "At goal",
-    "wz.above": "Above goal",
-    "wz.recent": "Recent 30",
-    "wz.all": "All time",
-    "wz.margin": "Margin",
-    "wcr.title": "Weight Change Rate",
-    "wcr.losing": "Losing",
-    "wcr.gaining": "Gaining",
-    "wcr.stable": "Stable",
-    "wcr.avg": "Avg",
-    "wcr.perWeek": "/wk",
-    "wic.title": "Weigh-in Rhythm",
-    "wic.daily": "Daily",
-    "wic.every_other_day": "Every other day",
-    "wic.every_few_days": "Every few days",
-    "wic.weekly": "Weekly",
-    "wic.cadence": "Rhythm",
-    "wic.score": "Regularity",
-    "wic.avgInterval": "Avg interval",
-    "wic.days": "days",
-    "plat.title": "Plateau Detection",
-    "plat.count": "Found",
-    "plat.longest": "Longest",
-    "plat.days": "days",
-    "plat.current": "Currently in plateau",
-    "plat.none": "No plateaus",
-    "plat.around": "~",
-    "wpr.title": "Weight Percentile",
-    "wpr.rank": "Rank",
-    "wpr.lower": " of readings are lower",
-    "wpr.median": "Median",
-    "wpr.range": "Full range",
-    "wta.title": "Trend Arrow",
-    "wta.up2": "Rising fast",
-    "wta.up1": "Rising",
-    "wta.flat": "Stable",
-    "wta.down1": "Falling",
-    "wta.down2": "Falling fast",
-    "wta.inDays": " in ",
-    "bcb.title": "Body Composition Change",
-    "bcb.fatMass": "Fat mass",
-    "bcb.leanMass": "Lean mass",
-    "bcb.now": "Now",
-    "bcb.start": "Start",
-    "bcb.change": "Change",
-    "wrc.title": "Weekly Report",
-    "wrc.consistency": "Consistency",
-    "wrc.goal": "Goal progress",
-    "wrc.stability": "Stability",
-    "wrc.days": "days logged",
-    "nwf.title": "Note Keywords",
-    "nwf.notes": "notes",
-    "nwf.times": "\xD7",
-    "gm.title": "Goal Milestones",
-    "gm.reached": "Reached",
-    "gm.remaining": "Remaining",
-    "gm.start": "Start",
-    "gm.goal": "Goal"
+    "tab.input": "Input",
+    "tab.graph": "Graph",
+    "tab.calendar": "Calendar",
+    "tab.settings": "Settings",
+    "tab.records": "Records",
+    "nav.home": "Home",
+    "nav.entry": "Record",
+    "nav.chart": "Trends",
+    "nav.records": "List",
+    "nav.settings": "Settings"
   }
 };
 function createTranslator(language) {
@@ -27423,7 +23833,7 @@ window.onerror = function(msg, src, line, col, err) {
       <h2 style="color:#dc2626;">\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F / An error occurred</h2>
       <p style="color:#666;margin:12px 0;">${escHtml(msg)}</p>
       <p style="color:#999;font-size:0.8rem;">Line ${line}:${col}</p>
-      <button type="button" onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">\u518D\u8AAD\u307F\u8FBC\u307F / Reload</button>
     </div>`;
   }
 };
@@ -27448,12 +23858,11 @@ var statusKind = "ok";
 var showAllRecords = false;
 var quickWeight = 65;
 var rainbowVisible = false;
-var _rainbowDismissTimer = 0;
+var activeTab = "input";
 var rainbowDetail = "";
 var summaryPeriod = "week";
 var chartPeriod = "all";
 var reminderTimer = null;
-var lastNotifiedDate = "";
 var calendarYear = (/* @__PURE__ */ new Date()).getFullYear();
 var calendarMonth = (/* @__PURE__ */ new Date()).getMonth();
 var showMonthlyStats = false;
@@ -27477,8 +23886,8 @@ try {
   app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
     <h2 style="color:#dc2626;">${t("error.init")}</h2>
     <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
-    <button type="button" onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
-    <button type="button" onclick="if(confirm('${escHtml(t("error.resetConfirm"))}')){localStorage.clear();location.reload()}" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">${t("error.resetData")}</button>
+    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
+    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">${t("error.resetData")}</button>
   </div>`;
 }
 initReminder();
@@ -27500,32 +23909,19 @@ if (window.matchMedia) {
   });
   applySystemTheme();
 }
-function sanitizeProfile(p) {
-  const defaults = createDefaultProfile();
-  const hc = String(p.heightCm ?? "");
-  const ag = String(p.age ?? "");
-  return {
-    name: typeof p.name === "string" ? p.name.slice(0, 50) : defaults.name,
-    heightCm: hc === "" || Number.isFinite(Number(hc)) && Number(hc) >= 50 && Number(hc) <= 300 ? hc : defaults.heightCm,
-    age: ag === "" || Number.isFinite(Number(ag)) && Number(ag) >= 1 && Number(ag) <= 150 ? ag : defaults.age,
-    gender: ["male", "female", "nonbinary", "other", "unspecified", ""].includes(p.gender) ? p.gender : defaults.gender
-  };
-}
 function loadState() {
   const rawRecords = safeParse(STORAGE_KEYS.records, []);
   const records = Array.isArray(rawRecords) ? rawRecords.filter((r) => r && r.dt && Number.isFinite(r.wt)) : [];
-  const sorted = [...records].sort((a, b) => a.dt > b.dt ? -1 : a.dt < b.dt ? 1 : 0);
-  const lastWeight = sorted.length > 0 ? sorted[0].wt : 65;
   return {
     records,
-    profile: sanitizeProfile({ ...createDefaultProfile(), ...safeParse(STORAGE_KEYS.profile, {}) }),
+    profile: { ...createDefaultProfile(), ...safeParse(STORAGE_KEYS.profile, {}) },
     settings: { ...createDefaultSettings(), ...safeParse(STORAGE_KEYS.settings, {}) },
     form: {
       weight: "",
       date: todayLocal(),
       imageName: "",
-      pickerInt: Math.floor(lastWeight),
-      pickerDec: Math.round((lastWeight - Math.floor(lastWeight)) * 10),
+      pickerInt: 65,
+      pickerDec: 0,
       bodyFat: "",
       note: ""
     }
@@ -27544,13 +23940,7 @@ function persist() {
     window.localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(state.profile));
     window.localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(state.settings));
     return true;
-  } catch (e) {
-    if (e instanceof DOMException && e.name === "QuotaExceededError") {
-      setStatus(t("error.storageQuota"), "error");
-    } else {
-      console.error("[persist] storage error:", e?.name, e?.message);
-      setStatus(t("status.storageError"), "error");
-    }
+  } catch {
     return false;
   }
 }
@@ -27563,53 +23953,37 @@ function showFirstLaunchModal() {
         <h2 id="langModalTitle">\u3088\u3046\u3053\u305D / Welcome</h2>
         <p>\u8A00\u8A9E\u3092\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044<br>Choose your language</p>
         <div class="lang-modal-buttons">
-          <button type="button" data-lang="ja" aria-label="\u65E5\u672C\u8A9E\u3092\u9078\u629E">\u{1F1EF}\u{1F1F5} \u65E5\u672C\u8A9E</button>
-          <button type="button" data-lang="en" aria-label="Select English">\u{1F1EC}\u{1F1E7} English</button>
+          <button type="button" data-lang="ja">\u{1F1EF}\u{1F1F5} \u65E5\u672C\u8A9E</button>
+          <button type="button" data-lang="en">\u{1F1EC}\u{1F1E7} English</button>
         </div>
       </div>
     </div>
   `;
   app.querySelector("[data-lang]")?.focus();
-  const selectLang = (lang) => {
-    state.settings.language = lang;
-    t = createTranslator(lang);
-    try {
-      window.localStorage.setItem(STORAGE_KEYS.firstLaunchDone, "1");
-    } catch {
-    }
-    persist();
-    render();
-  };
   app.querySelectorAll("[data-lang]").forEach((button) => {
-    button.addEventListener("click", () => selectLang(button.dataset.lang));
-  });
-  const overlay = app.querySelector(".lang-modal-overlay");
-  overlay?.addEventListener("click", (e) => {
-    if (e.target === overlay) selectLang("ja");
-  });
-  document.addEventListener("keydown", function onEsc(e) {
-    if (e.key === "Escape") {
-      document.removeEventListener("keydown", onEsc);
-      selectLang("ja");
-    }
+    button.addEventListener("click", () => {
+      const lang = button.dataset.lang;
+      state.settings.language = lang;
+      t = createTranslator(lang);
+      try {
+        window.localStorage.setItem(STORAGE_KEYS.firstLaunchDone, "1");
+      } catch {
+      }
+      persist();
+      render();
+    });
   });
 }
 var statusClearTimer = null;
-var statusFadeTimer = null;
 function setStatus(message, kind = "ok") {
   statusMessage = message;
   statusKind = kind;
   clearTimeout(statusClearTimer);
-  clearTimeout(statusFadeTimer);
   if (kind === "ok" && message) {
-    statusFadeTimer = setTimeout(() => {
-      const el = app.querySelector(".status");
-      if (el) el.classList.add("status-fade-out");
-    }, 4e3);
     statusClearTimer = setTimeout(() => {
       statusMessage = "";
       render();
-    }, 4600);
+    }, 4e3);
   }
   render();
 }
@@ -27630,7 +24004,7 @@ function formatBMI(bmi) {
   return bmi ? bmi.toFixed(1) : t("chart.none");
 }
 function formatNote(note) {
-  return escHtml(note).replace(/#([\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF66-\uFF9F]+)/g, '<span class="note-hashtag">#$1</span>');
+  return escapeAttr(note).replace(/#([\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF66-\uFF9F]+)/g, '<span class="note-hashtag">#$1</span>');
 }
 function getMotivationalMessage(streak, trend, records, goalProgress) {
   if (records.length === 1) return t("motivation.firstRecord");
@@ -27648,30 +24022,18 @@ function getMotivationalMessage(streak, trend, records, goalProgress) {
   if (trend === "down") return t("motivation.trendDown");
   return "";
 }
-var _renderRAF = 0;
-function scheduleRender() {
-  if (!_renderRAF) {
-    _renderRAF = requestAnimationFrame(() => {
-      _renderRAF = 0;
-      render();
-    });
-  }
-}
 function render() {
   try {
-    const scrollY = window.scrollY;
     document.documentElement.lang = state.settings.language;
     document.title = t("app.title");
     const description = document.querySelector('meta[name="description"]');
     if (description) description.setAttribute("content", t("app.description"));
     document.body.dataset.theme = state.settings.theme;
-    requestAnimationFrame(() => {
-      const themeColor = document.querySelector('meta[name="theme-color"]');
-      if (themeColor) {
-        const accent = getComputedStyle(document.body).getPropertyValue("--accent").trim();
-        if (accent) themeColor.setAttribute("content", accent);
-      }
-    });
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) {
+      const accent = getComputedStyle(document.body).getPropertyValue("--accent").trim();
+      if (accent) themeColor.setAttribute("content", accent);
+    }
     const stats = calcStats(state.records, state.profile);
     const dailyDiff = calcDailyDiff(state.records);
     const weightComp = calcWeightComparison(state.records);
@@ -27702,680 +24064,450 @@ function render() {
     const lastRecord = state.records[state.records.length - 1];
     const previewDiff = previewWeightResult.valid && lastRecord ? Math.round((previewWeightResult.weight - lastRecord.wt) * 10) / 10 : null;
     const previewLarge = previewDiff !== null && Math.abs(previewDiff) >= 2;
-    const filteredBySearch = recordSearchQuery ? filterRecords(state.records, recordSearchQuery) : state.records;
-    const filteredSearchCount = filteredBySearch.length;
     const selectedDate = state.form.date || todayLocal();
     const existingRecord = state.records.find((r) => r.dt === selectedDate);
     app.innerHTML = `
-    <a href="#entrySection" class="skip-link">${t("a11y.skipToEntry")}</a>
-    <main class="app-shell">
-      <section class="hero">
-        <div class="hero-top">
-          <div>
-            <div class="eyebrow">${t("status.ready")}</div>
-            <h1>${t("app.title")}</h1>
-            <p class="hero-copy">${t("app.subtitle")}</p>
-            <p class="hero-copy">${t("hero.copy")}</p>
-            <div class="pill-row">
-              <span class="pill">${t("badge.local")}</span>
-              <span class="pill">${t("badge.free")}</span>
-              <span class="pill">${t("badge.safe")}</span>
-              ${state.records.length ? `<span class="pill">${t("summary.count")}: ${state.records.length}</span>` : ""}
-              ${streak > 0 ? `<span class="streak-badge${streak >= 7 ? " rainbow" : ""}" title="${t("streak.title")}">${streak >= 7 ? "\u{1F308}" : "\u{1F525}"} ${streak}${t("streak.days")} ${streak >= 7 ? t("streak.fire") : ""}</span>` : ""}
-              ${trend ? `<span class="trend-indicator ${trend}">${trend === "down" ? "\u{1F4C9}" : trend === "up" ? "\u{1F4C8}" : "\u27A1\uFE0F"} ${t("trend." + trend)}</span>` : ""}
-            </div>
-            ${daysSinceLast !== null ? `<div class="freshness-indicator${daysSinceLast === 0 ? " fresh" : daysSinceLast >= 3 ? " stale" : ""}">
-              ${daysSinceLast === 0 ? t("freshness.today") : daysSinceLast === 1 ? t("freshness.yesterday") : t("freshness.days").replace("{days}", daysSinceLast)}
-              ${daysSinceLast >= 1 ? ` <span class="freshness-nudge">${t("freshness.nudge")}</span>` : ""}
-            </div>` : ""}
-            ${longestStreak >= 3 && longestStreak > streak ? `<div class="helper hint-small">${t("streak.longest").replace("{days}", longestStreak)}</div>` : ""}
-            ${motivation ? `<p class="motivation-msg">${motivation}</p>` : ""}
-            ${achievements.length ? `<div class="achievement-row">${achievements.map((a) => `<span class="achievement-badge ${a.tier}" title="${t("achievement." + a.id)}" aria-label="${escapeAttr(t("achievement." + a.id))}">${a.icon}</span>`).join("")}</div>` : ""}
+    <main class="app-shell tab-layout">
+      <!-- Tab Content -->
+      ${activeTab === "input" ? `
+      <div class="tab-page tab-input">
+        <!-- Mini status header -->
+        <div class="input-header">
+          <h1 class="input-title">${t("app.title")}</h1>
+          ${stats ? `<div class="input-current-weight">${formatWeight(stats.latestWeight)}</div>` : ""}
+          ${dailyDiff ? `<div class="input-diff ${dailyDiff.diff > 0 ? "positive" : dailyDiff.diff < 0 ? "negative" : "zero"}">${dailyDiff.diff > 0 ? "+" : ""}${dailyDiff.diff.toFixed(1)} kg</div>` : ""}
+          <div class="input-meta-row">
+            ${streak > 0 ? `<span class="streak-badge-sm${streak >= 7 ? " rainbow" : ""}">${streak >= 7 ? "\u{1F308}" : "\u{1F525}"} ${streak}${t("streak.days")}</span>` : ""}
+            ${trend ? `<span class="trend-sm ${trend}">${trend === "down" ? "\u{1F4C9}" : trend === "up" ? "\u{1F4C8}" : "\u27A1\uFE0F"}</span>` : ""}
+            ${daysSinceLast !== null && daysSinceLast >= 1 ? `<span class="freshness-sm">${daysSinceLast === 1 ? t("freshness.yesterday") : t("freshness.days").replace("{days}", daysSinceLast)}</span>` : ""}
           </div>
-          <div class="hero-card">
-            <div class="eyebrow">${t("bmi.title")}</div>
-            <div class="bmi-score">${stats?.latestBMI ? stats.latestBMI.toFixed(1) : "--"}</div>
-            <p class="bmi-label">${bmiStatus}</p>
-            <p class="bmi-label">${t("hero.disclaimer")}</p>
-          </div>
-        </div>
-        <div class="hero-bottom">
-          ${renderMetric(t("chart.latest"), stats ? formatWeight(stats.latestWeight) : "--")}
-          ${renderMetric(t("chart.change"), stats ? signedWeight(stats.change) : "--")}
-          ${renderMetric(t("chart.avg"), stats ? formatWeight(stats.avgWeight) : "--")}
-          ${renderMetric(t("chart.bmi"), stats?.latestBMI ? stats.latestBMI.toFixed(1) : "--")}
-          ${smoothedWeight ? renderMetric(t("smoothed.value"), `${formatWeight(smoothedWeight.smoothed)} <span class="${smoothedWeight.trend < 0 ? "negative" : smoothedWeight.trend > 0 ? "positive" : ""}" style="font-size:0.7em">${smoothedWeight.trend > 0 ? "+" : ""}${smoothedWeight.trend.toFixed(1)}</span>`) : ""}
+          ${motivation ? `<p class="motivation-sm">${motivation}</p>` : ""}
         </div>
 
-        <!-- Daily Diff & Goal Progress -->
-        <div class="hero-bottom hero-sub-2col">
-          <div class="diff-box">
-            <div class="label">${t("diff.title")}</div>
-            ${dailyDiff ? `<div class="diff-value ${dailyDiff.diff > 0 ? "positive" : dailyDiff.diff < 0 ? "negative" : "zero"}">
-                  ${dailyDiff.diff > 0 ? "+" : ""}${dailyDiff.diff.toFixed(1)} kg
-                </div>
-                <div class="diff-detail">
-                  ${t("diff.yesterday")}: ${dailyDiff.yesterday.toFixed(1)}kg \u2192 ${t("diff.today")}: ${dailyDiff.today.toFixed(1)}kg
-                  (${dailyDiff.diff > 0 ? t("diff.up") : dailyDiff.diff < 0 ? t("diff.down") : t("diff.same")})
-                </div>` : `<div class="diff-value zero">--</div>
-                <div class="diff-detail">${t("diff.noData")}</div>`}
+        <!-- Entry section -->
+        <section class="panel">
+          <div class="tab-row" role="tablist" aria-label="${t("section.entry")}">
+            ${renderTab("manual", "\u270F\uFE0F " + t("entry.manual"))}
+            ${renderTab("voice", "\u{1F3A4} " + t("entry.voice"))}
+            ${renderTab("photo", "\u{1F4F7} " + t("entry.photo"))}
           </div>
-          <div class="goal-box">
-            <div class="label">${t("goal.title")}: ${Number.isFinite(goalWeight) ? formatWeight(goalWeight) : t("goal.notSet")}</div>
-            ${goalProgress ? `<div class="progress-percent">${goalProgress.percent}%</div>
-                <div class="progress-bar-track" role="progressbar" aria-valuenow="${goalProgress.percent}" aria-valuemin="0" aria-valuemax="100" aria-label="${t("goal.title")}">
-                  <div class="progress-bar-fill" style="width: ${goalProgress.percent}%"></div>
-                  ${goalMilestones ? goalMilestones.filter((m) => m.pct < 100).map((m) => `<div class="goal-milestone-marker${m.reached ? " reached" : ""}" style="left:${m.pct}%" title="${t("goal.milestone").replace("{pct}", m.pct)}"></div>`).join("") : ""}
-                </div>
-                <div class="progress-text">
-                  <span>${t("goal.progress")}</span>
-                  <span>${goalProgress.remaining <= 0 ? t("goal.achieved") : `${t("goal.remaining")}: ${goalProgress.remaining.toFixed(1)}kg`}</span>
-                </div>
-                ${goalMilestones ? `<div class="goal-milestones">${goalMilestones.map((m) => `<span class="goal-ms${m.reached ? " reached" : ""}">${m.reached ? "\u2705" : "\u2B1C"} ${t("goal.milestone").replace("{pct}", m.pct)} <span class="hint-small">(${m.targetWeight}kg)</span></span>`).join("")}</div>` : ""}
-                ${goalPrediction ? `<div class="prediction-text">${t("goal.prediction")}: ${goalPrediction.achieved ? t("goal.predictionAchieved") : goalPrediction.insufficient ? t("goal.predictionInsufficient") : goalPrediction.noTrend ? t("goal.predictionNoTrend") : `${t("goal.predictionDays").replace("{days}", goalPrediction.days)} (${goalPrediction.predictedDate})`}</div>` : ""}` : `<div class="diff-value zero">--</div>
-                <div class="diff-detail">${t("goal.notSet")}</div>`}
-          </div>
-        </div>
-        ${weightComp ? `
-        <div class="hero-bottom hero-sub-3col">
-          ${["week", "month", "quarter"].map((key) => {
-      const c = weightComp[key];
-      if (!c) return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value zero compact">--</div></div>`;
-      const cls = c.diff > 0 ? "positive" : c.diff < 0 ? "negative" : "zero";
-      return `<div class="diff-box"><div class="label">${t("compare." + key)}</div><div class="diff-value ${cls} compact">${c.diff > 0 ? "+" : ""}${c.diff.toFixed(1)}kg</div></div>`;
-    }).join("")}
-        </div>` : ""}
-      </section>
 
-      ${renderAICoach()}
-
-      <div class="content-grid">
-        <div class="column">
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("section.profile")}</h2>
-                <p>${t("profile.helper")}</p>
+          <div class="entry-layout">
+            <div class="field weight-field-main">
+              <label>${t("entry.weight")}</label>
+              <div class="weight-picker">
+                <select id="pickerInt" name="pickerInt" aria-label="${t("picker.integer")}">
+                  ${renderPickerIntOptions(state.form.pickerInt)}
+                </select>
+                <span class="picker-dot" aria-hidden="true">.</span>
+                <select id="pickerDec" name="pickerDec" aria-label="${t("picker.decimal")}">
+                  ${renderPickerDecOptions(state.form.pickerDec)}
+                </select>
+                <span class="picker-unit">${t("picker.kg")}</span>
               </div>
-              <button type="button" class="btn secondary" data-action="save-profile">${t("profile.save")}</button>
             </div>
             <div class="input-grid">
               <div class="field">
-                <label for="name">${t("profile.name")}</label>
-                <input id="name" name="name" maxlength="40" autocomplete="name" value="${escapeAttr(state.profile.name)}" />
-              </div>
-              <div class="field">
-                <label for="gender">${t("profile.gender")}</label>
-                <select id="gender" name="gender">
-                  ${renderOption("female", state.profile.gender, t("gender.female"))}
-                  ${renderOption("male", state.profile.gender, t("gender.male"))}
-                  ${renderOption("nonbinary", state.profile.gender, t("gender.nonbinary"))}
-                  ${renderOption("unspecified", state.profile.gender, t("gender.unspecified"))}
-                </select>
-              </div>
-              <div class="field">
-                <label for="heightCm">${t("profile.height")}</label>
-                <input id="heightCm" name="heightCm" inputmode="decimal" autocomplete="off" value="${escapeAttr(state.profile.heightCm)}" />
-              </div>
-              <div class="field">
-                <label for="age">${t("profile.age")}</label>
-                <input id="age" name="age" inputmode="numeric" autocomplete="off" value="${escapeAttr(state.profile.age)}" />
-              </div>
-            </div>
-          </section>
-
-          <section class="panel" id="entrySection">
-            <div class="section-header">
-              <div>
-                <h2>${t("section.entry")}</h2>
-                <p>${t("review.permissions")}</p>
-              </div>
-              <div class="eyebrow">${t(`entry.source.${activeEntryMode}`)}</div>
-            </div>
-
-            <div class="tab-row" role="tablist" aria-label="${t("section.entry")}">
-              ${renderTab("manual", "\u270F\uFE0F " + t("entry.manual"))}
-              ${renderTab("voice", "\u{1F3A4} " + t("entry.voice"))}
-              ${renderTab("photo", "\u{1F4F7} " + t("entry.photo"))}
-            </div>
-
-            <div class="entry-layout">
-              <div class="input-grid">
-                <div class="field">
-                  <label>${t("entry.weight")}</label>
-                  <div class="weight-picker">
-                    <select id="pickerInt" name="pickerInt" aria-label="${t("picker.integer")}">
-                      ${renderPickerIntOptions(state.form.pickerInt)}
-                    </select>
-                    <span class="picker-dot" aria-hidden="true">.</span>
-                    <select id="pickerDec" name="pickerDec" aria-label="${t("picker.decimal")}">
-                      ${renderPickerDecOptions(state.form.pickerDec)}
-                    </select>
-                    <span class="picker-unit">${t("picker.kg")}</span>
-                  </div>
-                  ${(() => {
-      const presets = calcQuickWeightPresets(state.records);
-      if (presets.length === 0) return "";
-      return `<div class="weight-presets">${presets.map((p) => `<button type="button" class="weight-preset-btn" data-pick-weight="${p.weight}" title="${t("preset." + p.label)}">${t("preset." + p.label)} ${p.weight}kg</button>`).join("")}</div>`;
-    })()}
-                </div>
-                <div class="field">
-                  <label for="recordDate">${t("entry.date")}</label>
-                  <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" min="2000-01-01" max="${todayLocal()}" autocomplete="off" />
-                  <div class="date-shortcuts">
-                    <button type="button" class="date-shortcut" data-date-shortcut="today">${t("diff.today")}</button>
-                    <button type="button" class="date-shortcut" data-date-shortcut="yesterday">${t("diff.yesterday")}</button>
-                  </div>
-                </div>
-                <div class="field">
-                  <label for="bodyFat">${t("bodyFat.label")}</label>
-                  <input id="bodyFat" name="bodyFat" inputmode="decimal" autocomplete="off" placeholder="${escapeAttr(t("bodyFat.hint"))}" value="${escapeAttr(state.form.bodyFat)}" />
+                <label for="recordDate">${t("entry.date")}</label>
+                <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" max="${todayLocal()}" />
+                <div class="date-shortcuts">
+                  <button type="button" class="date-shortcut" data-date-shortcut="today">${t("diff.today")}</button>
+                  <button type="button" class="date-shortcut" data-date-shortcut="yesterday">${t("diff.yesterday")}</button>
                 </div>
               </div>
               <div class="field">
-                <label for="entryNote">${t("entry.note")}</label>
-                <input id="entryNote" name="note" type="text" maxlength="100" autocomplete="off" placeholder="${escapeAttr(t("entry.noteHint"))}" value="${escapeAttr(state.form.note)}" />
-                ${(state.form.note || "").length > 50 ? `<div class="hint-small" style="text-align:right;">${(state.form.note || "").length}/100</div>` : ""}
-                <div class="note-tags-row" role="group" aria-label="${t("note.tags")}">
-                  ${NOTE_TAGS.map((tag) => {
+                <label for="bodyFat">${t("bodyFat.label")}</label>
+                <input id="bodyFat" name="bodyFat" inputmode="decimal" autocomplete="off" placeholder="${escapeAttr(t("bodyFat.hint"))}" value="${escapeAttr(state.form.bodyFat)}" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="entryNote">${t("entry.note")}</label>
+              <input id="entryNote" name="note" type="text" maxlength="100" placeholder="${escapeAttr(t("entry.noteHint"))}" value="${escapeAttr(state.form.note)}" />
+              <div class="note-tags-row" role="group" aria-label="${t("note.tags")}">
+                ${NOTE_TAGS.map((tag) => {
       const active = (state.form.note || "").includes(`#${tag}`);
       return `<button type="button" class="note-tag${active ? " active" : ""}" data-note-tag="${tag}">${t("note.tag." + tag)}</button>`;
     }).join("")}
-                </div>
-                ${(() => {
-      const freq = getFrequentNotes(state.records, 4);
-      if (freq.length === 0) return "";
-      return `<div class="quick-notes-row">
-                    <span class="quick-notes-label">${t("quickNote.label")}:</span>
-                    ${freq.map((n) => `<button type="button" class="quick-note-chip" data-quick-note="${escapeAttr(n.text)}">${escapeAttr(n.text.length > 15 ? n.text.slice(0, 15) + "\u2026" : n.text)}</button>`).join("")}
-                  </div>`;
-    })()}
-              </div>
-
-              <!-- Quick Record Section -->
-              <div class="quick-section">
-                <h3>${t("quick.title")}</h3>
-                <p class="helper">${t("quick.hint")}</p>
-                <div class="quick-display" id="quickDisplay">${quickWeight.toFixed(1)} kg</div>
-                <div class="quick-buttons" role="group" aria-label="${t("quick.title")}">
-                  <button type="button" data-quick-adj="-1.0" aria-label="-1.0 kg">-1.0</button>
-                  <button type="button" data-quick-adj="-0.5" aria-label="-0.5 kg">-0.5</button>
-                  <button type="button" data-quick-adj="-0.1" aria-label="-0.1 kg">-0.1</button>
-                  <button type="button" data-quick-adj="+0.1" aria-label="+0.1 kg">+0.1</button>
-                  <button type="button" data-quick-adj="+0.5" aria-label="+0.5 kg">+0.5</button>
-                  <button type="button" data-quick-adj="+1.0" aria-label="+1.0 kg">+1.0</button>
-                </div>
-                <div class="quick-buttons" style="margin-top:10px;">
-                  <button type="button" class="quick-save" data-action="quick-save" aria-label="${t("quick.save")}">${t("quick.save")}</button>
-                </div>
-              </div>
-
-              <div class="voice-box ${activeEntryMode === "voice" ? "" : "hidden"}">
-                <h3>${t("entry.voice")}</h3>
-                <p>${supportsSpeech ? t("entry.voiceHint") : t("entry.voiceUnsupported")}</p>
-                <div class="row" style="margin-top: 12px;">
-                  <button type="button" class="btn secondary" data-action="toggle-voice" ${supportsSpeech ? "" : "disabled"}>
-                    ${voiceActive ? t("entry.voiceStop") : t("entry.voiceStart")}
-                  </button>
-                  ${voiceActive ? `<span class="voice-active-indicator">${t("status.listening")}</span>` : ""}
-                </div>
-                <div class="voice-transcript">${voiceTranscript || t("entry.lastVoice")}</div>
-              </div>
-
-              <div class="photo-box ${activeEntryMode === "photo" ? "" : "hidden"}">
-                <h3>${t("entry.photo")}</h3>
-                <p>${t("entry.photoHint")}</p>
-                <div class="row" style="margin-top: 12px;">
-                  ${isNativePlatform ? `<button type="button" class="btn secondary" data-action="pick-native-photo">${t("entry.photoSelect")}</button>` : `<label class="btn secondary" for="photoInput">${t("entry.photoSelect")}</label>
-                  <input id="photoInput" type="file" accept="image/*" capture="environment" class="hidden" />`}
-                </div>
-                ${imagePreviewUrl ? `
-                  <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" data-action="zoom-photo" role="button" tabindex="0" aria-label="${t("photo.zoomHint")}" />
-                  <p class="helper hint-small" style="margin-top: 4px; text-align: center;">${t("photo.zoomHint")}</p>
-                  ${!supportsTextDetection && !detectedWeights.length ? `<p class="helper" style="margin-top: 8px; text-align: center;">${t("photo.manualHint")}</p>` : ""}
-                ` : ""}
-                ${detectedWeights.length ? `<div style="margin-top: 12px;"><div class="helper">${t("entry.photoDetected")}</div><div class="chip-row" style="margin-top: 8px;">${detectedWeights.map((weight) => `<button type="button" class="chip" data-pick-weight="${weight}" aria-label="${formatWeight(weight)} kg">${formatWeight(weight)}</button>`).join("")}</div></div>` : ""}
-                ${!supportsTextDetection && !imagePreviewUrl ? `<span class="helper">${t("entry.photoFallback")}</span>` : ""}
-              </div>
-
-              ${previewDiff !== null ? `<div class="entry-preview">
-                <span class="entry-preview-diff ${previewDiff < 0 ? "negative" : previewDiff > 0 ? "positive" : "zero"}">${previewDiff > 0 ? "+" : ""}${previewDiff.toFixed(1)}kg ${t("entry.preview.vsLast")}</span>
-                ${previewLarge ? `<span class="entry-preview-warn">${t("entry.preview.large")}</span>` : ""}
-              </div>` : ""}
-              ${existingRecord ? `<div class="duplicate-warn">
-                <span>${t("entry.duplicate.warn")} ${existingRecord.wt.toFixed(1)}kg</span>
-                <span class="hint-small">${t("entry.duplicate.overwrite")}</span>
-              </div>` : ""}
-              <div class="row">
-                <button type="button" class="btn" data-action="save-record">${t("entry.save")}</button>
-                <div>
-                  <div class="helper">${state.profile.heightCm ? `${t("entry.bmiReady")}: ${formatBMI(currentBMI)}` : t("bmi.unknown")}</div>
-                  <div class="helper hint-small">${t("record.dailyLimit")}</div>
-                  <div class="helper hint-small desktop-only">\u2318+Enter</div>
-                </div>
-              </div>
-              <div class="validate-warnings" role="alert" aria-live="assertive" style="display:none"></div>
-            </div>
-
-            <div class="status ${statusKind === "error" ? "warn" : ""}" role="status" aria-live="polite">
-              ${escapeAttr(statusMessage)}
-              ${lastUndoState ? `<button type="button" class="undo-btn" data-action="undo">${t("undo.button")}</button>` : ""}
-            </div>
-          </section>
-
-          ${renderRecentEntries()}
-
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("section.chart")}</h2>
-                <p>${stats?.latestDate ?? t("chart.empty")}</p>
-              </div>
-              ${state.records.length ? `<button type="button" class="btn secondary" data-action="share-chart">${t("share.chart")}</button>` : ""}
-            </div>
-            <div class="summary-tabs" style="margin-bottom:10px;" role="tablist" aria-label="${t("section.chart")}">
-              <button type="button" class="summary-tab ${chartPeriod === "7" ? "active" : ""}" data-chart-period="7" role="tab" aria-selected="${chartPeriod === "7"}">${t("chart.period.7")}</button>
-              <button type="button" class="summary-tab ${chartPeriod === "30" ? "active" : ""}" data-chart-period="30" role="tab" aria-selected="${chartPeriod === "30"}">${t("chart.period.30")}</button>
-              <button type="button" class="summary-tab ${chartPeriod === "90" ? "active" : ""}" data-chart-period="90" role="tab" aria-selected="${chartPeriod === "90"}">${t("chart.period.90")}</button>
-              <button type="button" class="summary-tab ${chartPeriod === "all" ? "active" : ""}" data-chart-period="all" role="tab" aria-selected="${chartPeriod === "all"}">${t("chart.period.all")}</button>
-            </div>
-            <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}${stats ? ` \u2014 ${stats.latestWeight.toFixed(1)}kg, ${t("chart.change")}: ${stats.change > 0 ? "+" : ""}${stats.change.toFixed(1)}kg, ${state.records.length} ${t("chart.records")}` : ""}"></canvas>
-            <div id="chartTooltip" class="chart-tooltip" role="tooltip" aria-live="polite" style="display:none;"></div>
-            ${state.records.length >= 3 ? `<div class="chart-legend">
-              <span class="chart-legend-item"><span class="chart-legend-line gradient"></span>${t("chart.legend.weight")}</span>
-              <span class="chart-legend-item"><span class="chart-legend-line dashed accent3"></span>${t("chart.legend.movingAvg")}</span>
-              ${Number.isFinite(goalWeight) ? `<span class="chart-legend-item"><span class="chart-legend-line dashed ok"></span>${t("chart.legend.goal")}</span>` : ""}
-              <span class="chart-legend-item"><span class="chart-legend-line dashed accent2"></span>${t("chart.legend.forecast")}</span>
-            </div>` : ""}
-            ${state.profile.heightCm ? `<div class="hint-small" style="margin-top:4px;">${t("chart.bmiZones")}</div>` : ""}
-            <div class="stat-grid">
-              ${renderStat(t("chart.latest"), stats ? formatWeight(stats.latestWeight) : "--")}
-              ${renderStat(t("chart.min"), stats ? formatWeight(stats.minWeight) : "--")}
-              ${renderStat(t("chart.max"), stats ? formatWeight(stats.maxWeight) : "--")}
-              ${renderStat(t("chart.avg"), stats ? formatWeight(stats.avgWeight) : "--")}
-            </div>
-          </section>
-
-          <!-- Summary Panel -->
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("summary.title")}</h2>
               </div>
             </div>
-            <div class="summary-tabs" role="tablist" aria-label="${t("summary.title")}">
-              <button type="button" class="summary-tab ${summaryPeriod === "week" ? "active" : ""}" data-summary="week" role="tab" aria-selected="${summaryPeriod === "week"}">${t("summary.week")}</button>
-              <button type="button" class="summary-tab ${summaryPeriod === "month" ? "active" : ""}" data-summary="month" role="tab" aria-selected="${summaryPeriod === "month"}">${t("summary.month")}</button>
-            </div>
-            ${periodSummary ? `<div class="stat-grid">
-                  ${renderStat(t("summary.avg"), formatWeight(periodSummary.avg))}
-                  ${renderStat(t("summary.min"), formatWeight(periodSummary.min))}
-                  ${renderStat(t("summary.max"), formatWeight(periodSummary.max))}
-                  ${renderStat(t("summary.change"), signedWeight(periodSummary.change))}
-                </div>
-                <div class="helper" style="margin-top: 10px;">${t("summary.count")}: ${periodSummary.count}</div>` : `<div class="helper">${t("summary.noData")}</div>`}
-            <div class="rate-box">
-              <div class="label">${t("rate.title")}</div>
-              ${weeklyRate ? `<div class="rate-value ${weeklyRate.weeklyRate < 0 ? "loss" : weeklyRate.weeklyRate > 0 ? "gain" : "neutral"}">${weeklyRate.weeklyRate > 0 ? "+" : ""}${t("rate.value").replace("{rate}", weeklyRate.weeklyRate.toFixed(2))}</div>
-                  <div class="helper">${t("rate.period").replace("{days}", weeklyRate.totalDays).replace("{change}", (weeklyRate.totalChange > 0 ? "+" : "") + weeklyRate.totalChange.toFixed(1))}</div>` : `<div class="helper">${t("rate.insufficient")}</div>`}
-            </div>
-            ${insight ? `<div class="insight-box">
-              <div class="helper">${t("insight.bestDay").replace("{day}", t("day." + insight.bestDay))}</div>
-              ${insight.weekComparison !== null ? `<div class="helper">${insight.weekComparison > 0.05 ? t("insight.weekUp").replace("{diff}", insight.weekComparison.toFixed(1)) : insight.weekComparison < -0.05 ? t("insight.weekDown").replace("{diff}", insight.weekComparison.toFixed(1)) : t("insight.weekSame")}</div>` : ""}
-            </div>` : ""}
-            ${renderDashboard()}
-            ${renderDataFreshness()}
-            ${renderRecordMilestone()}
-            ${renderTrendIndicator()}
-            ${renderMomentumScore()}
-            ${renderStreakRewards()}
-            ${renderGoalCountdown()}
-            ${renderGoalScenarios()}
-            ${renderNextMilestones()}
-            ${renderDayOfWeekAvg()}
-            ${renderStability()}
-            ${renderBMIDistribution()}
-            ${renderIdealWeight()}
-            ${renderWeightVelocity()}
-            ${renderMultiPeriodRate()}
-            ${renderCalorieEstimate()}
-            ${renderWeightConfidence()}
-            ${renderBodyFatStats()}
-            ${renderWeeklyAverages()}
-            ${renderRecordingCalendar()}
-            ${renderLongTermProgress()}
-            ${renderWeightFluctuation()}
-            ${renderSuccessRate()}
-            ${renderRecordingRate()}
-            ${renderStreakCalendar()}
-            ${renderConsistencyScore()}
-            ${renderWeightRangeSummary()}
-            ${renderTrendStreak()}
-            ${renderBMITrend()}
-            ${renderBodyFatTrend()}
-            ${renderWeeklySummaryComparison()}
-            ${renderGoalProgressRing()}
-            ${renderDailyTarget()}
-            ${renderMonthPhaseAvg()}
-            ${renderStreakFreeze()}
-            ${renderRecentWeightBars()}
-            ${renderWeightAnniversary()}
-            ${renderTrendForecast()}
-            ${renderGoalStreak()}
-            ${renderThenVsNow()}
-            ${renderWeightPace()}
-            ${renderPeriodBreakdown()}
-            ${renderMotivation()}
-            ${renderWeightBand()}
-            ${renderMiniSparkline()}
-            ${renderEntrySummary()}
-            ${renderGoalDistance()}
-            ${renderStreakBadges()}
-            ${renderWeightTrendArrow()}
-            ${renderWeeklyReportCard()}
-            ${renderGoalMilestones()}
-            ${state.records.length >= 3 ? `
-            <div class="analytics-toggle-section">
-              <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
-                ${showAdvancedAnalytics ? t("analytics.showLess") : t("analytics.showMore")}
-              </button>
-              ${showAdvancedAnalytics ? `
-              <div class="advanced-analytics">
-                ${renderWeekdayWeekend()}
-                ${renderConsistencyStreak()}
-                ${renderWeightPercentile()}
-                ${renderMovingAverages()}
-                ${renderWeightRange()}
-                ${renderTagImpact()}
-                ${renderBestPeriod()}
-                ${renderWeeklyFrequency()}
-                ${renderWeightVariance()}
-                ${renderWeightPlateau()}
-                ${renderRecordGaps()}
-                ${renderSeasonality()}
-                ${renderWeightDistribution()}
-                ${renderDayOfWeekChange()}
-                ${renderPersonalRecords()}
-                ${renderWeightRegression()}
-                ${renderBMIHistory()}
-                ${renderWeightHeatmap()}
-                ${renderProgressSummary()}
-                ${renderMilestoneTimeline()}
-                ${renderVolatilityIndex()}
-                ${renderPeriodComparison()}
-                ${renderBodyComposition()}
-                ${renderShareSummary()}
-                ${renderDuplicateCheck()}
-                ${renderNoteTagStats()}
-                ${renderWeightAnomalies()}
-                ${renderMilestoneHistory()}
-                ${renderWeightJourney()}
-                ${renderMovingAvgCrossover()}
-                ${renderPredictionAccuracy()}
-                ${renderDailyChangeDist()}
-                ${renderRecordCompleteness()}
-                ${renderWeightSmoothness()}
-                ${renderBestWeighDay()}
-                ${renderTimeSlotPattern()}
-                ${renderProgressTimeline()}
-                ${renderForecastConfidence()}
-                ${renderWeightZones()}
-                ${renderWeightChangeRate()}
-                ${renderWeighInConsistency()}
-                ${renderPlateauPeriods()}
-                ${renderWeightPercentileRank()}
-                ${renderBodyCompositionBreakdown()}
-                ${renderNoteWordFrequency()}
+
+            <div class="voice-box ${activeEntryMode === "voice" ? "" : "hidden"}">
+              <h3>${t("entry.voice")}</h3>
+              <p>${supportsSpeech ? t("entry.voiceHint") : t("entry.voiceUnsupported")}</p>
+              <div class="row" style="margin-top: 12px;">
+                <button type="button" class="btn secondary" data-action="toggle-voice" ${supportsSpeech ? "" : "disabled"}>
+                  ${voiceActive ? t("entry.voiceStop") : t("entry.voiceStart")}
+                </button>
+                ${voiceActive ? `<span class="voice-active-indicator">${t("status.listening")}</span>` : ""}
               </div>
+              <div class="voice-transcript">${voiceTranscript || t("entry.lastVoice")}</div>
+            </div>
+
+            <div class="photo-box ${activeEntryMode === "photo" ? "" : "hidden"}">
+              <h3>${t("entry.photo")}</h3>
+              <p>${t("entry.photoHint")}</p>
+              <div class="row" style="margin-top: 12px;">
+                ${isNativePlatform ? `<button type="button" class="btn secondary" data-action="pick-native-photo">${t("entry.photoSelect")}</button>` : `<label class="btn secondary" for="photoInput">${t("entry.photoSelect")}</label>
+                <input id="photoInput" type="file" accept="image/*" capture="environment" class="hidden" />`}
+              </div>
+              ${imagePreviewUrl ? `
+                <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" data-action="zoom-photo" />
+                <p class="helper hint-small" style="margin-top: 4px; text-align: center;">${t("photo.zoomHint")}</p>
+                ${!supportsTextDetection && !detectedWeights.length ? `<p class="helper" style="margin-top: 8px; text-align: center;">${t("photo.manualHint")}</p>` : ""}
               ` : ""}
+              ${detectedWeights.length ? `<div style="margin-top: 12px;"><div class="helper">${t("entry.photoDetected")}</div><div class="chip-row" style="margin-top: 8px;">${detectedWeights.map((weight) => `<button type="button" class="chip" data-pick-weight="${weight}">${formatWeight(weight)}</button>`).join("")}</div></div>` : ""}
+              ${!supportsTextDetection && !imagePreviewUrl ? `<span class="helper">${t("entry.photoFallback")}</span>` : ""}
+            </div>
+
+            ${previewDiff !== null ? `<div class="entry-preview">
+              <span class="entry-preview-diff ${previewDiff < 0 ? "negative" : previewDiff > 0 ? "positive" : "zero"}">${previewDiff > 0 ? "+" : ""}${previewDiff.toFixed(1)}kg ${t("entry.preview.vsLast")}</span>
+              ${previewLarge ? `<span class="entry-preview-warn">${t("entry.preview.large")}</span>` : ""}
+            </div>` : ""}
+            ${existingRecord ? `<div class="duplicate-warn">
+              <span>${t("entry.duplicate.warn")} ${existingRecord.wt.toFixed(1)}kg</span>
+              <span class="hint-small">${t("entry.duplicate.overwrite")}</span>
+            </div>` : ""}
+            <button type="button" class="btn save-btn-main" data-action="save-record">${t("entry.save")}</button>
+            <div class="save-meta">
+              <div class="helper">${state.profile.heightCm ? `${t("entry.bmiReady")}: ${formatBMI(currentBMI)}` : ""}</div>
+            </div>
+
+            <!-- Quick Record Section -->
+            <div class="quick-section">
+              <h3>${t("quick.title")}</h3>
+              <p class="helper">${t("quick.hint")}</p>
+              <div class="quick-display" id="quickDisplay">${quickWeight.toFixed(1)} kg</div>
+              <div class="quick-buttons" role="group" aria-label="${t("quick.title")}">
+                <button type="button" data-quick-adj="-1.0" aria-label="-1.0 kg">-1.0</button>
+                <button type="button" data-quick-adj="-0.5" aria-label="-0.5 kg">-0.5</button>
+                <button type="button" data-quick-adj="-0.1" aria-label="-0.1 kg">-0.1</button>
+                <button type="button" data-quick-adj="+0.1" aria-label="+0.1 kg">+0.1</button>
+                <button type="button" data-quick-adj="+0.5" aria-label="+0.5 kg">+0.5</button>
+                <button type="button" data-quick-adj="+1.0" aria-label="+1.0 kg">+1.0</button>
+              </div>
+              <div class="quick-buttons" style="margin-top:10px;">
+                <button type="button" class="quick-save" data-action="quick-save">${t("quick.save")}</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="status ${statusKind === "error" ? "warn" : ""}" role="status" aria-live="polite">
+            ${escapeAttr(statusMessage)}
+            ${lastUndoState ? `<button type="button" class="undo-btn" data-action="undo">${t("undo.button")}</button>` : ""}
+          </div>
+        </section>
+
+        <!-- Goal progress on input tab -->
+        ${goalProgress ? `
+        <div class="goal-mini">
+          <div class="goal-mini-label">${t("goal.title")}: ${Number.isFinite(goalWeight) ? formatWeight(goalWeight) : ""}</div>
+          <div class="progress-bar-track" role="progressbar" aria-valuenow="${goalProgress.percent}" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-bar-fill" style="width: ${goalProgress.percent}%"></div>
+          </div>
+          <div class="goal-mini-text">${goalProgress.remaining <= 0 ? t("goal.achieved") : `${t("goal.remaining")}: ${goalProgress.remaining.toFixed(1)}kg (${goalProgress.percent}%)`}</div>
+        </div>
+        ` : ""}
+      </div>
+      ` : ""}
+
+      ${activeTab === "graph" ? `
+      <div class="tab-page tab-graph">
+        <section class="panel">
+          <div class="section-header">
+            <div>
+              <h2>${t("section.chart")}</h2>
+              <p>${stats?.latestDate ?? t("chart.empty")}</p>
+            </div>
+            ${state.records.length ? `<button type="button" class="btn secondary" data-action="share-chart">${t("share.chart")}</button>` : ""}
+          </div>
+          <div class="summary-tabs" style="margin-bottom:10px;" role="tablist" aria-label="${t("section.chart")}">
+            <button type="button" class="summary-tab ${chartPeriod === "7" ? "active" : ""}" data-chart-period="7" role="tab" aria-selected="${chartPeriod === "7"}">${t("chart.period.7")}</button>
+            <button type="button" class="summary-tab ${chartPeriod === "30" ? "active" : ""}" data-chart-period="30" role="tab" aria-selected="${chartPeriod === "30"}">${t("chart.period.30")}</button>
+            <button type="button" class="summary-tab ${chartPeriod === "90" ? "active" : ""}" data-chart-period="90" role="tab" aria-selected="${chartPeriod === "90"}">${t("chart.period.90")}</button>
+            <button type="button" class="summary-tab ${chartPeriod === "all" ? "active" : ""}" data-chart-period="all" role="tab" aria-selected="${chartPeriod === "all"}">${t("chart.period.all")}</button>
+          </div>
+          <canvas id="chart" width="960" height="${state.settings.chartStyle === "compact" ? 220 : 320}" role="img" aria-label="${t("section.chart")}${stats ? ` \u2014 ${stats.latestWeight.toFixed(1)}kg, ${t("chart.change")}: ${stats.change > 0 ? "+" : ""}${stats.change.toFixed(1)}kg, ${state.records.length} ${t("chart.records")}` : ""}"></canvas>
+          <div id="chartTooltip" class="chart-tooltip" role="tooltip" aria-live="polite" style="display:none;"></div>
+          ${state.records.length >= 3 ? `<div class="chart-legend">
+            <span class="chart-legend-item"><span class="chart-legend-line gradient"></span>${t("chart.legend.weight")}</span>
+            <span class="chart-legend-item"><span class="chart-legend-line dashed accent3"></span>${t("chart.legend.movingAvg")}</span>
+            ${Number.isFinite(goalWeight) ? `<span class="chart-legend-item"><span class="chart-legend-line dashed ok"></span>${t("chart.legend.goal")}</span>` : ""}
+            <span class="chart-legend-item"><span class="chart-legend-line dashed accent2"></span>${t("chart.legend.forecast")}</span>
+          </div>` : ""}
+          <div class="stat-grid">
+            ${renderStat(t("chart.latest"), stats ? formatWeight(stats.latestWeight) : "--")}
+            ${renderStat(t("chart.min"), stats ? formatWeight(stats.minWeight) : "--")}
+            ${renderStat(t("chart.max"), stats ? formatWeight(stats.maxWeight) : "--")}
+            ${renderStat(t("chart.avg"), stats ? formatWeight(stats.avgWeight) : "--")}
+          </div>
+        </section>
+
+        <!-- Summary Panel -->
+        <section class="panel">
+          <div class="summary-tabs" role="tablist" aria-label="${t("summary.title")}">
+            <button type="button" class="summary-tab ${summaryPeriod === "week" ? "active" : ""}" data-summary="week" role="tab" aria-selected="${summaryPeriod === "week"}">${t("summary.week")}</button>
+            <button type="button" class="summary-tab ${summaryPeriod === "month" ? "active" : ""}" data-summary="month" role="tab" aria-selected="${summaryPeriod === "month"}">${t("summary.month")}</button>
+          </div>
+          ${periodSummary ? `<div class="stat-grid">
+                ${renderStat(t("summary.avg"), formatWeight(periodSummary.avg))}
+                ${renderStat(t("summary.min"), formatWeight(periodSummary.min))}
+                ${renderStat(t("summary.max"), formatWeight(periodSummary.max))}
+                ${renderStat(t("summary.change"), signedWeight(periodSummary.change))}
+              </div>
+              <div class="helper" style="margin-top: 10px;">${t("summary.count")}: ${periodSummary.count}</div>` : `<div class="helper">${t("summary.noData")}</div>`}
+          <div class="rate-box">
+            <div class="label">${t("rate.title")}</div>
+            ${weeklyRate ? `<div class="rate-value ${weeklyRate.weeklyRate < 0 ? "loss" : weeklyRate.weeklyRate > 0 ? "gain" : "neutral"}">${weeklyRate.weeklyRate > 0 ? "+" : ""}${t("rate.value").replace("{rate}", weeklyRate.weeklyRate.toFixed(2))}</div>
+                <div class="helper">${t("rate.period").replace("{days}", weeklyRate.totalDays).replace("{change}", (weeklyRate.totalChange > 0 ? "+" : "") + weeklyRate.totalChange.toFixed(1))}</div>` : `<div class="helper">${t("rate.insufficient")}</div>`}
+          </div>
+          ${renderMomentumScore()}
+          ${renderStreakRewards()}
+          ${renderWeightVelocity()}
+          ${renderCalorieEstimate()}
+          ${renderBodyFatStats()}
+          ${renderShareProgress()}
+          ${state.records.length >= 3 ? `
+          <div class="analytics-toggle-section">
+            <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
+              ${showAdvancedAnalytics ? t("analytics.showLess") : t("analytics.showMore")}
+            </button>
+            ${showAdvancedAnalytics ? `
+            <div class="advanced-analytics">
+              ${renderDayOfWeekAvg()}
+              ${renderStability()}
+              ${renderBMIDistribution()}
+              ${renderNextMilestones()}
+              ${renderWeekdayWeekend()}
+              ${renderConsistencyStreak()}
+              ${renderWeightPercentile()}
+              ${renderMovingAverages()}
+              ${renderWeightRange()}
+              ${renderTagImpact()}
+              ${renderBestPeriod()}
+              ${renderWeeklyFrequency()}
+              ${renderWeightVariance()}
+              ${renderWeightPlateau()}
+              ${renderRecordGaps()}
+              ${renderSeasonality()}
+              ${renderWeightDistribution()}
+              ${renderDayOfWeekChange()}
+              ${renderPersonalRecords()}
+              ${renderWeightRegression()}
+              ${renderBMIHistory()}
+              ${renderWeightHeatmap()}
             </div>
             ` : ""}
-          </section>
+          </div>
+          ` : ""}
+        </section>
+      </div>
+      ` : ""}
 
-          <!-- Monthly Stats Panel -->
-          ${renderMonthlyStats()}
+      ${activeTab === "calendar" ? `
+      <div class="tab-page tab-calendar">
+        <section class="panel">
+          <div class="section-header">
+            <div>
+              <h2>${t("calendar.title")}</h2>
+              <p>${t("calendar.hint")}</p>
+            </div>
+          </div>
+          ${renderCalendar()}
+        </section>
+        ${renderMonthlyStats()}
+      </div>
+      ` : ""}
 
-          <!-- Monthly Averages Chart -->
-          ${renderMonthlyAverages()}
-
-          <!-- Calendar Panel -->
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("calendar.title")}</h2>
-                <p>${t("calendar.hint")}</p>
-              </div>
-            </div>
-            ${renderCalendar()}
-          </section>
-
-          <!-- Records List Panel -->
-          <section class="panel records-panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("section.records")}</h2>
-                <p>${state.records.length} ${t("chart.records")}</p>
-              </div>
-              ${state.records.length > 5 ? `<button type="button" class="btn secondary" data-action="toggle-records">${showAllRecords ? t("records.showLess") : t("records.showAll")}</button>` : ""}
-            </div>
-            ${state.records.length > 3 ? `
-            <div class="record-search">
-              <input id="recordSearch" type="search" placeholder="${escapeAttr(t("records.search"))}" value="${escapeAttr(recordSearchQuery)}" autocomplete="off" aria-label="${t("records.search")}" />
-              ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filteredSearchCount)}</span>` : `<span class="helper hint-small desktop-only">\u2318K</span>`}
-            </div>
-            <div class="record-date-range">
-              <div class="helper hint-small">${t("records.dateRange")}</div>
-              <div class="date-range-fields">
-                <label>${t("records.from")}<input id="dateRangeFrom" type="date" autocomplete="off" value="${escapeAttr(recordDateFrom)}" max="${todayLocal()}" /></label>
-                <label>${t("records.to")}<input id="dateRangeTo" type="date" autocomplete="off" value="${escapeAttr(recordDateTo)}" max="${todayLocal()}" /></label>
-                ${recordDateFrom || recordDateTo ? `<button type="button" class="btn ghost" data-action="clear-date-range">${t("records.clearRange")}</button>` : ""}
-              </div>
-            </div>` : ""}
-            ${state.records.length ? `<div class="export-row"><button type="button" class="btn ghost" data-action="export-csv">\u{1F4E4} ${t("export.csv")}</button><button type="button" class="btn ghost" data-action="import-csv">\u{1F4E5} ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>` : `<div class="export-row"><button type="button" class="btn ghost" data-action="import-csv">\u{1F4E5} ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>`}
-            <div class="record-list">
-              ${state.records.length ? renderRecordList() : `<div class="empty-state">
-                <span class="empty-emoji" aria-hidden="true">\u{1F4CA}</span>
-                <div class="empty-msg">${t("records.empty")}</div>
-                <div class="empty-hint">${t("records.emptyHint")}</div>
-                <div class="empty-state-actions">
-                  <button type="button" class="btn" data-mode="manual" aria-label="${t("entry.manual")}">\u270F\uFE0F ${t("entry.manual")}</button>
-                  <button type="button" class="btn secondary" data-mode="voice" aria-label="${t("entry.voice")}">\u{1F3A4} ${t("entry.voice")}</button>
-                  <button type="button" class="btn secondary" data-mode="photo" aria-label="${t("entry.photo")}">\u{1F4F7} ${t("entry.photo")}</button>
-                </div>
-              </div>`}
-            </div>
-            ${renderSourceBreakdown()}
-            ${renderRecordingTime()}
-            ${renderDataHealth()}
-            <div class="export-grid">
-              <button type="button" class="btn secondary" data-action="export-excel">\u{1F4CA} ${t("export.excel")}</button>
-              <button type="button" class="btn secondary" data-action="export-csv">\u{1F4C4} ${t("export.csv")}</button>
-              <button type="button" class="btn secondary" data-action="export-text">\u{1F4DD} ${t("export.text")}</button>
-            </div>
-          </section>
-        </div>
-
-        <div class="column">
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("section.settings")}</h2>
-                <p>v${APP_VERSION}</p>
-              </div>
-              <button type="button" class="btn secondary" data-action="save-settings">${t("settings.save")}</button>
-            </div>
-            <div class="settings-grid">
-              <div class="field">
-                <label for="language">${t("settings.language")}</label>
-                <select id="language" name="language">
-                  ${renderOption("ja", state.settings.language, t("lang.ja"))}
-                  ${renderOption("en", state.settings.language, t("lang.en"))}
-                </select>
-              </div>
-              <div class="field span-2">
-                <label>${t("settings.theme")}</label>
-                <div class="theme-grid" role="radiogroup" aria-label="${t("settings.theme")}">
-                  ${THEME_LIST.map((theme) => `
-                    <button type="button" class="theme-swatch ${state.settings.theme === theme.id ? "active" : ""}" data-theme-pick="${theme.id}" role="radio" aria-checked="${state.settings.theme === theme.id}" aria-label="${t("settings.theme." + theme.id)}">
-                      <span class="swatch-color" style="background: ${theme.color};"></span>
-                      <span class="swatch-label">${t("settings.theme." + theme.id)}</span>
-                    </button>
-                  `).join("")}
-                </div>
-              </div>
-              <div class="field">
-                <label for="chartStyle">${t("settings.chartStyle")}</label>
-                <select id="chartStyle" name="chartStyle">
-                  ${renderOption("detailed", state.settings.chartStyle, t("settings.chartStyle.detailed"))}
-                  ${renderOption("compact", state.settings.chartStyle, t("settings.chartStyle.compact"))}
-                </select>
-              </div>
-              <div class="field">
-                <label for="adPreviewEnabled">${t("settings.adPreview")}</label>
-                <select id="adPreviewEnabled" name="adPreviewEnabled">
-                  ${renderOption("true", String(state.settings.adPreviewEnabled), t("settings.on"))}
-                  ${renderOption("false", String(state.settings.adPreviewEnabled), t("settings.off"))}
-                </select>
-              </div>
-              <div class="field">
-                <label for="autoTheme">${t("settings.autoTheme")}</label>
-                <select id="autoTheme" name="autoTheme">
-                  ${renderOption("true", String(state.settings.autoTheme), t("settings.autoTheme.on"))}
-                  ${renderOption("false", String(state.settings.autoTheme), t("settings.autoTheme.off"))}
-                </select>
-                <div class="helper hint-small">${t("settings.autoTheme.hint")}</div>
-              </div>
-              <div class="field">
-                <label>${t("settings.platforms")}</label>
-                <input value="${t("settings.platformsValue")}" readonly />
-              </div>
-              <div class="field">
-                <label>${t("settings.storage")}</label>
-                <input value="${t("settings.storageValue")}" readonly />
-              </div>
-              <div class="field span-2">
-                <label>${t("settings.version")}</label>
-                <input value="${APP_VERSION}" readonly />
-              </div>
-            </div>
-            <div class="data-actions">
-              <button type="button" class="btn secondary" data-action="export-data">\u{1F4BE} ${t("settings.export")}</button>
-              <label class="btn secondary" for="importInput">\u{1F4E5} ${t("import.button")}</label>
-              <input id="importInput" type="file" accept=".json" class="hidden" />
-              <button type="button" class="btn ghost" data-action="reset-data">\u{1F5D1}\uFE0F ${t("settings.reset")}</button>
-            </div>
-          </section>
-
-          <!-- Google Drive Sync -->
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("google.title")}</h2>
-                <p>${t("google.hint")}</p>
-              </div>
-            </div>
-            <div class="google-actions">
-              <button type="button" class="google-btn" data-action="google-backup" ${isGoogleReady() ? "" : "disabled"}>
-                <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                ${t("google.backup")}
-              </button>
-              <button type="button" class="google-btn" data-action="google-restore" ${isGoogleReady() ? "" : "disabled"}>
-                <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                ${t("google.restore")}
-              </button>
-            </div>
-          </section>
-
-          <!-- Goal Weight -->
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("goal.title")}</h2>
-              </div>
-              <button type="button" class="btn secondary" data-action="save-goal">${t("goal.save")}</button>
+      ${activeTab === "settings" ? `
+      <div class="tab-page tab-settings">
+        <!-- Profile -->
+        <section class="panel">
+          <div class="section-header">
+            <div><h2>${t("section.profile")}</h2></div>
+            <button type="button" class="btn secondary" data-action="save-profile">${t("profile.save")}</button>
+          </div>
+          <div class="input-grid">
+            <div class="field">
+              <label for="name">${t("profile.name")}</label>
+              <input id="name" name="name" maxlength="40" value="${escapeAttr(state.profile.name)}" />
             </div>
             <div class="field">
-              <label for="goalWeight">${t("goal.set")}</label>
-              <input id="goalWeight" name="goalWeight" inputmode="decimal" autocomplete="off" value="${escapeAttr(state.settings.goalWeight ?? "")}" />
+              <label for="gender">${t("profile.gender")}</label>
+              <select id="gender" name="gender">
+                ${renderOption("female", state.profile.gender, t("gender.female"))}
+                ${renderOption("male", state.profile.gender, t("gender.male"))}
+                ${renderOption("nonbinary", state.profile.gender, t("gender.nonbinary"))}
+                ${renderOption("unspecified", state.profile.gender, t("gender.unspecified"))}
+              </select>
             </div>
-          </section>
+            <div class="field">
+              <label for="heightCm">${t("profile.height")}</label>
+              <input id="heightCm" name="heightCm" inputmode="decimal" value="${escapeAttr(state.profile.heightCm)}" />
+            </div>
+            <div class="field">
+              <label for="age">${t("profile.age")}</label>
+              <input id="age" name="age" inputmode="numeric" value="${escapeAttr(state.profile.age)}" />
+            </div>
+          </div>
+        </section>
 
-          <!-- Reminder -->
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("reminder.title")}</h2>
-              </div>
+        <!-- Goal Weight -->
+        <section class="panel">
+          <div class="section-header">
+            <div><h2>${t("goal.title")}</h2></div>
+            <button type="button" class="btn secondary" data-action="save-goal">${t("goal.save")}</button>
+          </div>
+          <div class="field">
+            <label for="goalWeight">${t("goal.set")}</label>
+            <input id="goalWeight" name="goalWeight" inputmode="decimal" autocomplete="off" value="${escapeAttr(state.settings.goalWeight ?? "")}" />
+          </div>
+          ${goalProgress ? `
+          <div class="goal-detail" style="margin-top:12px;">
+            <div class="progress-bar-track" role="progressbar" aria-valuenow="${goalProgress.percent}" aria-valuemin="0" aria-valuemax="100">
+              <div class="progress-bar-fill" style="width: ${goalProgress.percent}%"></div>
+              ${goalMilestones ? goalMilestones.filter((m) => m.pct < 100).map((m) => `<div class="goal-milestone-marker${m.reached ? " reached" : ""}" style="left:${m.pct}%" title="${t("goal.milestone").replace("{pct}", m.pct)}"></div>`).join("") : ""}
             </div>
-            <div class="reminder-grid">
-              <div class="field">
-                <label for="reminderEnabled">${t("reminder.enable")}</label>
-                <select id="reminderEnabled" name="reminderEnabled">
-                  ${renderOption("true", String(state.settings.reminderEnabled), t("reminder.on"))}
-                  ${renderOption("false", String(state.settings.reminderEnabled), t("reminder.off"))}
-                </select>
-              </div>
-              <div class="field">
-                <label for="reminderTime">${t("reminder.time")}</label>
-                <input id="reminderTime" name="reminderTime" type="time" value="${escapeAttr(state.settings.reminderTime || "21:00")}" />
-              </div>
+            <div class="progress-text">
+              <span>${t("goal.progress")}</span>
+              <span>${goalProgress.remaining <= 0 ? t("goal.achieved") : `${t("goal.remaining")}: ${goalProgress.remaining.toFixed(1)}kg`}</span>
             </div>
-            <div style="margin-top: 12px;">
-              <button type="button" class="btn secondary" data-action="save-reminder">${t("reminder.save")}</button>
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="section-header">
-              <div>
-                <h2>${t("section.review")}</h2>
-                <p>${t("review.note")}</p>
-              </div>
-            </div>
-            <div class="privacy-box">
-              <h3>${t("privacy.title")}</h3>
-              <p>${t("privacy.body")}</p>
-            </div>
-            <div class="note-grid" style="margin-top: 12px;">
-              <article class="review-card">
-                <h3>${t("review.permissionsTitle")}</h3>
-                <p>${t("review.permissions")}</p>
-              </article>
-              <article class="review-card">
-                <h3>${t("review.medicalTitle")}</h3>
-                <p>${t("review.medical")}</p>
-              </article>
-              <article class="review-card">
-                <h3>${t("review.adsTitle")}</h3>
-                <p>${t("review.ads")}</p>
-              </article>
-            </div>
-            <div class="review-card" style="margin-top: 12px;">
-              <h3>${t("review.checklistTitle")}</h3>
-              <ul class="checklist">
-                <li>${t("review.checklist.permissions")}</li>
-                <li>${t("review.checklist.privacy")}</li>
-                <li>${t("review.checklist.medical")}</li>
-                <li>${t("review.checklist.ads")}</li>
-              </ul>
-            </div>
-          </section>
-
-          ${state.settings.adPreviewEnabled ? `
-            <section class="panel">
-              <div class="ad-slot">
-                <div class="ad-badge">AD</div>
-                <div>
-                  <h3>${t("settings.adPreview")}</h3>
-                  <p class="helper">${t("review.ads")}</p>
-                </div>
-              </div>
-            </section>
+            ${goalPrediction ? `<div class="prediction-text">${t("goal.prediction")}: ${goalPrediction.achieved ? t("goal.predictionAchieved") : goalPrediction.insufficient ? t("goal.predictionInsufficient") : goalPrediction.noTrend ? t("goal.predictionNoTrend") : `${t("goal.predictionDays").replace("{days}", goalPrediction.days)} (${goalPrediction.predictedDate})`}</div>` : ""}
+          </div>
           ` : ""}
-        </div>
+        </section>
+
+        <!-- Settings -->
+        <section class="panel">
+          <div class="section-header">
+            <div><h2>${t("section.settings")}</h2><p>v${APP_VERSION}</p></div>
+            <button type="button" class="btn secondary" data-action="save-settings">${t("settings.save")}</button>
+          </div>
+          <div class="settings-grid">
+            <div class="field">
+              <label for="language">${t("settings.language")}</label>
+              <select id="language" name="language">
+                ${renderOption("ja", state.settings.language, t("lang.ja"))}
+                ${renderOption("en", state.settings.language, t("lang.en"))}
+              </select>
+            </div>
+            <div class="field span-2">
+              <label>${t("settings.theme")}</label>
+              <div class="theme-grid" role="radiogroup" aria-label="${t("settings.theme")}">
+                ${THEME_LIST.map((theme) => `
+                  <button type="button" class="theme-swatch ${state.settings.theme === theme.id ? "active" : ""}" data-theme-pick="${theme.id}" role="radio" aria-checked="${state.settings.theme === theme.id}" aria-label="${t("settings.theme." + theme.id)}">
+                    <span class="swatch-color" style="background: ${theme.color};"></span>
+                    <span class="swatch-label">${t("settings.theme." + theme.id)}</span>
+                  </button>
+                `).join("")}
+              </div>
+            </div>
+            <div class="field">
+              <label for="chartStyle">${t("settings.chartStyle")}</label>
+              <select id="chartStyle" name="chartStyle">
+                ${renderOption("detailed", state.settings.chartStyle, t("settings.chartStyle.detailed"))}
+                ${renderOption("compact", state.settings.chartStyle, t("settings.chartStyle.compact"))}
+              </select>
+            </div>
+            <div class="field">
+              <label for="autoTheme">${t("settings.autoTheme")}</label>
+              <select id="autoTheme" name="autoTheme">
+                ${renderOption("true", String(state.settings.autoTheme), t("settings.autoTheme.on"))}
+                ${renderOption("false", String(state.settings.autoTheme), t("settings.autoTheme.off"))}
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <!-- Reminder -->
+        <section class="panel">
+          <div class="section-header">
+            <div><h2>${t("reminder.title")}</h2></div>
+          </div>
+          <div class="reminder-grid">
+            <div class="field">
+              <label for="reminderEnabled">${t("reminder.enable")}</label>
+              <select id="reminderEnabled" name="reminderEnabled">
+                ${renderOption("true", String(state.settings.reminderEnabled), t("reminder.on"))}
+                ${renderOption("false", String(state.settings.reminderEnabled), t("reminder.off"))}
+              </select>
+            </div>
+            <div class="field">
+              <label for="reminderTime">${t("reminder.time")}</label>
+              <input id="reminderTime" name="reminderTime" type="time" value="${escapeAttr(state.settings.reminderTime || "21:00")}" />
+            </div>
+          </div>
+          <div style="margin-top: 12px;">
+            <button type="button" class="btn secondary" data-action="save-reminder">${t("reminder.save")}</button>
+          </div>
+        </section>
+
+        <!-- Data management -->
+        <section class="panel">
+          <div class="data-actions">
+            <button type="button" class="btn secondary" data-action="export-data">${t("settings.export")}</button>
+            <label class="btn secondary" for="importInput">${t("import.button")}</label>
+            <input id="importInput" type="file" accept=".json" class="hidden" />
+            <button type="button" class="btn ghost" data-action="reset-data">${t("settings.reset")}</button>
+          </div>
+        </section>
       </div>
+      ` : ""}
+
+      ${activeTab === "records" ? `
+      <div class="tab-page tab-records">
+        <section class="panel records-panel">
+          <div class="section-header">
+            <div>
+              <h2>${t("section.records")}</h2>
+              <p>${state.records.length} ${t("chart.records")}</p>
+            </div>
+            ${state.records.length > 5 ? `<button type="button" class="btn secondary" data-action="toggle-records">${showAllRecords ? t("records.showLess") : t("records.showAll")}</button>` : ""}
+          </div>
+          ${state.records.length > 3 ? `
+          <div class="record-search">
+            <input id="recordSearch" type="search" placeholder="${escapeAttr(t("records.search"))}" value="${escapeAttr(recordSearchQuery)}" autocomplete="off" aria-label="${t("records.search")}" />
+          </div>` : ""}
+          <div class="record-list">
+            ${state.records.length ? renderRecordList() : `<div class="empty-state">
+              <div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true"></div>
+              <div class="helper">${t("records.empty")}</div>
+            </div>`}
+          </div>
+          ${renderSourceBreakdown()}
+          <div class="export-grid">
+            <button type="button" class="btn secondary" data-action="export-excel">${t("export.excel")}</button>
+            <button type="button" class="btn secondary" data-action="export-csv">${t("export.csv")}</button>
+            <button type="button" class="btn ghost" data-action="import-csv">${t("import.csv")}</button>
+            <input type="file" id="csvImportInput" accept=".csv" style="display:none" />
+          </div>
+        </section>
+      </div>
+      ` : ""}
+
+      <!-- Bottom Tab Bar -->
+      <nav class="bottom-tabs" role="tablist" aria-label="Navigation">
+        <button type="button" class="bottom-tab ${activeTab === "input" ? "active" : ""}" data-tab="input" role="tab" aria-selected="${activeTab === "input"}">
+          <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16m8-8H4"/></svg>
+          <span class="bottom-tab-label">${t("tab.input")}</span>
+        </button>
+        <button type="button" class="bottom-tab ${activeTab === "graph" ? "active" : ""}" data-tab="graph" role="tab" aria-selected="${activeTab === "graph"}">
+          <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span class="bottom-tab-label">${t("tab.graph")}</span>
+        </button>
+        <button type="button" class="bottom-tab ${activeTab === "calendar" ? "active" : ""}" data-tab="calendar" role="tab" aria-selected="${activeTab === "calendar"}">
+          <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span class="bottom-tab-label">${t("tab.calendar")}</span>
+        </button>
+        <button type="button" class="bottom-tab ${activeTab === "records" ? "active" : ""}" data-tab="records" role="tab" aria-selected="${activeTab === "records"}">
+          <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          <span class="bottom-tab-label">${t("tab.records")}</span>
+        </button>
+        <button type="button" class="bottom-tab ${activeTab === "settings" ? "active" : ""}" data-tab="settings" role="tab" aria-selected="${activeTab === "settings"}">
+          <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          <span class="bottom-tab-label">${t("tab.settings")}</span>
+        </button>
+      </nav>
     </main>
-    <button type="button" class="scroll-top-btn" id="scrollTopBtn" aria-label="${t("scroll.top")}" title="${t("scroll.top")}">\u2191</button>
     ${rainbowVisible ? `
     <div class="rainbow-overlay" id="rainbowOverlay" role="alert" aria-live="assertive">
       <div class="confetti-container" id="confettiContainer"></div>
@@ -28389,12 +24521,10 @@ function render() {
   `;
     bindEvents();
     drawChart();
-    window.scrollTo(0, scrollY);
     if (rainbowVisible) {
       spawnConfetti();
       if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-      clearTimeout(_rainbowDismissTimer);
-      _rainbowDismissTimer = setTimeout(() => {
+      setTimeout(() => {
         const overlay = document.getElementById("rainbowOverlay");
         if (overlay) {
           overlay.classList.add("fade-out");
@@ -28403,7 +24533,7 @@ function render() {
             overlay.remove();
           }, 600);
         }
-      }, 4200);
+      }, 3500);
     }
   } catch (e) {
     console.error("[WeightRainbow] Render error:", e);
@@ -28411,12 +24541,9 @@ function render() {
       <h2 style="color:#dc2626;">${t("error.render")}</h2>
       <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
       <p style="color:#999;font-size:0.8rem;">${e.stack ? e.stack.split("\n").slice(0, 3).map((l) => escHtml(l)).join("<br>") : ""}</p>
-      <button type="button" onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
     </div>`;
   }
-}
-function renderMetric(label, value) {
-  return `<div class="metric"><div class="label">${label}</div><div class="value">${value}</div></div>`;
 }
 function renderMonthlyStats() {
   const monthlyStats = calcMonthlyStats(state.records);
@@ -28435,7 +24562,7 @@ function renderMonthlyStats() {
     const changeCls = m.change < 0 ? "loss" : m.change > 0 ? "gain" : "neutral";
     return `
             <div class="monthly-stats-row">
-              <div class="monthly-label">${(/* @__PURE__ */ new Date(m.month + "-01T00:00:00")).toLocaleDateString(state.settings.language === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "short" })}</div>
+              <div class="monthly-label">${(/* @__PURE__ */ new Date(m.month + "-01")).toLocaleDateString(state.settings.language === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "short" })}</div>
               <div class="monthly-values">
                 <span title="${t("summary.avg")}">${t("summary.avg")}: ${m.avg.toFixed(1)}kg</span>
                 <span title="${t("summary.min")}">\u2193${m.min.toFixed(1)}</span>
@@ -28462,7 +24589,7 @@ function renderCalendar() {
     <button type="button" data-action="cal-prev" aria-label="${t("calendar.prev")}">${t("calendar.prev")}</button>
     <span class="calendar-label">${new Date(calendarYear, calendarMonth).toLocaleDateString(state.settings.language === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "long" })}</span>
     <button type="button" data-action="cal-next" aria-label="${t("calendar.next")}">${t("calendar.next")}</button>
-    ${!isCurrentMonthView ? `<button type="button" class="btn ghost" data-action="cal-today" style="margin-left:4px;font-size:0.75rem;">${t("diff.today")}</button>` : ""}
+    ${!isCurrentMonthView ? `<button type="button" class="btn ghost" data-action="cal-today" style="margin-left:4px;font-size:0.72rem;">${t("diff.today")}</button>` : ""}
   </div>`;
   html += `<div class="calendar-grid">`;
   for (const key of dayNames) {
@@ -28484,10 +24611,10 @@ function renderCalendar() {
     if (hasRecord && change !== void 0) {
       if (change < 0) {
         const alpha = Math.min(50, Math.round(Math.abs(change) * 30 + 15));
-        bg = `background: color-mix(in srgb, var(--ok) ${alpha}%, transparent)`;
+        bg = `background: color-mix(in srgb, var(--ok, #10b981) ${alpha}%, transparent)`;
       } else if (change > 0) {
         const alpha = Math.min(50, Math.round(change * 30 + 15));
-        bg = `background: color-mix(in srgb, var(--warn) ${alpha}%, transparent)`;
+        bg = `background: color-mix(in srgb, var(--warn, #f59e0b) ${alpha}%, transparent)`;
       } else {
         bg = `background: color-mix(in srgb, var(--accent) 20%, transparent)`;
       }
@@ -28496,9 +24623,9 @@ function renderCalendar() {
       const intensity = d.intensity !== null ? d.intensity : 0;
       bg = `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)`;
     }
-    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${Number(d.wt).toFixed(1)}kg${changeLabel}` : ""}"${hasRecord ? ` aria-label="${d.day}${t("calendar.dayUnit")} ${Number(d.wt).toFixed(1)}kg${changeLabel}"` : ""}>
+    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${d.wt}kg${changeLabel}` : ""}"${hasRecord ? ` aria-label="${d.day}${t("calendar.dayUnit")} ${d.wt}kg${changeLabel}"` : ""}>
       <span class="calendar-day">${d.day}</span>
-      ${hasRecord ? `<span class="calendar-wt">${Number(d.wt).toFixed(1)}</span>` : ""}
+      ${hasRecord ? `<span class="calendar-wt">${d.wt}</span>` : ""}
     </div>`;
   }
   html += `</div>`;
@@ -28554,7 +24681,7 @@ function renderSourceBreakdown() {
         ${entries.map(([src, count]) => {
     const icon = sourceIcons[src] || "\u{1F4CA}";
     const pct = Math.round(count / state.records.length * 100);
-    return `<span class="source-chip"><span class="source-icon" aria-hidden="true">${icon}</span> ${t("entry.source." + src)} <strong>${count}</strong> (${pct}%)</span>`;
+    return `<span class="source-chip"><span class="source-icon">${icon}</span> ${t("entry.source." + src)} <strong>${count}</strong> (${pct}%)</span>`;
   }).join("")}
       </div>
     </div>
@@ -28573,7 +24700,7 @@ function renderWeekdayWeekend() {
           <div class="wdwe-value">${wdwe.weekdayAvg.toFixed(1)}kg</div>
           <div class="hint-small">${wdwe.weekdayCount} ${t("chart.records")}</div>
         </div>
-        <div class="wdwe-vs">${t("wdwe.vs")}</div>
+        <div class="wdwe-vs">vs</div>
         <div class="wdwe-col">
           <div class="wdwe-label">${t("wdwe.weekend")}</div>
           <div class="wdwe-value">${wdwe.weekendAvg.toFixed(1)}kg</div>
@@ -28585,29 +24712,6 @@ function renderWeekdayWeekend() {
         </div>
       </div>
       <div class="helper hint-small" style="margin-top:4px;">${t("wdwe.heavier." + wdwe.heavier)}</div>
-    </div>
-  `;
-}
-function renderDataHealth() {
-  const health = calcDataHealth(state.records);
-  if (!health) return "";
-  const level = health.score >= 80 ? "high" : health.score >= 50 ? "medium" : "low";
-  const issueHtml = health.issues.length === 0 ? `<div class="helper hint-small" style="color:var(--ok);font-weight:600;">${t("health.perfect")}</div>` : health.issues.slice(0, 3).map((issue) => {
-    if (issue.type === "gap") return `<div class="health-issue">\u{1F4C5} ${t("health.gap").replace("{days}", issue.days).replace("{from}", issue.from).replace("{to}", issue.to)}</div>`;
-    if (issue.type === "outlier") return `<div class="health-issue">\u{1F4CA} ${t("health.outlier").replace("{date}", issue.date).replace("{weight}", Number(issue.weight).toFixed(1)).replace("{expected}", Number(issue.expected).toFixed(1))}</div>`;
-    if (issue.type === "noBMI") return `<div class="health-issue">\u{1F4CF} ${t("health.noBMI")}</div>`;
-    return "";
-  }).join("");
-  return `
-    <div class="health-section">
-      <div class="helper">${t("health.title")}</div>
-      <div class="health-display">
-        <div class="health-score ${level}" role="meter" aria-valuenow="${health.score}" aria-valuemin="0" aria-valuemax="100" aria-label="${t("health.title")}">${health.score}</div>
-        <div class="health-details">
-          <div class="helper hint-small">${t("health.score").replace("{score}", health.score)}</div>
-          ${issueHtml}
-        </div>
-      </div>
     </div>
   `;
 }
@@ -28690,7 +24794,7 @@ function renderWeeklyFrequency() {
       <div class="helper">${t("freq.title")}</div>
       <div class="freq-chart">${bars}</div>
       <div class="helper hint-small">${t("freq.avg").replace("{avg}", freq.avgPerWeek)} \xB7 ${t("freq.hint").replace("{weeks}", freq.weeks)}</div>
-      ${hasPerfect ? `<div class="helper hint-small" style="color:var(--ok);font-weight:600;margin-top:2px;">${t("freq.perfect")}</div>` : ""}
+      ${hasPerfect ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;margin-top:2px;">${t("freq.perfect")}</div>` : ""}
     </div>
   `;
 }
@@ -28722,15 +24826,15 @@ function renderWeightVelocity() {
 function renderWeightVariance() {
   const v = calcWeightVariance(state.records);
   if (!v) return "";
-  const levelColor = v.level === "veryLow" || v.level === "low" ? "var(--ok)" : v.level === "moderate" ? "var(--warn)" : "var(--error)";
+  const levelColor = v.level === "veryLow" || v.level === "low" ? "var(--ok, #10b981)" : v.level === "moderate" ? "var(--warn, #f59e0b)" : "var(--error, #ef4444)";
   return `
     <div class="variance-section">
       <div class="helper">${t("variance.title")}</div>
       <div class="variance-badge" style="color:${levelColor};font-weight:700;">${t("variance." + v.level)}</div>
       <div class="variance-stats">
-        <span>${t("variance.cv").replace("{cv}", Number(v.cv).toFixed(1))}</span>
-        <span>${t("variance.swing").replace("{swing}", Number(v.maxSwing).toFixed(1))}</span>
-        <span>${t("variance.daily").replace("{avg}", Number(v.avgDailySwing).toFixed(1))}</span>
+        <span>${t("variance.cv").replace("{cv}", v.cv)}</span>
+        <span>${t("variance.swing").replace("{swing}", v.maxSwing)}</span>
+        <span>${t("variance.daily").replace("{avg}", v.avgDailySwing)}</span>
       </div>
       <div class="helper hint-small">${t("variance.hint").replace("{count}", v.count)}</div>
     </div>
@@ -28739,7 +24843,7 @@ function renderWeightVariance() {
 function renderWeightPlateau() {
   const p = calcWeightPlateau(state.records);
   if (!p) return "";
-  const statusColor = p.isPlateau ? "var(--warn)" : "var(--ok)";
+  const statusColor = p.isPlateau ? "var(--warn, #f59e0b)" : "var(--ok, #10b981)";
   const statusIcon = p.isPlateau ? "\u23F8" : "\u{1F4C8}";
   return `
     <div class="plateau-section">
@@ -28780,7 +24884,7 @@ function renderCalorieEstimate() {
   const renderPeriod = (data, labelKey) => {
     if (!data) return "";
     const status = data.dailyKcal > 50 ? "surplus" : data.dailyKcal < -50 ? "deficit" : "balanced";
-    const color = status === "deficit" ? "var(--ok)" : status === "surplus" ? "var(--warn)" : "var(--text)";
+    const color = status === "deficit" ? "var(--ok, #10b981)" : status === "surplus" ? "var(--warn, #f59e0b)" : "var(--text)";
     return `
       <div class="calorie-card">
         <div class="calorie-label">${t("calorie." + labelKey)}</div>
@@ -28803,7 +24907,7 @@ function renderCalorieEstimate() {
 function renderMomentumScore() {
   const m = calcMomentumScore(state.records, state.settings.goalWeight);
   if (!m) return "";
-  const color = m.level === "great" ? "var(--ok)" : m.level === "good" ? "var(--accent)" : m.level === "fair" ? "var(--warn)" : "var(--error)";
+  const color = m.level === "great" ? "var(--ok, #10b981)" : m.level === "good" ? "var(--accent)" : m.level === "fair" ? "var(--warn, #f59e0b)" : "var(--error, #ef4444)";
   const pct = m.score;
   return `
     <div class="momentum-section">
@@ -28843,16 +24947,16 @@ function renderSeasonality() {
     if (avg === null) return `<div class="season-bar-wrap"><div class="season-bar-label">${t("season.month." + (i + 1))}</div><div class="season-bar" style="height:0"></div></div>`;
     const diff = avg - s.overallAvg;
     const pct = Math.min(100, Math.max(5, 50 + diff * 10));
-    const color = i === s.lightestMonth ? "var(--ok)" : i === s.heaviestMonth ? "var(--warn)" : "var(--accent)";
-    return `<div class="season-bar-wrap"><div class="season-bar" style="height:${pct}%;background:${color};" title="${Number(avg).toFixed(1)}kg"></div><div class="season-bar-label">${t("season.month." + (i + 1))}</div></div>`;
+    const color = i === s.lightestMonth ? "var(--ok, #10b981)" : i === s.heaviestMonth ? "var(--warn, #f59e0b)" : "var(--accent)";
+    return `<div class="season-bar-wrap"><div class="season-bar" style="height:${pct}%;background:${color};" title="${avg}kg"></div><div class="season-bar-label">${t("season.month." + (i + 1))}</div></div>`;
   }).join("");
   return `
     <div class="season-section">
       <div class="helper">${t("season.title")}</div>
       <div class="season-chart">${bars}</div>
       <div class="season-info">
-        <div>${t("season.lightest").replace("{month}", s.lightestMonth + 1).replace("{avg}", Number(s.monthAvgs[s.lightestMonth]).toFixed(1))}</div>
-        <div>${t("season.heaviest").replace("{month}", s.heaviestMonth + 1).replace("{avg}", Number(s.monthAvgs[s.heaviestMonth]).toFixed(1))}</div>
+        <div>${t("season.lightest").replace("{month}", s.lightestMonth + 1).replace("{avg}", s.monthAvgs[s.lightestMonth])}</div>
+        <div>${t("season.heaviest").replace("{month}", s.heaviestMonth + 1).replace("{avg}", s.monthAvgs[s.heaviestMonth])}</div>
         <div>${t("season.range").replace("{range}", s.seasonalRange)}</div>
       </div>
       <div class="helper hint-small">${t("season.hint")}</div>
@@ -28866,7 +24970,7 @@ function renderWeightDistribution() {
     const pct = d.maxCount > 0 ? Math.round(b.count / d.maxCount * 100) : 0;
     const isCurrent = i === d.latestBucket;
     const isMode = i === d.modeBucket;
-    const color = isCurrent ? "var(--accent)" : isMode ? "var(--ok)" : "color-mix(in srgb, var(--accent) 40%, transparent)";
+    const color = isCurrent ? "var(--accent)" : isMode ? "var(--ok, #10b981)" : "color-mix(in srgb, var(--accent) 40%, transparent)";
     return `<div class="dist-bar-wrap">
       ${isCurrent ? `<div class="dist-current-marker">${t("dist.current")}</div>` : ""}
       <div class="dist-bar" style="height:${Math.max(2, pct)}%;background:${color};" title="${b.start}-${b.end}kg: ${b.count}"></div>
@@ -28893,11 +24997,11 @@ function renderDayOfWeekChange() {
     const pct = Math.round(Math.abs(avg) / maxAbs * 50);
     const isGain = avg > 0.01;
     const isLoss = avg < -0.01;
-    const color = isLoss ? "var(--ok)" : isGain ? "var(--warn)" : "var(--text)";
+    const color = isLoss ? "var(--ok, #10b981)" : isGain ? "var(--warn, #f59e0b)" : "var(--text)";
     const isBest = i === d.bestDay;
     const isWorst = i === d.worstDay;
     return `<div class="dow-change-col ${isBest ? "best" : ""} ${isWorst ? "worst" : ""}">
-      <div class="dow-change-val" style="color:${color};">${avg > 0 ? "+" : ""}${Number(avg).toFixed(2)}</div>
+      <div class="dow-change-val" style="color:${color};">${avg > 0 ? "+" : ""}${avg}</div>
       <div class="dow-change-bar-track"><div class="dow-change-bar" style="height:${pct}%;background:${color};"></div></div>
       <div class="dow-change-label">${t("day." + i)}</div>
     </div>`;
@@ -28907,8 +25011,8 @@ function renderDayOfWeekChange() {
       <div class="helper">${t("dowChange.title")}</div>
       <div class="dow-change-chart">${bars}</div>
       <div class="dow-change-info">
-        ${d.bestDay !== null ? `<div>${t("dowChange.best").replace("{day}", t("day." + d.bestDay)).replace("{avg}", Number(d.avgs[d.bestDay]).toFixed(2))}</div>` : ""}
-        ${d.worstDay !== null ? `<div>${t("dowChange.worst").replace("{day}", t("day." + d.worstDay)).replace("{avg}", Number(d.avgs[d.worstDay]).toFixed(2))}</div>` : ""}
+        ${d.bestDay !== null ? `<div>${t("dowChange.best").replace("{day}", t("day." + d.bestDay)).replace("{avg}", d.avgs[d.bestDay])}</div>` : ""}
+        ${d.worstDay !== null ? `<div>${t("dowChange.worst").replace("{day}", t("day." + d.worstDay)).replace("{avg}", d.avgs[d.worstDay])}</div>` : ""}
       </div>
       <div class="helper hint-small">${t("dowChange.hint")}</div>
     </div>
@@ -28938,8 +25042,8 @@ function renderPersonalRecords() {
 function renderWeightRegression() {
   const reg = calcWeightRegression(state.records);
   if (!reg) return "";
-  const dirColor = reg.direction === "losing" ? "var(--ok)" : reg.direction === "gaining" ? "var(--warn)" : "var(--text)";
-  const fitColor = reg.fit === "strong" ? "var(--ok)" : reg.fit === "moderate" ? "var(--warn)" : "var(--text)";
+  const dirColor = reg.direction === "losing" ? "var(--ok, #10b981)" : reg.direction === "gaining" ? "var(--warn, #f59e0b)" : "var(--text)";
+  const fitColor = reg.fit === "strong" ? "var(--ok, #10b981)" : reg.fit === "moderate" ? "var(--warn, #f59e0b)" : "var(--text)";
   const r2Pct = Math.round(reg.r2 * 100);
   return `
     <div class="regression-section">
@@ -28964,7 +25068,7 @@ function renderWeightRegression() {
 function renderBMIHistory() {
   const bh = calcBMIHistory(state.records);
   if (!bh) return "";
-  const zoneColors = { under: "var(--accent-3)", normal: "var(--ok)", over: "var(--warn)", obese: "var(--error)" };
+  const zoneColors = { under: "#3b82f6", normal: "#10b981", over: "#f59e0b", obese: "#ef4444" };
   const zoneBar = ["under", "normal", "over", "obese"].filter((z) => bh.zones[z] > 0).map((z) => `<div class="bmi-hist-seg" style="width:${bh.zones[z]}%;background:${zoneColors[z]};" title="${t("bmi." + z)} ${bh.zones[z]}%"></div>`).join("");
   const changeStr = bh.change > 0 ? "+" + bh.change : String(bh.change);
   return `
@@ -28988,13 +25092,13 @@ function renderBMIHistory() {
 function renderWeightHeatmap() {
   const hm = calcWeightHeatmap(state.records);
   if (!hm) return "";
-  const dayLabels = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].map((d) => t("recCal." + d));
+  const dayLabels = ["S", "M", "T", "W", "T", "F", "S"];
   const rows = dayLabels.map((label, dayIdx) => {
     const cells = hm.weeks.map((week) => {
       const day = week[dayIdx];
       if (day.isFuture) return `<div class="heatmap-cell" data-level="0"></div>`;
       const dir = day.direction || "";
-      const title = day.weight != null ? `${day.date}: ${Number(day.weight).toFixed(1)}kg${day.change != null ? ` (${day.change > 0 ? "+" : ""}${day.change.toFixed(1)}kg)` : ""}` : `${day.date}: ${t("heatmap.noData")}`;
+      const title = day.weight != null ? `${day.date}: ${day.weight}kg${day.change != null ? ` (${day.change > 0 ? "+" : ""}${day.change}kg)` : ""}` : `${day.date}: ${t("heatmap.noData")}`;
       return `<div class="heatmap-cell ${dir}" data-level="${day.level}" title="${title}"></div>`;
     }).join("");
     return `<div class="heatmap-row"><span class="heatmap-label">${label}</span>${cells}</div>`;
@@ -29029,7 +25133,7 @@ function renderStreakRewards() {
     <div class="streak-reward-section">
       <div class="helper">${t("streakReward.title")}</div>
       <div class="streak-reward-main">
-        <span class="streak-reward-icon" aria-hidden="true">${icon}</span>
+        <span class="streak-reward-icon">${icon}</span>
         <div class="streak-reward-info">
           <div class="streak-reward-badge">${t("streakReward." + sr.level)}</div>
           <div class="streak-reward-days">${t("streakReward.days").replace("{streak}", sr.streak)}</div>
@@ -29042,1848 +25146,6 @@ function renderStreakRewards() {
       <div class="helper hint-small">${t("streakReward.hint")}</div>
     </div>
   `;
-}
-function renderWeightConfidence() {
-  const fc = calcWeightConfidence(state.records);
-  if (!fc) return "";
-  const confColors = { high: "var(--ok)", medium: "var(--warn)", low: "var(--error)" };
-  const confColor = confColors[fc.confidence] || confColors.low;
-  const rows = fc.forecasts.map((f) => `
-    <div class="forecast-row">
-      <span class="forecast-label">${t("forecast.days").replace("{days}", f.days)}</span>
-      <span class="forecast-value">${t("forecast.predicted").replace("{wt}", f.predicted)}</span>
-      <span class="forecast-range">${t("forecast.range").replace("{low}", f.low).replace("{high}", f.high)}</span>
-    </div>
-  `).join("");
-  return `
-    <div class="forecast-section">
-      <div class="helper">${t("forecast.title")}</div>
-      <div class="forecast-meta">
-        <span class="forecast-rate">${t("forecast.rate").replace("{rate}", fc.weeklyRate > 0 ? "+" + fc.weeklyRate : String(fc.weeklyRate))}</span>
-        <span class="forecast-conf" style="color:${confColor};">${t("forecast.confidence")}: ${t("forecast." + fc.confidence)}</span>
-      </div>
-      <div class="forecast-table">${rows}</div>
-      <div class="helper hint-small">${t("forecast.hint").replace("{n}", fc.dataPoints)}</div>
-    </div>
-  `;
-}
-function renderProgressSummary() {
-  const ps = calcProgressSummary(state.records);
-  if (!ps) return "";
-  const trendColors = { improving: "var(--ok)", gaining: "var(--error)", stable: "var(--accent-3)" };
-  const trendColor = trendColors[ps.trend] || trendColors.stable;
-  const changeStr = ps.change > 0 ? "+" + ps.change : String(ps.change);
-  const totalStr = ps.totalChange > 0 ? "+" + ps.totalChange : String(ps.totalChange);
-  return `
-    <div class="progress-section">
-      <div class="helper">${t("progress.title")}</div>
-      <div class="progress-period">${t("progress.period").replace("{from}", ps.firstDate).replace("{to}", ps.lastDate).replace("{days}", ps.totalDays).replace("{count}", ps.recordCount)}</div>
-      <div class="progress-compare">
-        <div class="progress-half">
-          <span class="progress-half-label">${t("progress.firstHalf")}</span>
-          <span class="progress-half-value">${ps.firstHalfAvg}kg</span>
-        </div>
-        <div class="progress-arrow">${ps.change < 0 ? "\u2193" : ps.change > 0 ? "\u2191" : "\u2192"}</div>
-        <div class="progress-half">
-          <span class="progress-half-label">${t("progress.secondHalf")}</span>
-          <span class="progress-half-value">${ps.secondHalfAvg}kg</span>
-        </div>
-      </div>
-      <div class="progress-stats">
-        <span>${t("progress.change")}: <strong style="color:${trendColor}">${changeStr}kg</strong></span>
-        <span>${t("progress.totalChange").replace("{change}", totalStr)}</span>
-      </div>
-      <div class="progress-trend" style="color:${trendColor}">${t("progress." + ps.trend)}</div>
-      <div class="progress-stability">${ps.moreStable ? t("progress.moreStable") : t("progress.lessStable")}</div>
-    </div>
-  `;
-}
-function renderMilestoneTimeline() {
-  const tl = calcMilestoneTimeline(state.records);
-  if (!tl || tl.events.length === 0) return "";
-  const icons = { low: "\u2B07\uFE0F", mark: "\u{1F3AF}", bmi: "\u{1F4CA}" };
-  const items = tl.events.map((e) => {
-    let label = "";
-    if (e.type === "low") label = t("timeline.low").replace("{wt}", Number(e.weight).toFixed(1));
-    else if (e.type === "mark") label = t("timeline.mark").replace("{mark}", e.mark);
-    else if (e.type === "bmi") {
-      label = e.to === "normal" ? t("timeline.bmi.normal") : t("timeline.bmi.change").replace("{from}", e.from).replace("{to}", e.to);
-    }
-    return `<div class="timeline-item"><span class="timeline-icon" aria-hidden="true">${icons[e.type]}</span><div class="timeline-content"><span class="timeline-date">${e.date}</span><span class="timeline-label">${label}</span></div></div>`;
-  }).join("");
-  return `
-    <div class="timeline-section">
-      <div class="helper">${t("timeline.title")}</div>
-      <div class="timeline-list">${items}</div>
-      <div class="helper hint-small">${t("timeline.hint").replace("{count}", tl.events.length)}</div>
-    </div>
-  `;
-}
-function renderVolatilityIndex() {
-  const vi = calcVolatilityIndex(state.records);
-  if (!vi) return "";
-  const levelColors = { low: "var(--ok)", moderate: "var(--warn)", high: "var(--error)" };
-  const color = levelColors[vi.level] || levelColors.moderate;
-  const pct = Math.min(100, Math.round(vi.overall / 1.2 * 100));
-  return `
-    <div class="volatility-section">
-      <div class="helper">${t("volatility.title")}</div>
-      <div class="volatility-badge" style="color:${color}">${t("volatility." + vi.level)}</div>
-      <div class="volatility-bar-track">
-        <div class="volatility-bar-fill" style="width:${pct}%;background:${color}"></div>
-      </div>
-      <div class="volatility-stats">
-        <span>${t("volatility.overall").replace("{val}", Number(vi.overall).toFixed(1))}</span>
-        <span>${t("volatility.recent").replace("{val}", Number(vi.recent).toFixed(1))}</span>
-        <span>${t("volatility.max").replace("{val}", Number(vi.maxSwing).toFixed(1))}</span>
-      </div>
-      <div class="volatility-trend">${t("volatility." + vi.trend)}</div>
-      <div class="helper hint-small">${t("volatility.hint")}</div>
-    </div>
-  `;
-}
-function renderPeriodComparison() {
-  const pc = calcPeriodComparison(state.records);
-  if (!pc) return "";
-  function renderPair(label, period, curLabel, prevLabel) {
-    if (!period.current && !period.previous) return "";
-    const cur = period.current;
-    const prev = period.previous;
-    const diffStr = period.avgDiff != null ? period.avgDiff > 0 ? "+" + period.avgDiff.toFixed(1) : period.avgDiff.toFixed(1) : "\u2014";
-    const diffColor = period.avgDiff != null ? period.avgDiff < 0 ? "var(--ok)" : period.avgDiff > 0 ? "var(--error)" : "var(--text)" : "var(--text)";
-    return `
-      <div class="compare-pair">
-        <div class="compare-pair-title">${label}</div>
-        <div class="compare-row">
-          <div class="compare-cell">
-            <span class="compare-label">${curLabel}</span>
-            <span class="compare-value">${cur ? t("compare.avg").replace("{val}", cur.avg) : t("compare.noData")}</span>
-            ${cur ? `<span class="compare-count">${t("compare.records").replace("{n}", cur.count)}</span>` : ""}
-          </div>
-          <div class="compare-cell">
-            <span class="compare-label">${prevLabel}</span>
-            <span class="compare-value">${prev ? t("compare.avg").replace("{val}", prev.avg) : t("compare.noData")}</span>
-            ${prev ? `<span class="compare-count">${t("compare.records").replace("{n}", prev.count)}</span>` : ""}
-          </div>
-        </div>
-        ${period.avgDiff != null ? `<div class="compare-diff" style="color:${diffColor}">${t("compare.diff").replace("{val}", diffStr)}</div>` : ""}
-      </div>
-    `;
-  }
-  return `
-    <div class="compare-section">
-      <div class="helper">${t("compare.title")}</div>
-      ${renderPair(t("compare.weekly"), pc.weekly, t("compare.thisWeek"), t("compare.lastWeek"))}
-      ${renderPair(t("compare.monthly"), pc.monthly, t("compare.thisMonth"), t("compare.lastMonth"))}
-    </div>
-  `;
-}
-function renderGoalCountdown() {
-  const goalWeight = Number(state.settings.goalWeight);
-  if (!goalWeight) return "";
-  const gc = calcGoalCountdown(state.records, goalWeight);
-  if (!gc) return "";
-  if (gc.reached) {
-    return `
-      <div class="countdown-section countdown-reached">
-        <div class="helper">${t("countdown.title")}</div>
-        <div class="countdown-congrats">${t("countdown.reached")}</div>
-      </div>
-    `;
-  }
-  return `
-    <div class="countdown-section">
-      <div class="helper">${t("countdown.title")}</div>
-      <div class="countdown-current">${t("countdown.current").replace("{wt}", Number(gc.latest).toFixed(1)).replace("{goal}", Number(gc.goal).toFixed(1))}</div>
-      <div class="countdown-remaining">${t("countdown.remaining").replace("{val}", Number(gc.absRemaining).toFixed(1))}</div>
-      <div class="countdown-bar-track">
-        <div class="countdown-bar-fill" style="width:${gc.pct}%"></div>
-      </div>
-      <div class="countdown-pct">${t("countdown.pct").replace("{pct}", Math.round(gc.pct))}</div>
-      <div class="countdown-eta">${gc.etaDays ? t("countdown.eta").replace("{days}", gc.etaDays) : t("countdown.noEta")}</div>
-    </div>
-  `;
-}
-function renderBodyComposition() {
-  const bc = calcBodyComposition(state.records);
-  if (!bc) return "";
-  const bfStr = bc.bfChange > 0 ? "+" + bc.bfChange : String(bc.bfChange);
-  const fatStr = bc.fatMassChange > 0 ? "+" + bc.fatMassChange : String(bc.fatMassChange);
-  const leanStr = bc.leanMassChange > 0 ? "+" + bc.leanMassChange : String(bc.leanMassChange);
-  return `
-    <div class="body-comp-section">
-      <div class="helper">${t("bodyComp.title")}</div>
-      <div class="body-comp-trend body-comp-trend-${bc.trend}">${t("bodyComp." + bc.trend)}</div>
-      <div class="body-comp-bf">${t("bodyComp.bf").replace("{first}", bc.firstBf).replace("{latest}", bc.latestBf).replace("{change}", bfStr)}</div>
-      <div class="body-comp-masses">
-        <div class="body-comp-mass fat">${t("bodyComp.fatMass").replace("{change}", fatStr)}</div>
-        <div class="body-comp-mass lean">${t("bodyComp.leanMass").replace("{change}", leanStr)}</div>
-      </div>
-      <div class="helper hint-small">${t("bodyComp.hint").replace("{n}", bc.dataPoints)}</div>
-    </div>
-  `;
-}
-function renderShareSummary() {
-  const summary = generateWeightSummary(state.records, state.profile);
-  if (!summary) return "";
-  const changeStr = summary.weight.totalChange > 0 ? "+" + summary.weight.totalChange : String(summary.weight.totalChange);
-  const lines = [
-    t("share.period").replace("{from}", summary.period.from).replace("{to}", summary.period.to).replace("{days}", summary.period.days),
-    t("share.weight").replace("{first}", summary.weight.first).replace("{latest}", summary.weight.latest).replace("{change}", changeStr),
-    t("share.range").replace("{min}", summary.weight.min).replace("{max}", summary.weight.max).replace("{avg}", summary.weight.avg),
-    t("share.records").replace("{n}", summary.records)
-  ];
-  if (summary.bmi) {
-    lines.push(t("share.bmi").replace("{bmi}", summary.bmi.bmi).replace("{zone}", summary.bmi.zone));
-  }
-  lines.push(t("share.footer"));
-  const text = lines.join("\n");
-  return `
-    <div class="share-summary-section">
-      <div class="helper">${t("share.title")}</div>
-      <pre class="share-summary-text">${text}</pre>
-      <button type="button" class="btn ghost share-summary-btn" data-action="copy-summary" data-text="${escapeAttr(text)}">${t("share.btn")}</button>
-    </div>
-  `;
-}
-function renderDuplicateCheck() {
-  const dd = detectDuplicates(state.records);
-  if (dd.duplicates.length === 0 && dd.suspicious.length === 0) return "";
-  const items = [];
-  for (const d of dd.duplicates) {
-    items.push(`<div class="dupes-item dupes-warn">${t("dupes.duplicate").replace("{date}", d.date).replace("{count}", d.count)}</div>`);
-  }
-  for (const s of dd.suspicious) {
-    items.push(`<div class="dupes-item dupes-info">${t("dupes.suspicious").replace("{weight}", s.weight).replace("{count}", s.count).replace("{from}", s.from).replace("{to}", s.to)}</div>`);
-  }
-  return `
-    <div class="dupes-section">
-      <div class="helper">${t("dupes.title")}</div>
-      ${items.join("")}
-    </div>
-  `;
-}
-function renderWeeklyAverages() {
-  const weeks = calcWeeklyAverages(state.records, 8);
-  const withData = weeks.filter((w) => w.avg !== null);
-  if (withData.length < 2) return "";
-  const allAvgs = withData.map((w) => w.avg);
-  const minAvg = Math.min(...allAvgs);
-  const maxAvg = Math.max(...allAvgs);
-  const range = maxAvg - minAvg || 1;
-  const bars = weeks.map((w, i) => {
-    if (w.avg === null) {
-      return `<div class="weekly-avg-bar-wrap"><div class="weekly-avg-bar empty"></div><div class="weekly-avg-label">${t("weeklyAvg.noData")}</div></div>`;
-    }
-    const pct = Math.max(10, (w.avg - minAvg) / range * 80 + 10);
-    const prev = i > 0 ? weeks[i - 1] : null;
-    const change = prev && prev.avg !== null ? Math.round((w.avg - prev.avg) * 10) / 10 : null;
-    const changeClass = change !== null ? change < -0.1 ? "down" : change > 0.1 ? "up" : "flat" : "";
-    const startLabel = w.weekStart.slice(5).replace("-", "/");
-    return `<div class="weekly-avg-bar-wrap">
-      <div class="weekly-avg-value">${w.avg.toFixed(1)}</div>
-      <div class="weekly-avg-bar ${changeClass}" style="height:${pct}%"></div>
-      <div class="weekly-avg-label">${startLabel}</div>
-      ${change !== null ? `<div class="weekly-avg-change ${changeClass}">${change > 0 ? "+" : ""}${change.toFixed(1)}</div>` : ""}
-    </div>`;
-  });
-  return `
-    <div class="weekly-avg-section">
-      <div class="helper">${t("weeklyAvg.title")}</div>
-      <div class="weekly-avg-chart">${bars.join("")}</div>
-    </div>
-  `;
-}
-function renderRecordingCalendar() {
-  if (state.records.length === 0) return "";
-  const cal = calcMonthlyRecordingMap(state.records);
-  const todayStr = todayLocal();
-  const dayHeaders = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].map((d) => `<div class="rec-cal-header">${t("recCal." + d)}</div>`).join("");
-  const firstDow = cal.days[0].dayOfWeek;
-  const blanks = Array.from({ length: firstDow }, () => `<div class="rec-cal-blank"></div>`).join("");
-  const cells = cal.days.map((d) => {
-    const isToday = d.date === todayStr;
-    const isFuture = d.date > todayStr;
-    const cls = isFuture ? "future" : d.recorded ? "recorded" : "missed";
-    const title = d.recorded ? `${d.date}: ${d.weight.toFixed(1)}kg` : d.date;
-    return `<div class="rec-cal-cell ${cls}${isToday ? " today" : ""}" title="${title}"><span>${d.day}</span></div>`;
-  }).join("");
-  const elapsed = cal.days.filter((d) => d.date <= todayStr).length;
-  const adjustedRate = elapsed > 0 ? Math.round(cal.recordedCount / elapsed * 100) : 0;
-  const rateText = t("recCal.rate").replace("{rate}", adjustedRate).replace("{count}", cal.recordedCount).replace("{total}", elapsed);
-  return `
-    <div class="rec-cal-section">
-      <div class="helper">${t("recCal.title")}</div>
-      <div class="rec-cal-grid">${dayHeaders}${blanks}${cells}</div>
-      <div class="helper hint-small" style="margin-top:6px">${rateText}</div>
-    </div>
-  `;
-}
-function renderTrendIndicator() {
-  const trend = calcWeightTrendIndicator(state.records);
-  if (!trend) return "";
-  const arrow = trend.direction === "down" ? "\u2193" : trend.direction === "up" ? "\u2191" : "\u2192";
-  const cls = trend.direction === "down" ? "trend-down" : trend.direction === "up" ? "trend-up" : "trend-stable";
-  let msg;
-  if (trend.direction === "down") {
-    msg = `${Math.abs(trend.change).toFixed(1)}kg ${t("trend.down")}`;
-  } else if (trend.direction === "up") {
-    msg = `+${trend.change.toFixed(1)}kg ${t("trend.up")}`;
-  } else {
-    msg = t("trend.stable");
-  }
-  const recentText = t("trend.recent").replace("{avg}", trend.recentAvg.toFixed(1));
-  return `
-    <div class="trend-card ${cls}">
-      <span class="trend-arrow">${arrow}</span>
-      <div class="trend-text">
-        <div class="trend-msg">${msg}</div>
-        <div class="trend-detail">${recentText}</div>
-      </div>
-    </div>
-  `;
-}
-function renderNoteTagStats() {
-  const stats = calcNoteTagStats(state.records);
-  if (stats.tags.length === 0) return "";
-  const tagIcons = { exercise: "\u{1F3C3}", diet: "\u{1F957}", cheatday: "\u{1F355}", sick: "\u{1F912}", travel: "\u2708\uFE0F", stress: "\u{1F630}", sleep: "\u{1F634}", alcohol: "\u{1F37A}" };
-  const rows = stats.tags.slice(0, 6).map((t_) => {
-    const icon = tagIcons[t_.tag] || "\u{1F3F7}\uFE0F";
-    const changeSign = t_.avgChange > 0 ? "+" : "";
-    const changeClass = t_.avgChange < 0 ? "tag-stat-down" : t_.avgChange > 0 ? "tag-stat-up" : "";
-    return `<div class="tag-stat-row">
-      <span class="tag-stat-name">${icon} ${escapeAttr(t_.tag)}</span>
-      <span class="tag-stat-count">${t("tagStats.count").replace("{count}", t_.count).replace("{pct}", t_.pct)}</span>
-      <span class="tag-stat-change ${changeClass}">${changeSign}${t_.avgChange.toFixed(1)}kg</span>
-    </div>`;
-  }).join("");
-  return `
-    <div class="tag-stats-section">
-      <div class="helper">${t("tagStats.title")}</div>
-      ${rows}
-    </div>
-  `;
-}
-function renderIdealWeight() {
-  if (!state.profile.heightCm || state.records.length === 0) return "";
-  const latest = [...state.records].sort((a, b) => a.dt.localeCompare(b.dt)).pop();
-  const ideal = calcIdealWeightRange(Number(state.profile.heightCm), latest.wt);
-  if (!ideal) return "";
-  const zoneLabel = t("ideal." + ideal.zone);
-  const rangeText = t("ideal.range").replace("{min}", Number(ideal.minWeight).toFixed(1)).replace("{max}", Number(ideal.maxWeight).toFixed(1));
-  const currentText = t("ideal.current").replace("{weight}", Number(ideal.currentWeight).toFixed(1)).replace("{bmi}", Number(ideal.currentBMI).toFixed(1));
-  const centerText = t("ideal.center").replace("{mid}", Number(ideal.midWeight).toFixed(1));
-  const idealStart = Math.round((18.5 - 15) / 15 * 100);
-  const idealEnd = Math.round((24.9 - 15) / 15 * 100);
-  return `
-    <div class="ideal-section">
-      <div class="helper">${t("ideal.title")}</div>
-      <div class="ideal-bar-container">
-        <div class="ideal-bar">
-          <div class="ideal-zone ideal-under" style="width:${idealStart}%"></div>
-          <div class="ideal-zone ideal-normal" style="width:${idealEnd - idealStart}%"></div>
-          <div class="ideal-zone ideal-over" style="width:${100 - idealEnd}%"></div>
-          <div class="ideal-marker" style="left:${ideal.position}%"></div>
-        </div>
-        <div class="ideal-labels">
-          <span>${t("ideal.underweight")}</span>
-          <span>${t("ideal.normal")}</span>
-          <span>${t("ideal.overweight")}</span>
-        </div>
-      </div>
-      <div class="helper hint-small">${currentText} \u2014 ${zoneLabel}</div>
-      <div class="helper hint-small">${rangeText}</div>
-      <div class="helper hint-small">${centerText}</div>
-    </div>
-  `;
-}
-function renderMonthlyAverages() {
-  const months2 = calcMonthlyAverages(state.records, 6);
-  const withData = months2.filter((m) => m.avg !== null);
-  if (withData.length < 2) return "";
-  const allAvgs = withData.map((m) => m.avg);
-  const minAvg = Math.min(...allAvgs);
-  const maxAvg = Math.max(...allAvgs);
-  const range = maxAvg - minAvg || 1;
-  const bars = months2.map((m, i) => {
-    if (m.avg === null) {
-      return `<div class="mavg-bar-wrap"><div class="mavg-bar empty"></div><div class="mavg-label">${t("monthAvg.label").replace("{m}", m.label.slice(5))}</div></div>`;
-    }
-    const pct = Math.max(10, (m.avg - minAvg) / range * 80 + 10);
-    const prev = i > 0 ? months2[i - 1] : null;
-    const cls = prev && prev.avg !== null ? m.avg < prev.avg ? "down" : m.avg > prev.avg ? "up" : "" : "";
-    return `<div class="mavg-bar-wrap">
-      <div class="mavg-value">${m.avg.toFixed(1)}</div>
-      <div class="mavg-bar ${cls}" style="height:${pct}%"></div>
-      <div class="mavg-label">${t("monthAvg.label").replace("{m}", m.label.slice(5))}</div>
-      <div class="mavg-count">${m.count}</div>
-    </div>`;
-  }).join("");
-  return `
-    <div class="mavg-section">
-      <div class="helper">${t("monthAvg.title")}</div>
-      <div class="mavg-chart">${bars}</div>
-    </div>
-  `;
-}
-function renderLongTermProgress() {
-  const progress = calcLongTermProgress(state.records);
-  if (!progress || progress.periods.every((p) => !p.hasData)) return "";
-  const labelMap = { "1m": "ltp.1m", "3m": "ltp.3m", "6m": "ltp.6m", "1y": "ltp.1y", "all": "ltp.all" };
-  const rows = progress.periods.filter((p) => p.hasData).map((p) => {
-    const sign = p.change > 0 ? "+" : "";
-    const cls = p.change < 0 ? "down" : p.change > 0 ? "up" : "";
-    return `<div class="ltp-row">
-        <span class="ltp-label">${t(labelMap[p.label])}</span>
-        <span class="ltp-past">${p.pastWeight.toFixed(1)}</span>
-        <span class="ltp-arrow">\u2192</span>
-        <span class="ltp-current">${progress.current.toFixed(1)}</span>
-        <span class="ltp-change ${cls}">${sign}${p.change.toFixed(1)}kg (${sign}${p.pctChange}%)</span>
-      </div>`;
-  }).join("");
-  return `
-    <div class="ltp-section">
-      <div class="helper">${t("ltp.title")}</div>
-      ${rows}
-    </div>
-  `;
-}
-function renderWeightFluctuation() {
-  const fluct = calcWeightFluctuation(state.records);
-  if (!fluct) return "";
-  const withData = fluct.periods.filter((p) => p.hasData);
-  if (withData.length === 0) return "";
-  const labelMap = { "7d": "fluct.7d", "30d": "fluct.30d" };
-  const rows = withData.map((p) => {
-    const pos = Math.max(0, Math.min(100, p.position));
-    return `<div class="fluct-row">
-      <span class="fluct-label">${t(labelMap[p.label])}</span>
-      <div class="fluct-bar-wrap">
-        <span class="fluct-min">${p.min.toFixed(1)}</span>
-        <div class="fluct-bar">
-          <div class="fluct-marker" style="left:${pos}%"></div>
-        </div>
-        <span class="fluct-max">${p.max.toFixed(1)}</span>
-      </div>
-      <span class="fluct-range">${t("fluct.range")} ${p.range.toFixed(1)}kg</span>
-    </div>`;
-  }).join("");
-  return `
-    <div class="fluct-section">
-      <div class="helper">${t("fluct.title")}</div>
-      ${rows}
-    </div>
-  `;
-}
-function renderWeightAnomalies() {
-  const anomalies = calcWeightAnomalies(state.records);
-  if (anomalies.length === 0) return "";
-  const rows = anomalies.slice(0, 5).map((a) => {
-    const text = t("anomaly.entry").replace("{date}", a.dt.slice(5).replace("-", "/")).replace("{wt}", a.wt.toFixed(1)).replace("{expected}", a.expected.toFixed(1)).replace("{diff}", a.diff.toFixed(1));
-    return `<div class="anomaly-row">\u26A0\uFE0F ${text}</div>`;
-  }).join("");
-  return `
-    <div class="anomaly-section">
-      <div class="helper">${t("anomaly.title")}</div>
-      <div class="helper hint-small">${t("anomaly.hint")}</div>
-      ${rows}
-    </div>
-  `;
-}
-function renderSuccessRate() {
-  const sr = calcSuccessRate(state.records);
-  if (!sr) return "";
-  const total = sr.down + sr.same + sr.up;
-  const downPct = Math.round(sr.down / total * 100);
-  const samePct = Math.round(sr.same / total * 100);
-  const upPct = 100 - downPct - samePct;
-  return `
-    <div class="success-section">
-      <div class="helper">${t("success.title")}</div>
-      <div class="success-rate-big">${sr.successRate}%</div>
-      <div class="success-bar">
-        <div class="success-seg down" style="width:${downPct}%" title="${t("success.down")} ${downPct}%"></div>
-        <div class="success-seg same" style="width:${samePct}%" title="${t("success.same")} ${samePct}%"></div>
-        <div class="success-seg up" style="width:${upPct}%" title="${t("success.up")} ${upPct}%"></div>
-      </div>
-      <div class="success-legend">
-        <span class="success-leg-item"><span class="success-dot down"></span>${t("success.down")} ${sr.down}</span>
-        <span class="success-leg-item"><span class="success-dot same"></span>${t("success.same")} ${sr.same}</span>
-        <span class="success-leg-item"><span class="success-dot up"></span>${t("success.up")} ${sr.up}</span>
-      </div>
-      ${sr.recentRate !== null ? `<div class="helper hint-small" style="margin-top:4px;">${t("success.recent")}: ${sr.recentRate}%</div>` : ""}
-    </div>
-  `;
-}
-function renderRecordingRate() {
-  const rr = calcRecordingRate(state.records);
-  if (!rr) return "";
-  const summary = t("recRate.summary").replace("{recorded}", rr.recordedDays).replace("{total}", rr.totalDays);
-  const weekBars = rr.weeks.map((w) => {
-    const pct = w.total > 0 ? Math.round(w.recorded / w.total * 100) : 0;
-    return `<div class="rr-week">
-      <div class="rr-bar-track"><div class="rr-bar-fill" style="width:${pct}%"></div></div>
-      <span class="rr-week-label">${w.recorded}/${w.total}</span>
-    </div>`;
-  }).join("");
-  return `
-    <div class="rr-section">
-      <div class="helper">${t("recRate.title")}</div>
-      <div class="rr-rate-big">${rr.rate}%</div>
-      <div class="helper hint-small">${summary}</div>
-      <div class="helper hint-small" style="margin-top:6px;">${t("recRate.weeks")}</div>
-      <div class="rr-weeks">${weekBars}</div>
-    </div>
-  `;
-}
-function renderMilestoneHistory() {
-  const mh = calcMilestoneHistory(state.records);
-  if (!mh || mh.milestones.length === 0) return "";
-  const dirLabel = mh.direction === "down" ? t("msHist.down") : t("msHist.up");
-  const recent = mh.milestones.slice(-8).reverse();
-  const rows = recent.map((m) => {
-    const text = t("msHist.reached").replace("{kg}", m.kg).replace("{date}", m.date.slice(5).replace("-", "/")).replace("{days}", m.daysFromStart);
-    return `<div class="msh-row">${mh.direction === "down" ? "\u{1F4C9}" : "\u{1F4C8}"} ${text}</div>`;
-  }).join("");
-  return `
-    <div class="msh-section">
-      <div class="helper">${t("msHist.title")}</div>
-      <div class="helper hint-small">${dirLabel}</div>
-      ${rows}
-    </div>
-  `;
-}
-function renderWeightJourney() {
-  const journey = calcWeightJourney(state.records);
-  if (!journey || journey.phases.length === 0) return "";
-  const typeLabel = { loss: "journey.loss", gain: "journey.gain", maintain: "journey.maintain" };
-  const typeIcon = { loss: "\u{1F4C9}", gain: "\u{1F4C8}", maintain: "\u27A1\uFE0F" };
-  const typeCls = { loss: "loss", gain: "gain", maintain: "maintain" };
-  const rows = journey.phases.slice(-6).map((p) => {
-    const sign = p.change > 0 ? "+" : "";
-    return `<div class="jny-row ${typeCls[p.type]}">
-      <span class="jny-icon">${typeIcon[p.type]}</span>
-      <span class="jny-type">${t(typeLabel[p.type])}</span>
-      <span class="jny-dates">${p.startDate.slice(5).replace("-", "/")}\u301C${p.endDate.slice(5).replace("-", "/")}</span>
-      <span class="jny-change">${sign}${p.change.toFixed(1)}kg</span>
-      <span class="jny-days">${p.days}d</span>
-    </div>`;
-  }).join("");
-  const totalSign = journey.totalChange > 0 ? "+" : "";
-  return `
-    <div class="jny-section">
-      <div class="helper">${t("journey.title")}</div>
-      ${rows}
-      <div class="jny-total">${t("journey.total")}: ${totalSign}${journey.totalChange.toFixed(1)}kg</div>
-    </div>
-  `;
-}
-function renderGoalScenarios() {
-  const goalWeight = Number(state.settings.goalWeight);
-  const scenarios = calcGoalScenarios(state.records, goalWeight);
-  if (!scenarios) return "";
-  const labelMap = { gentle: "scenario.gentle", moderate: "scenario.moderate", aggressive: "scenario.aggressive" };
-  const rows = scenarios.scenarios.map((s) => {
-    const weeksText = t("scenario.weeks").replace("{weeks}", s.weeks);
-    return `<div class="scn-row">
-      <span class="scn-label">${t(labelMap[s.label])}</span>
-      <span class="scn-rate">${Math.abs(s.pace).toFixed(2)}kg${t("scenario.perWeek")}</span>
-      <span class="scn-weeks">${weeksText}</span>
-      <span class="scn-date">${s.date.slice(2).replace(/-/g, "/")}</span>
-    </div>`;
-  }).join("");
-  return `
-    <div class="scn-section">
-      <div class="helper">${t("scenario.title")}</div>
-      ${rows}
-    </div>
-  `;
-}
-function renderStreakCalendar() {
-  if (state.records.length < 3) return "";
-  const cal = calcStreakCalendar(state.records, 12);
-  const cells = cal.weeks.map((week) => {
-    const days2 = week.map((d) => {
-      const cls = d.recorded ? "sc-day filled" : "sc-day";
-      const todayCls = d.isToday ? " sc-today" : "";
-      return `<div class="${cls}${todayCls}" title="${d.date}"></div>`;
-    }).join("");
-    return `<div class="sc-week">${days2}</div>`;
-  }).join("");
-  const summary = t("streakCal.summary").replace("{recorded}", cal.totalRecorded).replace("{total}", cal.totalDays);
-  return `
-    <div class="sc-section">
-      <div class="helper">${t("streakCal.title")}</div>
-      <div class="sc-grid">${cells}</div>
-      <div class="helper hint-small">${summary}</div>
-    </div>
-  `;
-}
-function renderMovingAvgCrossover() {
-  const data = calcMovingAvgCrossover(state.records);
-  if (!data.shortMA) return "";
-  const trendLabel = data.currentTrend === "downtrend" ? t("cross.downtrend") : data.currentTrend === "uptrend" ? t("cross.uptrend") : t("cross.neutral");
-  const trendIcon = data.currentTrend === "downtrend" ? "\u{1F4C9}" : data.currentTrend === "uptrend" ? "\u{1F4C8}" : "\u27A1\uFE0F";
-  const trendCls = data.currentTrend === "downtrend" ? "mac-down" : data.currentTrend === "uptrend" ? "mac-up" : "mac-neutral";
-  const crossRows = data.crossovers.length ? data.crossovers.slice(-5).reverse().map((c) => {
-    const icon = c.type === "golden" ? "\u{1F7E2}" : "\u{1F534}";
-    const label = c.type === "golden" ? t("cross.golden") : t("cross.death");
-    return `<div class="mac-row"><span class="mac-icon">${icon}</span><span class="mac-date">${c.date.slice(5).replace("-", "/")}</span><span class="mac-label">${label}</span></div>`;
-  }).join("") : `<div class="helper hint-small">${t("cross.none")}</div>`;
-  return `
-    <div class="mac-section">
-      <div class="helper">${t("cross.title")}</div>
-      <div class="mac-trend ${trendCls}">
-        <span class="mac-trend-icon">${trendIcon}</span>
-        <span class="mac-trend-text">${trendLabel}</span>
-      </div>
-      <div class="mac-ma-row">
-        <span>${t("cross.shortMA")}: <strong>${data.shortMA.toFixed(1)}kg</strong></span>
-        <span>${t("cross.longMA")}: <strong>${data.longMA.toFixed(1)}kg</strong></span>
-      </div>
-      ${crossRows}
-    </div>
-  `;
-}
-function renderPredictionAccuracy() {
-  const data = calcPredictionAccuracy(state.records);
-  if (data.accuracy === null) return "";
-  const ratingLabels = { excellent: t("pred.excellent"), good: t("pred.good"), fair: t("pred.fair"), poor: t("pred.poor") };
-  const ratingColors = { excellent: "pa-excellent", good: "pa-good", fair: "pa-fair", poor: "pa-poor" };
-  const ratingLabel = ratingLabels[data.rating] || data.rating;
-  const ratingCls = ratingColors[data.rating] || "";
-  const recentRows = data.predictions.slice(-5).reverse().map(
-    (p) => `<div class="pa-row"><span class="pa-date">${p.date.slice(5).replace("-", "/")}</span><span class="pa-pred">${p.predicted.toFixed(1)}</span><span class="pa-arrow">\u2192</span><span class="pa-actual">${p.actual.toFixed(1)}</span><span class="pa-err ${p.error <= 0.5 ? "pa-hit" : "pa-miss"}">\xB1${p.error.toFixed(1)}</span></div>`
-  ).join("");
-  return `
-    <div class="pa-section">
-      <div class="helper">${t("pred.title")}</div>
-      <div class="pa-summary">
-        <div class="pa-stat">
-          <span class="pa-big ${ratingCls}">${data.accuracy}%</span>
-          <span class="pa-label">${t("pred.accuracy")}</span>
-        </div>
-        <div class="pa-stat">
-          <span class="pa-big">${data.avgError.toFixed(1)}kg</span>
-          <span class="pa-label">${t("pred.avgError")}</span>
-        </div>
-        <div class="pa-badge ${ratingCls}">${ratingLabel}</div>
-      </div>
-      <div class="pa-recent">
-        <div class="helper hint-small">${t("pred.recent")}</div>
-        <div class="pa-header"><span>${""}</span><span>${t("pred.predicted")}</span><span></span><span>${t("pred.actual")}</span><span></span></div>
-        ${recentRows}
-      </div>
-    </div>
-  `;
-}
-function renderConsistencyScore() {
-  const goalWeight = Number(state.settings.goalWeight);
-  const data = calcConsistencyScore(state.records, goalWeight);
-  if (data.score === null) return "";
-  const gradeColors = { S: "cs-s", A: "cs-a", B: "cs-b", C: "cs-c", D: "cs-d" };
-  const gradeCls = gradeColors[data.grade] || "";
-  const bar = (label, value) => `<div class="cs-bar-row"><span class="cs-bar-label">${label}</span><div class="cs-bar-track"><div class="cs-bar-fill" style="width:${value}%"></div></div><span class="cs-bar-val">${value}</span></div>`;
-  return `
-    <div class="cs-section">
-      <div class="helper">${t("cscore.title")}</div>
-      <div class="cs-top">
-        <div class="cs-score-circle ${gradeCls}">
-          <span class="cs-score-num">${data.score}</span>
-          <span class="cs-score-label">/100</span>
-        </div>
-        <div class="cs-grade ${gradeCls}">${data.grade}</div>
-      </div>
-      <div class="cs-bars">
-        ${bar(t("cscore.recording"), data.components.recording)}
-        ${bar(t("cscore.stability"), data.components.stability)}
-        ${bar(t("cscore.momentum"), data.components.momentum)}
-      </div>
-    </div>
-  `;
-}
-function renderWeightRangeSummary() {
-  const data = calcWeightRangeSummary(state.records);
-  if (!data.periods.length) return "";
-  const labelMap = { "7d": t("wrange.7d"), "30d": t("wrange.30d"), "90d": t("wrange.90d"), "all": t("wrange.all") };
-  const globalMin = Math.min(...data.periods.map((p) => p.min));
-  const globalMax = Math.max(...data.periods.map((p) => p.max));
-  const spread = globalMax - globalMin || 1;
-  const rows = data.periods.map((p) => {
-    const leftPct = ((p.min - globalMin) / spread * 80).toFixed(1);
-    const widthPct = Math.max(2, p.range / spread * 80).toFixed(1);
-    const avgPct = ((p.avg - globalMin) / spread * 80).toFixed(1);
-    return `<div class="wr-row">
-      <span class="wr-label">${labelMap[p.label] || p.label}</span>
-      <div class="wr-bar-wrap">
-        <div class="wr-bar" style="left:${leftPct}%;width:${widthPct}%">
-          <div class="wr-avg-marker" style="left:${p.range > 0 ? ((p.avg - p.min) / p.range * 100).toFixed(1) : 50}%"></div>
-        </div>
-      </div>
-      <span class="wr-vals">${p.min.toFixed(1)}\u2013${p.max.toFixed(1)}</span>
-    </div>`;
-  }).join("");
-  return `
-    <div class="wr-section">
-      <div class="helper">${t("wrange.title")}</div>
-      <div class="wr-legend">
-        <span>${t("wrange.min")}: ${globalMin.toFixed(1)}</span>
-        <span>${t("wrange.max")}: ${globalMax.toFixed(1)}</span>
-      </div>
-      ${rows}
-    </div>
-  `;
-}
-function renderTrendStreak() {
-  const data = calcTrendStreak(state.records);
-  if (!data.direction || data.count < 2) return "";
-  const msgKey = `tstreak.${data.direction}`;
-  const msg = t(msgKey).replace("{count}", data.count);
-  const cls = data.direction === "down" ? "ts-down" : data.direction === "up" ? "ts-up" : "ts-flat";
-  const changeSign = data.totalChange > 0 ? "+" : "";
-  return `
-    <div class="ts-section ${cls}">
-      <div class="ts-msg">${msg}</div>
-      <div class="ts-detail">
-        <span>${t("tstreak.change")}: <strong>${changeSign}${data.totalChange.toFixed(1)}kg</strong></span>
-        <span>${t("tstreak.period")}: ${data.startDate.slice(5).replace("-", "/")} \u2192 ${data.endDate.slice(5).replace("-", "/")}</span>
-      </div>
-    </div>
-  `;
-}
-function renderBMITrend() {
-  const data = calcBMITrend(state.records);
-  if (!data.current) return "";
-  const dirLabel = t(`bmiTrend.${data.direction}`);
-  const dirCls = data.direction === "down" ? "bt-down" : data.direction === "up" ? "bt-up" : "bt-neutral";
-  const changeSign = data.change > 0 ? "+" : "";
-  const pts = data.points;
-  const svgW = 200, svgH = 40;
-  const bMin = data.min - 0.5, bMax = data.max + 0.5, bRange = bMax - bMin || 1;
-  const pathD = pts.map((p, i) => {
-    const x = i / Math.max(pts.length - 1, 1) * svgW;
-    const y = svgH - (p.bmi - bMin) / bRange * svgH;
-    return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
-  return `
-    <div class="bt-section">
-      <div class="helper">${t("bmiTrend.title")}</div>
-      <div class="bt-top">
-        <div class="bt-current">
-          <span class="bt-big">${data.current.toFixed(1)}</span>
-          <span class="bt-badge ${dirCls}">${changeSign}${data.change.toFixed(1)} ${dirLabel}</span>
-        </div>
-        <svg class="bt-spark" viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none">
-          <path d="${pathD}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/>
-        </svg>
-      </div>
-      <div class="bt-meta">
-        <span>${t("bmiTrend.range")}: ${data.min.toFixed(1)} \u2013 ${data.max.toFixed(1)}</span>
-        <span>${pts.length} ${t("chart.records")}</span>
-      </div>
-    </div>
-  `;
-}
-function renderWeeklySummaryComparison() {
-  const data = calcWeeklySummaryComparison(state.records);
-  if (!data.diffs) return "";
-  const tw = data.thisWeek;
-  const lw = data.lastWeek;
-  const d = data.diffs;
-  function diffCell(val) {
-    if (val === 0) return `<span class="wc-zero">\xB10</span>`;
-    const cls = val < 0 ? "wc-neg" : "wc-pos";
-    return `<span class="${cls}">${val > 0 ? "+" : ""}${typeof val === "number" && !Number.isInteger(val) ? val.toFixed(1) : val}</span>`;
-  }
-  const metrics = [
-    { label: t("wcomp.avg"), tw: tw.avg.toFixed(1), lw: lw.avg.toFixed(1), diff: d.avg },
-    { label: t("wcomp.min"), tw: tw.min.toFixed(1), lw: lw.min.toFixed(1), diff: d.min },
-    { label: t("wcomp.max"), tw: tw.max.toFixed(1), lw: lw.max.toFixed(1), diff: d.max },
-    { label: t("wcomp.count"), tw: tw.count, lw: lw.count, diff: d.count }
-  ];
-  const rows = metrics.map(
-    (m) => `<div class="wc-row"><span class="wc-label">${m.label}</span><span class="wc-val">${m.lw}</span><span class="wc-val">${m.tw}</span><span class="wc-val">${diffCell(m.diff)}</span></div>`
-  ).join("");
-  return `
-    <div class="wc-section">
-      <div class="helper">${t("wcomp.title")}</div>
-      <div class="wc-header"><span></span><span>${t("wcomp.lastWeek")}</span><span>${t("wcomp.thisWeek")}</span><span>${t("wcomp.diff")}</span></div>
-      ${rows}
-    </div>
-  `;
-}
-function renderGoalProgressRing() {
-  const goalWeight = Number(state.settings.goalWeight);
-  const data = calcGoalProgressRing(state.records, goalWeight);
-  if (!data) return "";
-  const r = 54, cx = 60, cy = 60, stroke = 10;
-  const circ = 2 * Math.PI * r;
-  const offset = circ - data.percent / 100 * circ;
-  const trackColor = "var(--border)";
-  const fillColor = data.percent >= 100 ? "var(--ok)" : data.onTrack ? "var(--accent)" : "var(--error)";
-  const statusLabel = data.percent >= 100 ? t("gring.done") : data.onTrack ? t("gring.onTrack") : t("gring.offTrack");
-  const statusCls = data.percent >= 100 ? "gr-done" : data.onTrack ? "gr-on" : "gr-off";
-  const rateSign = data.weeklyRate > 0 ? "-" : data.weeklyRate < 0 ? "+" : "";
-  const etaText = data.estimatedWeeks ? t("gring.eta").replace("{weeks}", data.estimatedWeeks) : "";
-  return `
-    <div class="gr-section">
-      <div class="helper">${t("gring.title")}</div>
-      <div class="gr-layout">
-        <svg class="gr-ring" viewBox="0 0 120 120">
-          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${trackColor}" stroke-width="${stroke}"/>
-          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${fillColor}" stroke-width="${stroke}"
-            stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}"
-            stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"
-            style="transition:stroke-dashoffset 0.5s ease"/>
-          <text x="${cx}" y="${cy - 6}" text-anchor="middle" class="gr-pct-text">${data.percent}%</text>
-          <text x="${cx}" y="${cy + 14}" text-anchor="middle" class="gr-goal-text">${data.goalWeight.toFixed(1)}kg</text>
-        </svg>
-        <div class="gr-stats">
-          <div class="gr-stat"><span class="gr-stat-label">${t("gring.lost")}</span><span class="gr-stat-val">${data.lost.toFixed(1)}kg</span></div>
-          <div class="gr-stat"><span class="gr-stat-label">${t("gring.remaining")}</span><span class="gr-stat-val">${data.remaining.toFixed(1)}kg</span></div>
-          <div class="gr-stat"><span class="gr-stat-label">${t("gring.rate")}</span><span class="gr-stat-val">${rateSign}${Math.abs(data.weeklyRate).toFixed(1)}kg/w</span></div>
-          <div class="gr-badge ${statusCls}">${statusLabel}</div>
-          ${etaText ? `<div class="gr-eta">${etaText}</div>` : ""}
-        </div>
-      </div>
-    </div>
-  `;
-}
-function renderBodyFatTrend() {
-  const data = calcBodyFatTrend(state.records);
-  if (!data.current || data.points.length < 2) return "";
-  const dirLabel = t(`bfTrend.${data.direction}`);
-  const dirCls = data.direction === "down" ? "bft-down" : data.direction === "up" ? "bft-up" : "bft-neutral";
-  const changeSign = data.change > 0 ? "+" : "";
-  const pts = data.points;
-  const svgW = 200, svgH = 40;
-  const bMin = data.min - 0.5, bMax = data.max + 0.5, bRange = bMax - bMin || 1;
-  const pathD = pts.map((p, i) => {
-    const x = i / Math.max(pts.length - 1, 1) * svgW;
-    const y = svgH - (p.bf - bMin) / bRange * svgH;
-    return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
-  return `
-    <div class="bft-section">
-      <div class="helper">${t("bfTrend.title")}</div>
-      <div class="bft-top">
-        <div class="bft-current">
-          <span class="bft-big">${data.current.toFixed(1)}%</span>
-          <span class="bft-badge ${dirCls}">${changeSign}${data.change.toFixed(1)}% ${dirLabel}</span>
-        </div>
-        <svg class="bft-spark" viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none">
-          <path d="${pathD}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/>
-        </svg>
-      </div>
-      <div class="bft-meta">
-        <span>${t("bfTrend.avg")}: ${data.avg.toFixed(1)}%</span>
-        <span>${t("bfTrend.range")}: ${data.min.toFixed(1)}\u2013${data.max.toFixed(1)}%</span>
-      </div>
-    </div>
-  `;
-}
-function renderDailyTarget() {
-  const goalWeight = Number(state.settings.goalWeight);
-  if (!goalWeight || state.records.length < 2) return "";
-  const data = calcDailyTarget(state.records, goalWeight);
-  if (!data) return "";
-  let statusMsg, statusCls;
-  if (data.onTarget) {
-    statusMsg = t("dtarget.onTarget");
-    statusCls = "dt-on";
-  } else if (data.isAbove) {
-    statusMsg = t("dtarget.above").replace("{diff}", Math.abs(data.diff).toFixed(1));
-    statusCls = "dt-above";
-  } else {
-    statusMsg = t("dtarget.below").replace("{diff}", Math.abs(data.diff).toFixed(1));
-    statusCls = "dt-below";
-  }
-  const paceStr = t("dtarget.pace").replace("{pace}", Math.abs(data.pace).toFixed(2));
-  return `
-    <div class="dt-section">
-      <div class="helper">${t("dtarget.title")}</div>
-      <div class="dt-grid">
-        <div class="dt-cell">
-          <span class="dt-label">${t("dtarget.target")}</span>
-          <span class="dt-val">${data.target}kg</span>
-        </div>
-        <div class="dt-cell">
-          <span class="dt-label">${t("dtarget.current")}</span>
-          <span class="dt-val">${data.current}kg</span>
-        </div>
-      </div>
-      <div class="dt-status ${statusCls}">${statusMsg}</div>
-      <div class="dt-pace">${paceStr}</div>
-    </div>
-  `;
-}
-function renderMonthPhaseAvg() {
-  const data = calcMonthPhaseAvg(state.records);
-  if (!data) return "";
-  const phaseLabels = {
-    early: t("mphase.early"),
-    mid: t("mphase.mid"),
-    late: t("mphase.late"),
-    end: t("mphase.end")
-  };
-  const rows = data.phases.map((p) => {
-    if (p.avg === null) return "";
-    const changeStr = p.change !== null && p.change !== 0 ? `<span class="mp-change ${p.change > 0 ? "mp-up" : "mp-down"}">${p.change > 0 ? "+" : ""}${p.change.toFixed(2)}kg</span>` : "";
-    return `
-      <div class="mp-row">
-        <span class="mp-label">${phaseLabels[p.label]}</span>
-        <span class="mp-avg">${p.avg}kg</span>
-        ${changeStr}
-        <span class="mp-count">${p.count} ${t("mphase.records")}</span>
-      </div>
-    `;
-  }).join("");
-  const statusMsg = data.hasPattern ? t("mphase.pattern") : t("mphase.noPattern");
-  const statusCls = data.hasPattern ? "mp-has-pattern" : "mp-stable";
-  return `
-    <div class="mp-section">
-      <div class="helper">${t("mphase.title")}</div>
-      ${rows}
-      <div class="mp-status ${statusCls}">${statusMsg}</div>
-    </div>
-  `;
-}
-function renderStreakFreeze() {
-  const data = calcStreakFreezeInfo(state.records);
-  if (data.currentStreak < 3 && data.freezesEarned === 0) return "";
-  return `
-    <div class="sf-section">
-      <div class="helper">${t("sfreeze.title")}</div>
-      <div class="sf-grid">
-        <div class="sf-cell">
-          <span class="sf-num">${data.currentStreak}</span>
-          <span class="sf-label">${t("sfreeze.current")}</span>
-        </div>
-        <div class="sf-cell">
-          <span class="sf-num">${data.longestStreak}</span>
-          <span class="sf-label">${t("sfreeze.longest")}</span>
-        </div>
-        <div class="sf-cell sf-highlight">
-          <span class="sf-num">${data.freezesAvailable}</span>
-          <span class="sf-label">${t("sfreeze.available")}</span>
-        </div>
-      </div>
-      <div class="sf-detail">
-        <span>${t("sfreeze.earned")}: ${data.freezesEarned}</span>
-        <span>${t("sfreeze.used")}: ${data.freezesUsed}</span>
-      </div>
-      <div class="sf-info">${t("sfreeze.info")}</div>
-    </div>
-  `;
-}
-function renderRecentWeightBars() {
-  const goalWeight = Number(state.settings.goalWeight);
-  const data = calcRecentWeightBars(state.records, goalWeight, 7);
-  if (!data) return "";
-  const barsHtml = data.bars.map((b) => {
-    const changeCls = b.change !== null ? b.change < 0 ? "rb-down" : b.change > 0 ? "rb-up" : "" : "";
-    const changeStr = b.change !== null ? `<span class="rb-change ${changeCls}">${b.change > 0 ? "+" : ""}${b.change.toFixed(1)}</span>` : "";
-    return `
-      <div class="rb-col">
-        <div class="rb-val">${b.wt.toFixed(1)}</div>
-        ${changeStr}
-        <div class="rb-bar-wrap">
-          <div class="rb-bar" style="height:${Math.max(b.pct, 3)}%"></div>
-        </div>
-        <div class="rb-date">${b.dt.slice(5).replace("-", "/")}</div>
-      </div>
-    `;
-  }).join("");
-  const goalLine = data.goalPct !== null ? `<div class="rb-goal-line" style="bottom:${data.goalPct}%"><span class="rb-goal-label">${t("rbars.goal")}</span></div>` : "";
-  return `
-    <div class="rb-section">
-      <div class="helper">${t("rbars.title")}</div>
-      <div class="rb-chart">
-        ${goalLine}
-        ${barsHtml}
-      </div>
-    </div>
-  `;
-}
-function renderWeightAnniversary() {
-  const data = calcWeightAnniversary(state.records);
-  if (!data || data.trackingDays < 7) return "";
-  const changeSign = data.totalChange > 0 ? "+" : "";
-  const changeCls = data.totalChange < 0 ? "av-loss" : data.totalChange > 0 ? "av-gain" : "";
-  const milestoneHtml = (data.milestones || []).map((m) => {
-    if (!m.reached && data.trackingDays < m.days * 0.8) return "";
-    const label = t(`anniv.${m.label}`);
-    if (m.reached) {
-      const mChangeSign = m.changeAtMilestone > 0 ? "+" : "";
-      const mCls = m.changeAtMilestone < 0 ? "av-loss" : m.changeAtMilestone > 0 ? "av-gain" : "";
-      return `<div class="av-milestone av-done"><span class="av-ms-label">${label}</span><span class="av-ms-val ${mCls}">${mChangeSign}${m.changeAtMilestone}kg</span></div>`;
-    }
-    const daysLeft = m.days - data.trackingDays;
-    return `<div class="av-milestone av-pending"><span class="av-ms-label">${label}</span><span class="av-ms-soon">${t("anniv.upcoming")} (${daysLeft}${t("sfreeze.days")})</span></div>`;
-  }).filter(Boolean).join("");
-  return `
-    <div class="av-section">
-      <div class="helper">${t("anniv.title")}</div>
-      <div class="av-header">${t("anniv.tracking").replace("{days}", data.trackingDays)}</div>
-      <div class="av-summary">
-        <span>${t("anniv.start")}: ${data.startWeight.toFixed(1)}kg</span>
-        <span class="${changeCls}">${t("anniv.total")}: ${changeSign}${data.totalChange}kg</span>
-      </div>
-      <div class="av-milestones">${milestoneHtml}</div>
-    </div>
-  `;
-}
-function renderTrendForecast() {
-  const data = calcTrendForecast(state.records, 14);
-  if (!data || data.forecast.length < 8) return "";
-  const weeklyChange = +(data.slope * 7).toFixed(2);
-  const trendLabel = weeklyChange < -0.05 ? t("tfc.losing") : weeklyChange > 0.05 ? t("tfc.gaining") : t("tfc.stable");
-  const trendCls = weeklyChange < -0.05 ? "fc-loss" : weeklyChange > 0.05 ? "fc-gain" : "fc-stable";
-  const day7 = data.forecast.find((f) => f.dayOffset === 7);
-  const day14 = data.forecast.find((f) => f.dayOffset === 14);
-  const current = data.forecast[0]?.weight;
-  return `
-    <div class="fc-section">
-      <div class="helper">${t("tfc.title")}</div>
-      <div class="fc-trend ${trendCls}">
-        ${trendLabel} \xB7 ${weeklyChange > 0 ? "+" : ""}${weeklyChange}kg ${t("tfc.perWeek")}
-      </div>
-      <div class="fc-grid">
-        ${day7 ? `<div class="fc-cell">
-          <span class="fc-label">${t("tfc.in7days")}</span>
-          <span class="fc-val">${day7.weight.toFixed(1)}kg</span>
-          <span class="fc-diff ${day7.weight - current < 0 ? "fc-loss" : "fc-gain"}">${day7.weight - current > 0 ? "+" : ""}${(day7.weight - current).toFixed(1)}</span>
-        </div>` : ""}
-        ${day14 ? `<div class="fc-cell">
-          <span class="fc-label">${t("tfc.in14days")}</span>
-          <span class="fc-val">${day14.weight.toFixed(1)}kg</span>
-          <span class="fc-diff ${day14.weight - current < 0 ? "fc-loss" : "fc-gain"}">${day14.weight - current > 0 ? "+" : ""}${(day14.weight - current).toFixed(1)}</span>
-        </div>` : ""}
-      </div>
-    </div>
-  `;
-}
-function renderDailyChangeDist() {
-  const data = calcDailyChangeDist(state.records);
-  if (!data || data.buckets.length < 2) return "";
-  const maxCount = Math.max(...data.buckets.map((b) => b.count));
-  const barsHtml = data.buckets.map((b) => {
-    const height = maxCount > 0 ? Math.max(b.count / maxCount * 100, 3) : 3;
-    const cls = b.min >= 0 ? "cd-pos" : "cd-neg";
-    return `
-      <div class="cd-col">
-        <div class="cd-bar-wrap"><div class="cd-bar ${cls}" style="height:${height}%"></div></div>
-        <div class="cd-blabel">${b.label}</div>
-      </div>
-    `;
-  }).join("");
-  const avgSign = data.avgChange > 0 ? "+" : "";
-  const medSign = data.medianChange > 0 ? "+" : "";
-  return `
-    <div class="cd-section">
-      <div class="helper">${t("cdist.title")}</div>
-      <div class="cd-chart">${barsHtml}</div>
-      <div class="cd-stats">
-        <span>${t("cdist.avg")}: ${avgSign}${data.avgChange}kg</span>
-        <span>${t("cdist.median")}: ${medSign}${data.medianChange}kg</span>
-      </div>
-      <div class="cd-range">${t("cdist.normal")}: ${data.normalRange.low > 0 ? "+" : ""}${data.normalRange.low} ${t("cdist.to")} ${data.normalRange.high > 0 ? "+" : ""}${data.normalRange.high}kg</div>
-    </div>
-  `;
-}
-function renderGoalStreak() {
-  const goalWeight = Number(state.settings.goalWeight);
-  if (!goalWeight) return "";
-  const data = calcGoalStreak(state.records, goalWeight);
-  if (!data || data.streak < 2) return "";
-  if (data.direction === "achieved") {
-    return `
-      <div class="gs-section gs-achieved">
-        <div class="helper">${t("gstreak.title")}</div>
-        <div class="gs-msg">${t("gstreak.achieved")}</div>
-      </div>
-    `;
-  }
-  return `
-    <div class="gs-section">
-      <div class="helper">${t("gstreak.title")}</div>
-      <div class="gs-count">${data.streak}</div>
-      <div class="gs-label">${t("gstreak.days")}</div>
-      <div class="gs-detail">
-        <span>${t("gstreak.dist")}: ${data.currentDist}kg</span>
-        <span>${t("gstreak.closest")}: ${data.closestToGoal}kg</span>
-      </div>
-    </div>
-  `;
-}
-function renderThenVsNow() {
-  const data = calcThenVsNow(state.records, 7);
-  if (!data) return "";
-  const diffSign = data.diff > 0 ? "+" : "";
-  const diffCls = data.diff < 0 ? "tvn-loss" : data.diff > 0 ? "tvn-gain" : "";
-  return `
-    <div class="tvn-section">
-      <div class="helper">${t("tvn.title")}</div>
-      <div class="tvn-grid">
-        <div class="tvn-col tvn-then">
-          <div class="tvn-period">${t("tvn.then")}</div>
-          <div class="tvn-avg">${data.then.avg}kg</div>
-          <div class="tvn-range">${data.then.min}\u2013${data.then.max}kg</div>
-        </div>
-        <div class="tvn-arrow">${data.diff < 0 ? "\u{1F4C9}" : data.diff > 0 ? "\u{1F4C8}" : "\u27A1\uFE0F"}</div>
-        <div class="tvn-col tvn-now">
-          <div class="tvn-period">${t("tvn.now")}</div>
-          <div class="tvn-avg">${data.now.avg}kg</div>
-          <div class="tvn-range">${data.now.min}\u2013${data.now.max}kg</div>
-        </div>
-      </div>
-      <div class="tvn-diff ${diffCls}">${t("tvn.change")}: ${diffSign}${data.diff}kg</div>
-    </div>
-  `;
-}
-function renderRecordCompleteness() {
-  const data = calcRecordCompleteness(state.records);
-  if (!data || data.total < 3) return "";
-  const barColor = data.level === "excellent" ? "var(--ok)" : data.level === "good" ? "var(--accent-3)" : data.level === "fair" ? "var(--warn)" : "var(--muted)";
-  return `
-    <div class="rc-section">
-      <div class="helper">${t("rcomp.title")}</div>
-      <div class="rc-level" style="color:${barColor}">${t("rcomp.level." + data.level)}</div>
-      <div class="rc-bars">
-        <div class="rc-bar-row"><span class="rc-bar-label">${t("rcomp.bodyFat")}</span><div class="rc-bar-track"><div class="rc-bar-fill" style="width:${data.bodyFatPct}%;background:${barColor}"></div></div><span class="rc-bar-val">${data.bodyFatPct}%</span></div>
-        <div class="rc-bar-row"><span class="rc-bar-label">${t("rcomp.note")}</span><div class="rc-bar-track"><div class="rc-bar-fill" style="width:${data.notePct}%;background:${barColor}"></div></div><span class="rc-bar-val">${data.notePct}%</span></div>
-        <div class="rc-bar-row"><span class="rc-bar-label">${t("rcomp.tag")}</span><div class="rc-bar-track"><div class="rc-bar-fill" style="width:${data.tagPct}%;background:${barColor}"></div></div><span class="rc-bar-val">${data.tagPct}%</span></div>
-      </div>
-      ${data.level !== "excellent" ? `<div class="rc-tip">${t("rcomp.tip")}</div>` : ""}
-    </div>
-  `;
-}
-function renderWeightPace() {
-  const goalWeight = Number(state.settings.goalWeight);
-  const data = calcWeightPace(state.records, goalWeight);
-  if (!data) return "";
-  const paceColor = data.pace === "healthy" ? "var(--ok)" : data.pace === "too_fast" ? "var(--error)" : data.pace === "too_slow" ? "var(--warn)" : "var(--muted)";
-  const paceLabel = data.pace === "healthy" ? t("wpace.healthy_pace") : data.pace === "too_fast" ? t("wpace.too_fast") : data.pace === "too_slow" ? t("wpace.too_slow") : t("wpace.maintaining");
-  const sign = data.weeklyRate > 0 ? "+" : "";
-  return `
-    <div class="wp-section">
-      <div class="helper">${t("wpace.title")}</div>
-      <div class="wp-meter">
-        <div class="wp-rate" style="color:${paceColor}">${sign}${data.weeklyRate} kg/${t("wpace.weekly")}</div>
-        <div class="wp-badge" style="background:color-mix(in srgb, ${paceColor} 15%, transparent);color:${paceColor}">${paceLabel}</div>
-      </div>
-      ${data.pace !== "maintaining" ? `<div class="wp-range">${t("wpace.range").replace("{min}", String(data.healthyMin)).replace("{max}", String(data.healthyMax))}</div>` : ""}
-    </div>
-  `;
-}
-function renderWeightSmoothness() {
-  const data = calcWeightSmoothness(state.records);
-  if (!data) return "";
-  const color = data.score >= 70 ? "var(--ok)" : data.score >= 50 ? "var(--warn)" : "var(--error)";
-  const ratingLabel = t("wsm." + data.rating);
-  return `
-    <div class="wsm-section">
-      <div class="helper">${t("wsm.title")}</div>
-      <div class="wsm-meter">
-        <div class="wsm-score" style="color:${color}">${data.score}</div>
-        <div class="wsm-details">
-          <div class="wsm-rating" style="color:${color}">${ratingLabel}</div>
-          <div class="wsm-noise">${t("wsm.noise")}: \xB1${data.avgDailyNoise}kg</div>
-        </div>
-      </div>
-      <div class="wsm-bar-track"><div class="wsm-bar-fill" style="width:${data.score}%;background:${color}"></div></div>
-      ${data.score < 70 ? `<div class="wsm-tip">${t("wsm.tip")}</div>` : ""}
-    </div>
-  `;
-}
-function renderPeriodBreakdown() {
-  const data = calcPeriodBreakdown(state.records, 3);
-  if (!data || data.months.length === 0) return "";
-  const rows = data.months.map((m) => {
-    const changeStr = m.change !== null ? `<span class="pbd-change ${m.change < 0 ? "pbd-loss" : m.change > 0 ? "pbd-gain" : ""}">${m.change > 0 ? "+" : ""}${m.change}kg</span>` : `<span class="pbd-change">\u2014</span>`;
-    return `<tr>
-      <td class="pbd-month">${m.yearMonth}</td>
-      <td class="pbd-avg">${m.avg}kg</td>
-      <td class="pbd-range-cell">${m.min}\u2013${m.max}</td>
-      <td class="pbd-cnt">${m.count}</td>
-      <td>${changeStr}</td>
-    </tr>`;
-  }).join("");
-  return `
-    <div class="pbd-section">
-      <div class="helper">${t("pbd.title")}</div>
-      <table class="pbd-table">
-        <thead><tr>
-          <th></th><th>${t("pbd.avg")}</th><th>${t("pbd.range")}</th><th>${t("pbd.count")}</th><th>${t("pbd.change")}</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  `;
-}
-function renderMotivation() {
-  const data = calcMotivationLevel(state.records);
-  if (!data) return "";
-  const stars = "\u2605".repeat(data.level) + "\u2606".repeat(5 - data.level);
-  const color = data.level >= 4 ? "var(--ok)" : data.level >= 3 ? "var(--accent-3)" : data.level >= 2 ? "var(--warn)" : "var(--muted)";
-  const msg = t("motiv.level" + data.level);
-  const trendMsg = t("motiv.trend." + data.trendDirection);
-  return `
-    <div class="mot-section">
-      <div class="helper">${t("motiv.title")}</div>
-      <div class="mot-stars" style="color:${color}">${stars}</div>
-      <div class="mot-msg" style="color:${color}">${msg}</div>
-      <div class="mot-details">
-        ${data.streakDays > 0 ? `<span class="mot-streak">${t("motiv.streak").replace("{days}", String(data.streakDays))}</span>` : ""}
-        <span class="mot-trend">${trendMsg}</span>
-      </div>
-    </div>
-  `;
-}
-function renderWeightBand() {
-  const data = calcWeightBand(state.records);
-  if (!data) return "";
-  return `
-    <div class="wb-section">
-      <div class="helper">${t("wband.title")}</div>
-      <div class="wb-visual">
-        <div class="wb-band">
-          <span class="wb-lo">${data.low}kg</span>
-          <span class="wb-mean">${data.mean}kg</span>
-          <span class="wb-hi">${data.high}kg</span>
-        </div>
-        <div class="wb-bar"><div class="wb-bar-center"></div></div>
-      </div>
-      <div class="wb-info">${t("wband.spread")}: \xB1${data.stdDev}kg</div>
-      ${data.bandwidth > 1 ? `<div class="wb-tip">${t("wband.tip")}</div>` : ""}
-    </div>
-  `;
-}
-function renderBestWeighDay() {
-  const data = calcBestWeighDay(state.records);
-  if (!data) return "";
-  const maxDiff = Math.max(...data.days.map((d) => d.diffFromBest), 0.1);
-  const bars = data.days.map((d) => {
-    const pct = Math.round(d.diffFromBest / maxDiff * 100);
-    const isBest = d.day === data.bestDay;
-    const cls = isBest ? "bwd-bar-best" : "";
-    return `<div class="bwd-row">
-      <span class="bwd-day">${t("bwd.days." + d.day)}</span>
-      <div class="bwd-bar-track"><div class="bwd-bar-fill ${cls}" style="width:${isBest ? 0 : pct}%"></div></div>
-      <span class="bwd-avg">${d.avg}kg</span>
-    </div>`;
-  }).join("");
-  return `
-    <div class="bwd-section">
-      <div class="helper">${t("bwd.title")}</div>
-      ${bars}
-      <div class="bwd-best-label">${t("bwd.best")}: ${t("bwd.days." + data.bestDay)}</div>
-    </div>
-  `;
-}
-function renderMiniSparkline() {
-  const data = calcMiniSparkline(state.records, 10);
-  if (!data) return "";
-  const trendColor = data.trend === "down" ? "var(--ok)" : data.trend === "up" ? "var(--error)" : "var(--accent-3)";
-  const trendLabel = t("spark." + data.trend);
-  return `
-    <div class="spk-section">
-      <div class="helper">${t("spark.title")}</div>
-      <div class="spk-row">
-        <svg class="spk-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <path d="${data.svgPath}" fill="none" stroke="${trendColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-        </svg>
-        <div class="spk-info">
-          <div class="spk-trend" style="color:${trendColor}">${trendLabel}</div>
-          <div class="spk-range">${data.min}\u2013${data.max}kg</div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-function renderEntrySummary() {
-  const data = calcEntrySummary(state.records);
-  if (!data) return "";
-  const fmtDiff = (v) => {
-    const sign = v > 0 ? "+" : "";
-    const cls = v < 0 ? "esum-down" : v > 0 ? "esum-up" : "";
-    return `<span class="${cls}">${sign}${v}kg</span>`;
-  };
-  return `
-    <div class="esum-section">
-      <div class="helper">${t("esum.title")} (${data.latest.dt.slice(5).replace("-", "/")})</div>
-      <div class="esum-grid">
-        <div class="esum-item"><span class="esum-label">${t("esum.vsPrev")}</span>${fmtDiff(data.vsYesterday)}</div>
-        <div class="esum-item"><span class="esum-label">${t("esum.vsWeek")}</span>${fmtDiff(data.vsWeekAvg)}</div>
-        <div class="esum-item"><span class="esum-label">${t("esum.best")}</span><span>${data.allTimeBest}kg</span></div>
-      </div>
-      ${data.isNewBest ? `<div class="esum-new-best">${t("esum.newBest")}</div>` : ""}
-    </div>
-  `;
-}
-function renderGoalDistance() {
-  const goalWeight = Number(state.settings.goalWeight);
-  const data = calcGoalDistance(state.records, goalWeight);
-  if (!data) return "";
-  if (data.direction === "achieved") {
-    return `<div class="gd-section"><div class="gd-achieved">${t("gdist.achieved")}</div></div>`;
-  }
-  const etaStr = data.etaDays !== null ? t("gdist.days").replace("{days}", String(data.etaDays)) : t("gdist.noEta");
-  return `
-    <div class="gd-section">
-      <div class="helper">${t("gdist.title")}</div>
-      <div class="gd-progress-track"><div class="gd-progress-fill" style="width:${data.progressPct}%"></div></div>
-      <div class="gd-info">
-        <span class="gd-remaining">${t("gdist.remaining")} ${data.remaining}kg</span>
-        <span class="gd-pct">${data.progressPct}%</span>
-      </div>
-      <div class="gd-eta">${t("gdist.eta")}: ${etaStr}</div>
-    </div>
-  `;
-}
-function renderTimeSlotPattern() {
-  const data = calcTimeSlotPattern(state.records);
-  if (!data) return "";
-  const maxCount = Math.max(...data.slots.map((s) => s.count), 1);
-  const bars = data.slots.map((s) => {
-    const pct = Math.round(s.count / maxCount * 100);
-    const isBest = s.name === data.preferredSlot;
-    return `<div class="ts-row">
-      <span class="ts-label">${t("tslot." + s.name)}</span>
-      <div class="ts-bar-track"><div class="ts-bar-fill${isBest ? " ts-best" : ""}" style="width:${pct}%"></div></div>
-      <span class="ts-count">${s.count}</span>
-    </div>`;
-  }).join("");
-  return `
-    <div class="ts-section">
-      <div class="helper">${t("tslot.title")}</div>
-      ${bars}
-      <div class="ts-preferred">${t("tslot.preferred")}: ${t("tslot." + data.preferredSlot)}</div>
-    </div>
-  `;
-}
-function renderStreakBadges() {
-  const data = calcStreakBadges(state.records);
-  if (!data) return "";
-  const badgeItems = data.badges.map((b) => {
-    const cls = b.earned ? "sb-earned" : "sb-locked";
-    const label = t("sbadge.days").replace("{n}", String(b.days));
-    return `<div class="sb-badge ${cls}" title="${label}"><span class="sb-icon">${b.earned ? b.icon : "\u{1F512}"}</span><span class="sb-label">${label}</span></div>`;
-  }).join("");
-  return `
-    <div class="sb-section">
-      <div class="helper">${t("sbadge.title")}</div>
-      <div class="sb-grid">${badgeItems}</div>
-      <div class="sb-stats">
-        <span>${t("sbadge.current")}: ${data.currentStreak}${t("sbadge.days").replace("{n}", "").trim()}</span>
-        <span>${t("sbadge.longest")}: ${data.longestStreak}${t("sbadge.days").replace("{n}", "").trim()}</span>
-      </div>
-    </div>
-  `;
-}
-function renderProgressTimeline() {
-  const goalWeight = Number(state.settings.goalWeight);
-  const data = calcProgressTimeline(state.records, goalWeight);
-  if (!data || data.events.length < 2) return "";
-  const icons = { start: "\u{1F3C1}", milestone: "\u{1F4CD}", best: "\u2B50", current: "\u{1F4CC}" };
-  const items = data.events.map((e) => {
-    const label = t("ptl." + e.type);
-    const icon = icons[e.type] || "\u{1F4CD}";
-    return `<div class="ptl-item">
-      <div class="ptl-dot">${icon}</div>
-      <div class="ptl-content">
-        <span class="ptl-date">${e.dt.slice(5).replace("-", "/")}</span>
-        <span class="ptl-wt">${e.wt}kg</span>
-        <span class="ptl-type">${label}</span>
-      </div>
-    </div>`;
-  }).join("");
-  const sign = data.totalChange > 0 ? "+" : "";
-  const changeCls = data.totalChange < 0 ? "ptl-loss" : data.totalChange > 0 ? "ptl-gain" : "";
-  return `
-    <div class="ptl-section">
-      <div class="helper">${t("ptl.title")}</div>
-      <div class="ptl-timeline">${items}</div>
-      <div class="ptl-total ${changeCls}">${t("ptl.total")}: ${sign}${data.totalChange}kg</div>
-    </div>
-  `;
-}
-function renderForecastConfidence() {
-  const data = calcForecastConfidence(state.records);
-  if (!data) return "";
-  const confColor = data.confidence >= 60 ? "var(--ok)" : data.confidence >= 30 ? "var(--warn)" : "var(--muted)";
-  const sign7 = data.forecast7 > data.current ? "+" : "";
-  const sign30 = data.forecast30 > data.current ? "+" : "";
-  const diff7 = +(data.forecast7 - data.current).toFixed(1);
-  const diff30 = +(data.forecast30 - data.current).toFixed(1);
-  return `
-    <div class="fc2-section">
-      <div class="helper">${t("fconf.title")}</div>
-      <div class="fc2-grid">
-        <div class="fc2-col">
-          <div class="fc2-label">${t("fconf.7day")}</div>
-          <div class="fc2-val">${data.forecast7}kg</div>
-          <div class="fc2-diff ${diff7 < 0 ? "fc2-down" : diff7 > 0 ? "fc2-up" : ""}">${sign7}${diff7}kg</div>
-        </div>
-        <div class="fc2-col">
-          <div class="fc2-label">${t("fconf.30day")}</div>
-          <div class="fc2-val">${data.forecast30}kg</div>
-          <div class="fc2-diff ${diff30 < 0 ? "fc2-down" : diff30 > 0 ? "fc2-up" : ""}">${sign30}${diff30}kg</div>
-        </div>
-      </div>
-      <div class="fc2-conf">
-        <span>${t("fconf.confidence")}</span>
-        <div class="fc2-conf-track"><div class="fc2-conf-fill" style="width:${data.confidence}%;background:${confColor}"></div></div>
-        <span class="fc2-conf-val" style="color:${confColor}">${data.confidence}%</span>
-      </div>
-    </div>
-  `;
-}
-function renderWeightZones() {
-  const goal = Number(state.settings.goalWeight);
-  const data = calcWeightZones(state.records, goal);
-  if (!data) return "";
-  return `
-    <div class="wz-section">
-      <div class="helper">${t("wz.title")}</div>
-      <div class="wz-bar-label">${t("wz.all")} (${data.total})</div>
-      <div class="wz-bar">
-        ${data.zones.below.pct > 0 ? `<div class="wz-seg wz-below" style="width:${data.zones.below.pct}%">${data.zones.below.pct}%</div>` : ""}
-        ${data.zones.at.pct > 0 ? `<div class="wz-seg wz-at" style="width:${data.zones.at.pct}%">${data.zones.at.pct}%</div>` : ""}
-        ${data.zones.above.pct > 0 ? `<div class="wz-seg wz-above" style="width:${data.zones.above.pct}%">${data.zones.above.pct}%</div>` : ""}
-      </div>
-      <div class="wz-bar-label">${t("wz.recent")} (${Math.min(30, data.total)})</div>
-      <div class="wz-bar">
-        ${data.recent30.below.pct > 0 ? `<div class="wz-seg wz-below" style="width:${data.recent30.below.pct}%">${data.recent30.below.pct}%</div>` : ""}
-        ${data.recent30.at.pct > 0 ? `<div class="wz-seg wz-at" style="width:${data.recent30.at.pct}%">${data.recent30.at.pct}%</div>` : ""}
-        ${data.recent30.above.pct > 0 ? `<div class="wz-seg wz-above" style="width:${data.recent30.above.pct}%">${data.recent30.above.pct}%</div>` : ""}
-      </div>
-      <div class="wz-legend">
-        <span class="wz-leg-item"><span class="wz-dot wz-below"></span>${t("wz.below")}</span>
-        <span class="wz-leg-item"><span class="wz-dot wz-at"></span>${t("wz.at")}</span>
-        <span class="wz-leg-item"><span class="wz-dot wz-above"></span>${t("wz.above")}</span>
-        <span class="wz-leg-margin">\xB1${data.margin}kg</span>
-      </div>
-    </div>
-  `;
-}
-function renderWeightChangeRate() {
-  const data = calcWeightChangeRate(state.records);
-  if (!data) return "";
-  const trendLabel = data.trend === "losing" ? t("wcr.losing") : data.trend === "gaining" ? t("wcr.gaining") : t("wcr.stable");
-  const trendColor = data.trend === "losing" ? "var(--ok)" : data.trend === "gaining" ? "var(--warn)" : "var(--muted)";
-  const bars = data.windows.map((w) => {
-    const pct = Math.round(Math.abs(w.rate) / data.maxAbsRate * 100);
-    const color = w.direction === "losing" ? "var(--ok)" : w.direction === "gaining" ? "var(--warn)" : "var(--muted)";
-    const isNeg = w.rate < 0;
-    return `<div class="wcr-col">
-      <div class="wcr-bar-wrap">
-        ${isNeg ? `<div class="wcr-bar wcr-bar-neg" style="height:${pct}%;background:${color}"></div>` : ""}
-        <div class="wcr-zero"></div>
-        ${!isNeg ? `<div class="wcr-bar wcr-bar-pos" style="height:${pct}%;background:${color}"></div>` : ""}
-      </div>
-      <div class="wcr-label">${w.rate > 0 ? "+" : ""}${w.rate}</div>
-    </div>`;
-  }).join("");
-  return `
-    <div class="wcr-section">
-      <div class="helper">${t("wcr.title")}</div>
-      <div class="wcr-chart">${bars}</div>
-      <div class="wcr-summary">
-        <span style="color:${trendColor}">${trendLabel}</span>
-        <span class="wcr-avg">${t("wcr.avg")}: ${data.avgRate > 0 ? "+" : ""}${data.avgRate}kg${t("wcr.perWeek")}</span>
-      </div>
-    </div>
-  `;
-}
-function renderWeighInConsistency() {
-  const data = calcWeighInConsistency(state.records);
-  if (!data) return "";
-  const cadenceLabel = t(`wic.${data.cadenceLabel}`);
-  const scoreColor = data.score >= 70 ? "var(--ok)" : data.score >= 40 ? "var(--warn)" : "var(--muted)";
-  return `
-    <div class="wic-section">
-      <div class="helper">${t("wic.title")}</div>
-      <div class="wic-grid">
-        <div class="wic-item">
-          <div class="wic-label">${t("wic.cadence")}</div>
-          <div class="wic-val">${cadenceLabel}</div>
-        </div>
-        <div class="wic-item">
-          <div class="wic-label">${t("wic.avgInterval")}</div>
-          <div class="wic-val">${data.avgInterval} ${t("wic.days")}</div>
-        </div>
-      </div>
-      <div class="wic-score-row">
-        <span>${t("wic.score")}</span>
-        <div class="wic-score-track"><div class="wic-score-fill" style="width:${data.score}%;background:${scoreColor}"></div></div>
-        <span class="wic-score-val" style="color:${scoreColor}">${data.score}%</span>
-      </div>
-    </div>
-  `;
-}
-function renderPlateauPeriods() {
-  const data = calcPlateauPeriods(state.records);
-  if (!data) return "";
-  const recent = data.plateaus.slice(-3);
-  const rows = recent.map((p) => `
-    <div class="plat-row">
-      <span class="plat-dates">${p.startDt.slice(5)} ~ ${p.endDt.slice(5)}</span>
-      <span class="plat-info">${t("plat.around")}${p.avgWt}kg \xB7 ${p.days}${t("plat.days")}</span>
-    </div>
-  `).join("");
-  return `
-    <div class="plat-section">
-      <div class="helper">${t("plat.title")}</div>
-      ${rows}
-      <div class="plat-summary">
-        <span>${t("plat.count")}: ${data.plateaus.length}</span>
-        <span>${t("plat.longest")}: ${data.longestDays}${t("plat.days")}</span>
-        ${data.current ? `<span class="plat-active">${t("plat.current")}</span>` : ""}
-      </div>
-    </div>
-  `;
-}
-function renderWeightPercentileRank() {
-  const data = calcWeightPercentileRank(state.records);
-  if (!data) return "";
-  const pctColor = data.percentile <= 30 ? "var(--ok)" : data.percentile >= 70 ? "var(--warn)" : "var(--accent)";
-  const markerPos = Math.max(2, Math.min(98, data.percentile));
-  return `
-    <div class="wpr-section">
-      <div class="helper">${t("wpr.title")}</div>
-      <div class="wpr-main">
-        <span class="wpr-pct" style="color:${pctColor}">${data.percentile}%</span>
-        <span class="wpr-desc">${t("wpr.lower")}</span>
-      </div>
-      <div class="wpr-track">
-        <div class="wpr-q1" style="left:25%"></div>
-        <div class="wpr-q3" style="left:75%"></div>
-        <div class="wpr-marker" style="left:${markerPos}%;background:${pctColor}"></div>
-      </div>
-      <div class="wpr-labels">
-        <span>${data.min}kg</span>
-        <span>${t("wpr.median")}: ${data.median}kg</span>
-        <span>${data.max}kg</span>
-      </div>
-    </div>
-  `;
-}
-function renderWeightTrendArrow() {
-  const data = calcWeightTrendArrow(state.records);
-  if (!data) return "";
-  const arrows = { up2: "\u2B06\u2B06", up1: "\u2B06", flat: "\u27A1", down1: "\u2B07", down2: "\u2B07\u2B07" };
-  const colors = { up2: "var(--warn)", up1: "var(--warn)", flat: "var(--muted)", down1: "var(--ok)", down2: "var(--ok)" };
-  const label = t(`wta.${data.arrow}`);
-  const sign = data.change > 0 ? "+" : "";
-  return `
-    <div class="wta-section">
-      <div class="wta-arrow" style="color:${colors[data.arrow]}">${arrows[data.arrow]}</div>
-      <div class="wta-info">
-        <div class="wta-label">${label}</div>
-        <div class="wta-change">${sign}${data.change}kg${t("wta.inDays")}${data.days}${t("wic.days")}</div>
-      </div>
-    </div>
-  `;
-}
-function renderBodyCompositionBreakdown() {
-  const data = calcBodyCompositionBreakdown(state.records);
-  if (!data) return "";
-  const fmtSign = (v) => (v > 0 ? "+" : "") + v;
-  const fatColor = data.fatChange <= 0 ? "var(--ok)" : "var(--warn)";
-  const leanColor = data.leanChange >= 0 ? "var(--ok)" : "var(--warn)";
-  return `
-    <div class="bcb-section">
-      <div class="helper">${t("bcb.title")}</div>
-      <table class="bcb-table">
-        <thead><tr><th></th><th>${t("bcb.start")}</th><th>${t("bcb.now")}</th><th>${t("bcb.change")}</th></tr></thead>
-        <tbody>
-          <tr>
-            <td class="bcb-label">${t("bcb.fatMass")}</td>
-            <td>${data.first.fatMass}kg</td>
-            <td>${data.current.fatMass}kg</td>
-            <td style="color:${fatColor}">${fmtSign(data.fatChange)}kg</td>
-          </tr>
-          <tr>
-            <td class="bcb-label">${t("bcb.leanMass")}</td>
-            <td>${data.first.leanMass}kg</td>
-            <td>${data.current.leanMass}kg</td>
-            <td style="color:${leanColor}">${fmtSign(data.leanChange)}kg</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  `;
-}
-function renderWeeklyReportCard() {
-  const goal = Number(state.settings.goalWeight);
-  const data = calcWeeklyReportCard(state.records, goal);
-  if (!data) return "";
-  const gradeColors = { A: "var(--ok)", B: "#4caf50", C: "var(--warn)", D: "#ff9800", F: "#f44336" };
-  const color = gradeColors[data.grade] || "var(--muted)";
-  const bar = (label, val) => `
-    <div class="wrc-row">
-      <span class="wrc-label">${label}</span>
-      <div class="wrc-bar-track"><div class="wrc-bar-fill" style="width:${val}%;background:${val >= 70 ? "var(--ok)" : val >= 40 ? "var(--warn)" : "var(--muted)"}"></div></div>
-      <span class="wrc-val">${val}</span>
-    </div>`;
-  return `
-    <div class="wrc-section">
-      <div class="helper">${t("wrc.title")}</div>
-      <div class="wrc-grade" style="color:${color}">${data.grade}</div>
-      <div class="wrc-score">${data.score}/100 \xB7 ${data.weekRecords}/7 ${t("wrc.days")}</div>
-      ${bar(t("wrc.consistency"), data.consistency)}
-      ${bar(t("wrc.goal"), data.goalProgress)}
-      ${bar(t("wrc.stability"), data.stability)}
-    </div>
-  `;
-}
-function renderNoteWordFrequency() {
-  const data = calcNoteWordFrequency(state.records);
-  if (!data) return "";
-  const maxCount = data.words[0].count;
-  const tags = data.words.map((w) => {
-    const size = 0.7 + w.count / maxCount * 0.6;
-    const opacity = 0.5 + w.count / maxCount * 0.5;
-    return `<span class="nwf-word" style="font-size:${size}rem;opacity:${opacity}" title="${w.count}${t("nwf.times")}">${w.text}</span>`;
-  }).join("");
-  return `
-    <div class="nwf-section">
-      <div class="helper">${t("nwf.title")} <span class="nwf-count">(${data.totalNotes} ${t("nwf.notes")})</span></div>
-      <div class="nwf-cloud">${tags}</div>
-    </div>
-  `;
-}
-function renderGoalMilestones() {
-  const goal = Number(state.settings.goalWeight);
-  const milestones = calcGoalMilestones(state.records, goal);
-  if (!milestones || !Array.isArray(milestones) || milestones.length === 0) return "";
-  const startWt = state.records.length > 0 ? state.records[0].wt : 0;
-  const steps = milestones.map((m) => `
-    <div class="gm-step ${m.reached ? "gm-done" : ""}">
-      <div class="gm-dot">${m.reached ? "\u2714" : ""}</div>
-      <div class="gm-pct">${m.pct}%</div>
-      <div class="gm-wt">${m.targetWeight}kg</div>
-    </div>
-  `).join("");
-  return `
-    <div class="gm-section">
-      <div class="helper">${t("gm.title")}</div>
-      <div class="gm-track">
-        <div class="gm-line"></div>
-        ${steps}
-      </div>
-      <div class="gm-range">
-        <span>${t("gm.start")}: ${startWt}kg</span>
-        <span>${t("gm.goal")}: ${goal}kg</span>
-      </div>
-    </div>
-  `;
-}
-function renderRecentEntries() {
-  const entries = getRecentEntries(state.records, 5);
-  if (entries.length === 0) return "";
-  const sourceIcons = { manual: "\u270F\uFE0F", voice: "\u{1F3A4}", photo: "\u{1F4F7}", quick: "\u26A1", import: "\u{1F4E5}" };
-  const rows = entries.map((e) => {
-    const icon = sourceIcons[e.source] || "\u270F\uFE0F";
-    const changeStr = e.change !== null ? `<span class="recent-change ${e.change < 0 ? "down" : e.change > 0 ? "up" : ""}">${e.change > 0 ? "+" : ""}${e.change.toFixed(1)}</span>` : "";
-    return `<div class="recent-row">${icon} <span class="recent-date">${e.dt.slice(5).replace("-", "/")}</span><span class="recent-wt">${e.wt.toFixed(1)}kg</span>${changeStr}</div>`;
-  }).join("");
-  return `
-    <div class="recent-entries">
-      <div class="helper">${t("recent.title")}</div>
-      ${rows}
-    </div>
-  `;
-}
-function renderDashboard() {
-  const dash = calcDashboardSummary(state.records, Number(state.profile.heightCm));
-  if (!dash) return "";
-  const changeSign = dash.change > 0 ? "+" : "";
-  const changeCls = dash.change < 0 ? "dash-down" : dash.change > 0 ? "dash-up" : "";
-  return `
-    <div class="dash-grid">
-      <div class="dash-card">
-        <div class="dash-label">${t("dash.weight")}</div>
-        <div class="dash-value">${dash.weight.toFixed(1)}<small>kg</small></div>
-      </div>
-      <div class="dash-card ${changeCls}">
-        <div class="dash-label">${t("dash.change")}</div>
-        <div class="dash-value">${changeSign}${dash.change.toFixed(1)}<small>kg</small></div>
-      </div>
-      <div class="dash-card">
-        <div class="dash-label">${t("dash.bmi")}</div>
-        <div class="dash-value">${dash.bmi !== null ? dash.bmi.toFixed(1) : "\u2014"}</div>
-      </div>
-      <div class="dash-card">
-        <div class="dash-label">${t("dash.streak")}</div>
-        <div class="dash-value">${t("dash.days").replace("{n}", dash.streak)}</div>
-      </div>
-    </div>
-  `;
-}
-function renderDataFreshness() {
-  const fresh = calcDataFreshness(state.records);
-  if (!fresh) return "";
-  if (fresh.level === "today") return "";
-  let msg;
-  if (fresh.level === "recent") {
-    msg = t("fresh.recent").replace("{days}", fresh.daysSince).replace("{weight}", fresh.lastWeight.toFixed(1));
-  } else if (fresh.level === "stale") {
-    msg = t("fresh.stale").replace("{days}", fresh.daysSince);
-  } else {
-    msg = t("fresh.veryStale").replace("{days}", fresh.daysSince);
-  }
-  const cls = fresh.level === "veryStale" ? "fresh-warn" : fresh.level === "stale" ? "fresh-nudge" : "fresh-info";
-  return `<div class="freshness-banner ${cls}">${msg}</div>`;
-}
-function renderMultiPeriodRate() {
-  const data = calcMultiPeriodRate(state.records);
-  if (!data) return "";
-  const hasAny = data.periods.some((p) => p.hasData);
-  if (!hasAny) return "";
-  const cols = data.periods.map((p) => {
-    if (!p.hasData) {
-      return `<div class="mpr-col"><div class="mpr-label">${t("multiRate.days").replace("{days}", p.days)}</div><div class="mpr-value">${t("multiRate.noData")}</div></div>`;
-    }
-    const sign = p.change > 0 ? "+" : "";
-    const cls = p.change < -0.1 ? "mpr-down" : p.change > 0.1 ? "mpr-up" : "mpr-flat";
-    const wsign = p.weeklyRate > 0 ? "+" : "";
-    return `<div class="mpr-col ${cls}">
-      <div class="mpr-label">${t("multiRate.days").replace("{days}", p.days)}</div>
-      <div class="mpr-value">${sign}${p.change.toFixed(1)}kg</div>
-      <div class="mpr-weekly">${wsign}${p.weeklyRate.toFixed(1)}kg/w</div>
-    </div>`;
-  }).join("");
-  return `
-    <div class="mpr-section">
-      <div class="helper">${t("multiRate.title")}</div>
-      <div class="mpr-grid">${cols}</div>
-    </div>
-  `;
-}
-function renderRecordMilestone() {
-  const ms = calcRecordMilestone(state.records.length);
-  if (!ms) return "";
-  if (ms.reached) {
-    return `<div class="milestone-banner milestone-reached">${t("milestone.reached").replace("{count}", ms.reached)}</div>`;
-  }
-  if (ms.remaining <= 5) {
-    return `<div class="milestone-banner milestone-close">${t("milestone.next").replace("{next}", ms.next).replace("{remaining}", ms.remaining)}</div>`;
-  }
-  return "";
-}
-function renderRecordingTime() {
-  const timeStats = calcRecordingTimeStats(state.records);
-  if (!timeStats) return "";
-  const periods = ["morning", "afternoon", "evening", "night"];
-  const icons = { morning: "\u{1F305}", afternoon: "\u2600\uFE0F", evening: "\u{1F306}", night: "\u{1F319}" };
-  return `
-    <div class="time-stats-section">
-      <div class="helper">${t("timeStats.title")}</div>
-      <div class="time-stats-bar">
-        ${periods.filter((p) => timeStats[p].pct > 0).map((p) => `<div class="time-stats-segment time-${p}" style="width:${timeStats[p].pct}%" title="${t("timeStats." + p)}: ${timeStats[p].count} (${timeStats[p].pct}%)"></div>`).join("")}
-      </div>
-      <div class="time-stats-legend">
-        ${periods.map((p) => `<span class="time-stats-item">${icons[p]} ${t("timeStats." + p)} ${timeStats[p].pct}%</span>`).join("")}
-      </div>
-      <div class="helper hint-small" style="margin-top:4px;">${t("timeStats.most").replace("{period}", t("timeStats." + timeStats.mostCommon))}</div>
-    </div>
-  `;
-}
-function renderAICoach() {
-  const goalWeight = Number(state.settings.goalWeight);
-  const report = generateAICoachReport(state.records, state.profile, goalWeight);
-  if (report.grade === "new" && state.records.length < 2) {
-    return `
-    <section class="ai-coach-panel panel">
-      <div class="ai-coach-header">
-        <div class="ai-coach-icon">\u{1F916}</div>
-        <div>
-          <h2>${t("ai.title")}</h2>
-          <p class="helper">${t("ai.subtitle")}</p>
-        </div>
-      </div>
-      <div class="ai-coach-empty">
-        <div class="ai-empty-icon">\u{1F4CA}</div>
-        <p>${t("ai.advice.start")}</p>
-      </div>
-    </section>`;
-  }
-  const gradeColors = { excellent: "var(--ok)", good: "var(--ok)", fair: "var(--warn)", needsWork: "var(--warn)", critical: "var(--error)" };
-  const gradeColor = gradeColors[report.grade] || "var(--muted)";
-  const scoreAngle = report.score / 100 * 360;
-  return `
-    <section class="ai-coach-panel panel">
-      <div class="ai-coach-header">
-        <div class="ai-coach-icon">\u{1F916}</div>
-        <div>
-          <h2>${t("ai.title")}</h2>
-          <p class="helper">${t("ai.subtitle")}</p>
-        </div>
-        <div class="ai-score-ring" style="--score-angle: ${scoreAngle}deg; --score-color: ${gradeColor}">
-          <span class="ai-score-value">${report.score}</span>
-          <span class="ai-score-label">${t("ai.grade." + report.grade)}</span>
-        </div>
-      </div>
-
-      ${report.weeklyReport ? `
-      <div class="ai-weekly-report">
-        <h3>${t("ai.weeklyReport")}</h3>
-        <div class="ai-weekly-grid">
-          <div class="ai-weekly-stat">
-            <span class="ai-weekly-label">${t("ai.weeklyAvg")}</span>
-            <span class="ai-weekly-value">${report.weeklyReport.avg}kg</span>
-          </div>
-          ${report.weeklyReport.change !== null ? `
-          <div class="ai-weekly-stat">
-            <span class="ai-weekly-label">${t("ai.weeklyChange")}</span>
-            <span class="ai-weekly-value ${report.weeklyReport.change > 0 ? "positive" : report.weeklyReport.change < 0 ? "negative" : ""}">${report.weeklyReport.change > 0 ? "+" : ""}${report.weeklyReport.change}kg</span>
-          </div>` : ""}
-          <div class="ai-weekly-stat">
-            <span class="ai-weekly-label">${t("ai.weeklyRange")}</span>
-            <span class="ai-weekly-value">${report.weeklyReport.range}kg</span>
-          </div>
-          <div class="ai-weekly-stat">
-            <span class="ai-weekly-label">${t("ai.weeklyEntries")}</span>
-            <span class="ai-weekly-value">${report.weeklyReport.entries}</span>
-          </div>
-        </div>
-      </div>` : ""}
-
-      ${report.highlights.length ? `
-      <div class="ai-section ai-highlights">
-        <h3>${t("ai.highlights")}</h3>
-        <div class="ai-items">
-          ${report.highlights.map((h) => `<div class="ai-item ai-highlight">${t("ai.highlight." + h)}</div>`).join("")}
-        </div>
-      </div>` : ""}
-
-      ${report.risks.length ? `
-      <div class="ai-section ai-risks">
-        <h3>${t("ai.risks")}</h3>
-        <div class="ai-items">
-          ${report.risks.map((r) => `<div class="ai-item ai-risk">${t("ai.risk." + r)}</div>`).join("")}
-        </div>
-      </div>` : ""}
-
-      ${report.advices.length ? `
-      <div class="ai-section ai-advices">
-        <h3>${t("ai.advice")}</h3>
-        <div class="ai-items">
-          ${report.advices.map((a) => `<div class="ai-item ai-advice-item">${t("ai.advice." + a)}</div>`).join("")}
-        </div>
-      </div>` : ""}
-
-      ${report.prediction ? `
-      <div class="ai-section ai-prediction">
-        <h3>${t("ai.prediction.title")}</h3>
-        <div class="ai-prediction-content">
-          ${report.prediction.achieved ? t("ai.prediction.achieved") : report.prediction.noTrend ? t("ai.prediction.noTrend") : report.prediction.insufficient ? t("ai.prediction.insufficient") : `<div class="ai-prediction-days">${t("ai.prediction.goalDays").replace("{days}", report.prediction.days)}</div>
-               <div class="ai-prediction-date">${t("ai.prediction.goalDate").replace("{date}", report.prediction.predictedDate)}</div>`}
-        </div>
-      </div>` : ""}
-    </section>`;
 }
 function renderStability() {
   const stability = calcWeightStability(state.records);
@@ -30914,7 +25176,7 @@ function renderConsistencyStreak() {
       <div class="consistency-display">
         <span class="consistency-badge${cs.streak >= 5 ? " great" : ""}">${cs.streak >= 5 ? "\u{1F3AF}" : "\u{1F4CA}"} ${t("consistency.current").replace("{days}", cs.streak).replace("{tol}", cs.tolerance)}</span>
         ${cs.best > cs.streak ? `<span class="helper hint-small">${t("consistency.best").replace("{days}", cs.best)}</span>` : ""}
-        ${cs.streak >= 5 ? `<span class="helper hint-small" style="color:var(--ok);font-weight:600;">${t("consistency.great")}</span>` : ""}
+        ${cs.streak >= 5 ? `<span class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("consistency.great")}</span>` : ""}
       </div>
     </div>
   `;
@@ -30923,10 +25185,10 @@ function renderBMIDistribution() {
   const dist = calcBMIDistribution(state.records);
   if (!dist) return "";
   const zones = [
-    { key: "under", color: "var(--accent-3)" },
-    { key: "normal", color: "var(--ok)" },
-    { key: "over", color: "var(--warn)" },
-    { key: "obese", color: "var(--error)" }
+    { key: "under", color: "var(--accent-3, #3b82f6)" },
+    { key: "normal", color: "var(--ok, #10b981)" },
+    { key: "over", color: "var(--warn, #f59e0b)" },
+    { key: "obese", color: "var(--error, #ef4444)" }
   ];
   const bars = zones.filter((z) => dist[z.key].pct > 0).map((z) => `<div class="bmi-dist-segment" style="width:${dist[z.key].pct}%;background:${z.color}" title="${t("bmiDist." + z.key)}: ${dist[z.key].count} (${dist[z.key].pct}%)"></div>`).join("");
   const legend = zones.map((z) => `<span class="bmi-dist-legend-item"><span class="bmi-dist-dot" style="background:${z.color}"></span>${t("bmiDist." + z.key)} ${dist[z.key].pct}%</span>`).join("");
@@ -30953,7 +25215,7 @@ function renderWeightPercentile() {
         <div class="percentile-details">
           <div class="percentile-label">${t("percentile.value").replace("{pct}", pctl.percentile)}</div>
           <div class="helper hint-small">${t("percentile.rank").replace("{rank}", pctl.rank).replace("{total}", pctl.total)}</div>
-          ${pctl.percentile <= 10 ? `<div class="helper hint-small" style="color:var(--ok);font-weight:600;">${t("percentile.best")}</div>` : ""}
+          ${pctl.percentile <= 10 ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("percentile.best")}</div>` : ""}
         </div>
       </div>
     </div>
@@ -31016,6 +25278,26 @@ function renderDayOfWeekAvg() {
     </div>
   `;
 }
+function renderShareProgress() {
+  const goal = Number(state.settings.goalWeight);
+  const heightCm = state.profile?.heightCm || 0;
+  const data = calcShareText(state.records, goal, heightCm);
+  if (!data) return "";
+  const lines = [
+    `${t("sht.current")}: ${data.currentWt}kg`,
+    `${t("sht.change")}: ${data.sign}${data.change}kg (${data.days}${t("sht.days")})`,
+    data.streak > 1 ? `${t("sht.streak")}: ${data.streak}${t("sht.days")}` : "",
+    data.bmi ? `BMI: ${data.bmi}` : "",
+    data.goalPct != null ? `${t("sht.goal")}: ${data.goalPct}%` : ""
+  ].filter(Boolean);
+  return `
+    <div class="sht-section">
+      <div class="helper">${t("sht.title")}</div>
+      <div class="sht-preview">${lines.join(" | ")}</div>
+      <button type="button" class="btn ghost sht-btn" data-action="copy-share">${t("sht.btn")}</button>
+    </div>
+  `;
+}
 function renderRecordList() {
   let filtered = filterRecords(state.records, recordSearchQuery);
   filtered = filterRecordsByDateRange(filtered, recordDateFrom, recordDateTo);
@@ -31037,9 +25319,6 @@ function renderRecordList() {
         maxDt = r.dt;
       }
     }
-  }
-  if (hasFilter && displayed.length === 0) {
-    return `<div class="empty-state"><div class="helper">${t("records.noMatch")}</div></div>`;
   }
   const dtIndex = new Map(state.records.map((r, i) => [r.dt, i]));
   return displayed.map((record) => {
@@ -31066,57 +25345,22 @@ function renderPickerDecOptions(selected) {
   return html;
 }
 function bindEvents() {
-  app.querySelectorAll('[role="tablist"]').forEach((tablist) => {
-    tablist.addEventListener("keydown", (e) => {
-      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-      const tabs = [...tablist.querySelectorAll('[role="tab"]')];
-      const idx = tabs.indexOf(document.activeElement);
-      if (idx === -1) return;
-      e.preventDefault();
-      const next = e.key === "ArrowRight" ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
-      tabs[next].focus();
-      tabs[next].click();
+  app.querySelectorAll("[data-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeTab = button.dataset.tab;
+      render();
+      window.scrollTo(0, 0);
     });
   });
   app.querySelectorAll("[data-mode]").forEach((button) => {
     button.addEventListener("click", () => {
-      if (voiceActive && button.dataset.mode !== "voice") {
-        recognition?.stop();
-        recognition = null;
-        voiceActive = false;
-      }
       activeEntryMode = button.dataset.mode;
       render();
-      if (activeEntryMode === "manual") {
-        document.getElementById("pickerInt")?.focus();
-      } else if (activeEntryMode === "voice") {
-        app.querySelector("[data-action='toggle-voice']")?.focus();
-      } else if (activeEntryMode === "photo") {
-        (app.querySelector("[data-action='pick-native-photo']") || app.querySelector("label[for='photoInput']"))?.focus();
-      }
     });
   });
   app.querySelector('[data-action="save-profile"]')?.addEventListener("click", saveProfile);
   app.querySelector('[data-action="save-settings"]')?.addEventListener("click", saveSettings);
   app.querySelector('[data-action="save-record"]')?.addEventListener("click", saveRecordFromPicker);
-  app.addEventListener("click", (e) => {
-    if (e.target.closest('[data-action="confirm-save"]')) {
-      const container = document.querySelector(".validate-warnings");
-      if (container) {
-        container.style.display = "none";
-        container.innerHTML = "";
-      }
-      saveRecordFromPicker();
-    }
-    if (e.target.closest('[data-action="dismiss-warning"]')) {
-      const container = document.querySelector(".validate-warnings");
-      if (container) {
-        container.style.display = "none";
-        container.innerHTML = "";
-      }
-      validationBypass = false;
-    }
-  });
   app.querySelector('[data-action="export-data"]')?.addEventListener("click", exportData);
   app.querySelector('[data-action="reset-data"]')?.addEventListener("click", resetData);
   app.querySelector('[data-action="pick-native-photo"]')?.addEventListener("click", pickNativePhoto);
@@ -31136,23 +25380,26 @@ function bindEvents() {
     showAdvancedAnalytics = !showAdvancedAnalytics;
     render();
   });
-  app.querySelector('[data-action="copy-summary"]')?.addEventListener("click", async (e) => {
-    const text = e.target.dataset.text;
-    try {
-      await navigator.clipboard.writeText(text);
-      e.target.textContent = t("share.copied");
-      clearTimeout(e.target._copyTimer);
-      e.target._copyTimer = setTimeout(() => {
-        e.target.textContent = t("share.btn");
-      }, 2e3);
-    } catch {
-    }
+  app.querySelector('[data-action="copy-share"]')?.addEventListener("click", () => {
+    const goal = Number(state.settings.goalWeight);
+    const heightCm = state.profile?.heightCm || 0;
+    const d = calcShareText(state.records, goal, heightCm);
+    if (!d) return;
+    const txt = [
+      `${t("sht.current")}: ${d.currentWt}kg`,
+      `${t("sht.change")}: ${d.sign}${d.change}kg (${d.days}${t("sht.days")})`,
+      d.streak > 1 ? `${t("sht.streak")}: ${d.streak}${t("sht.days")}` : "",
+      d.bmi ? `BMI: ${d.bmi}` : "",
+      d.goalPct != null ? `${t("sht.goal")}: ${d.goalPct}%` : ""
+    ].filter(Boolean).join("\n");
+    navigator.clipboard.writeText(txt).then(() => setStatus(t("sht.copied"))).catch(() => {
+    });
   });
   app.querySelector("#recordSearch")?.addEventListener("input", (e) => {
     recordSearchQuery = e.target.value;
-    const pos = e.target.selectionStart;
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
+      const pos = e.target.selectionStart;
       render();
       const input = document.getElementById("recordSearch");
       if (input) {
@@ -31192,14 +25439,7 @@ function bindEvents() {
   app.querySelector('[data-action="google-backup"]')?.addEventListener("click", googleBackup);
   app.querySelector('[data-action="google-restore"]')?.addEventListener("click", googleRestore);
   app.querySelector('[data-action="undo"]')?.addEventListener("click", undoLastSave);
-  const zoomEl = app.querySelector('[data-action="zoom-photo"]');
-  zoomEl?.addEventListener("click", handlePhotoZoom);
-  zoomEl?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      handlePhotoZoom();
-    }
-  });
+  app.querySelector('[data-action="zoom-photo"]')?.addEventListener("click", handlePhotoZoom);
   app.querySelector('[data-action="cal-prev"]')?.addEventListener("click", () => {
     calendarMonth--;
     if (calendarMonth < 0) {
@@ -31231,7 +25471,6 @@ function bindEvents() {
   app.querySelectorAll("[data-quick-adj]").forEach((button) => {
     button.addEventListener("click", () => {
       const adj = parseFloat(button.dataset.quickAdj);
-      if (!Number.isFinite(adj)) return;
       quickWeight = Math.round((quickWeight + adj) * 10) / 10;
       quickWeight = Math.max(20, Math.min(300, quickWeight));
       const display = document.getElementById("quickDisplay");
@@ -31241,7 +25480,6 @@ function bindEvents() {
   app.querySelectorAll("[data-pick-weight]").forEach((button) => {
     button.addEventListener("click", () => {
       const w = parseFloat(button.dataset.pickWeight);
-      if (!Number.isFinite(w)) return;
       state.form.pickerInt = Math.floor(w);
       state.form.pickerDec = Math.round((w - Math.floor(w)) * 10);
       render();
@@ -31257,7 +25495,7 @@ function bindEvents() {
     button.addEventListener("click", () => {
       const key = button.dataset.dateShortcut;
       if (key === "yesterday") {
-        const d = /* @__PURE__ */ new Date(todayLocal() + "T00:00:00");
+        const d = /* @__PURE__ */ new Date();
         d.setDate(d.getDate() - 1);
         state.form.date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       } else {
@@ -31268,12 +25506,9 @@ function bindEvents() {
   });
   app.querySelectorAll("[data-delete-date]").forEach((button) => {
     button.addEventListener("click", () => {
-      const dt = button.dataset.deleteDate;
-      const rec = state.records.find((r) => r.dt === dt);
-      const detail = rec ? `${dt} (${rec.wt.toFixed(1)}kg)` : dt;
-      if (!window.confirm(t("confirm.deleteRecord") + "\n" + detail)) return;
+      if (!window.confirm(t("confirm.deleteRecord"))) return;
       lastUndoState = { records: [...state.records], quickWeight };
-      state.records = state.records.filter((r) => r.dt !== dt);
+      state.records = state.records.filter((r) => r.dt !== button.dataset.deleteDate);
       persist();
       showUndoSnackbar(t("records.deleted"));
     });
@@ -31296,12 +25531,6 @@ function bindEvents() {
       render();
     });
   });
-  app.querySelectorAll("[data-quick-note]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.form.note = button.dataset.quickNote;
-      render();
-    });
-  });
   app.querySelectorAll("input, select").forEach((element) => {
     element.addEventListener("input", handleFieldInput);
     element.addEventListener("change", handleFieldInput);
@@ -31320,33 +25549,20 @@ function bindEvents() {
 function handleFieldInput(event) {
   const { name, value } = event.target;
   if (["name", "heightCm", "age", "gender"].includes(name)) {
-    if (name === "heightCm" && value !== "") {
-      const h = Number(value);
-      if (!Number.isFinite(h) || h < 50 || h > 300) return;
-    }
-    if (name === "age" && value !== "") {
-      const a = Number(value);
-      if (!Number.isFinite(a) || a < 1 || a > 150 || !Number.isInteger(a)) return;
-    }
     state.profile = { ...state.profile, [name]: value };
-    persist();
     if (name === "heightCm") render();
     return;
   }
   if (name === "pickerInt") {
-    const v = parseInt(value, 10);
-    if (!Number.isFinite(v)) return;
-    state.form.pickerInt = v;
+    state.form.pickerInt = parseInt(value, 10);
     state.form.weight = `${state.form.pickerInt}.${state.form.pickerDec}`;
-    scheduleRender();
+    render();
     return;
   }
   if (name === "pickerDec") {
-    const v = parseInt(value, 10);
-    if (!Number.isFinite(v)) return;
-    state.form.pickerDec = v;
+    state.form.pickerDec = parseInt(value, 10);
     state.form.weight = `${state.form.pickerInt}.${state.form.pickerDec}`;
-    scheduleRender();
+    render();
     return;
   }
   if (["weight", "date", "bodyFat", "note"].includes(name)) {
@@ -31356,44 +25572,29 @@ function handleFieldInput(event) {
   if (name === "language") {
     state.settings.language = value;
     t = createTranslator(value);
-    persist();
     render();
     return;
   }
   if (name === "theme" || name === "chartStyle") {
     state.settings[name] = value;
-    persist();
     render();
     return;
   }
   if (name === "adPreviewEnabled") {
     state.settings.adPreviewEnabled = value === "true";
-    persist();
     render();
     return;
   }
   if (name === "goalWeight") {
-    if (value !== "" && value != null) {
-      const gw = parseFloat(value);
-      if (!Number.isFinite(gw) || gw < 20 || gw > 300) {
-        setStatus(t("validate.goalWeight"), "error");
-        return;
-      }
-      state.settings.goalWeight = gw;
-    } else {
-      state.settings.goalWeight = "";
-    }
-    persist();
+    state.settings.goalWeight = value;
     return;
   }
   if (name === "reminderEnabled") {
     state.settings.reminderEnabled = value === "true";
-    persist();
     return;
   }
   if (name === "reminderTime") {
     state.settings.reminderTime = value;
-    persist();
     return;
   }
   if (name === "autoTheme") {
@@ -31449,13 +25650,7 @@ function checkRainbow(newWeight) {
     rainbowVisible = true;
   }
 }
-var _saveLock = false;
 function saveRecordFromPicker() {
-  if (_saveLock) return;
-  _saveLock = true;
-  setTimeout(() => {
-    _saveLock = false;
-  }, 300);
   const weight = state.form.pickerInt + state.form.pickerDec / 10;
   state.form.weight = weight.toFixed(1);
   saveRecordWithWeight(weight, activeEntryMode);
@@ -31465,35 +25660,14 @@ function quickSaveRecord() {
 }
 var lastUndoState = null;
 var undoTimer = null;
-var validationBypass = false;
 function saveRecordWithWeight(weight, source) {
   const weightResult = validateWeight(String(weight));
   if (!weightResult.valid) {
-    validationBypass = false;
     setStatus(t(weightResult.error || "entry.noWeight"), "error");
     return;
   }
-  if (!validationBypass && state.records.length > 0) {
-    const warnings = validateWeightEntry(weightResult.weight, state.records);
-    if (warnings.length > 0) {
-      const container = document.querySelector(".validate-warnings");
-      if (container) {
-        const msgs = warnings.map((w) => {
-          if (w.type === "largeDiff") return escHtml(t("validate.largeDiff").replace("{diff}", w.diff).replace("{previous}", w.previous).replace("{date}", w.date));
-          if (w.type === "outsideRange") return escHtml(t("validate.outsideRange").replace("{min}", w.min).replace("{max}", w.max));
-          return "";
-        }).filter(Boolean);
-        container.innerHTML = `<div class="validate-warning-box"><p class="validate-warning-title">${escHtml(t("validate.title"))}</p>${msgs.map((m) => `<p class="validate-warning-msg">${m}</p>`).join("")}<div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="btn ghost validate-confirm" data-action="confirm-save">${escHtml(t("entry.save"))}</button><button type="button" class="btn ghost" data-action="dismiss-warning">${escHtml(t("camera.cancel"))}</button></div></div>`;
-        container.style.display = "block";
-        validationBypass = true;
-        return;
-      }
-    }
-  }
-  validationBypass = false;
   const bfResult = validateBodyFat(state.form.bodyFat);
   if (!bfResult.valid) {
-    validationBypass = false;
     setStatus(t(bfResult.error), "error");
     return;
   }
@@ -31520,9 +25694,6 @@ function saveRecordWithWeight(weight, source) {
   const updated = upsertRecord(state.records, record);
   state.records = trimRecords(updated, MAX_RECORDS);
   quickWeight = weightResult.weight;
-  if (imagePreviewUrl && imagePreviewUrl.startsWith("blob:")) {
-    URL.revokeObjectURL(imagePreviewUrl);
-  }
   imagePreviewUrl = "";
   detectedWeights = [];
   activeEntryMode = "manual";
@@ -31537,20 +25708,11 @@ function saveRecordWithWeight(weight, source) {
     note: ""
   };
   if (!persist()) {
-    validationBypass = false;
     setStatus(t("status.storageError"), "error");
     return;
   }
   if (navigator.vibrate) navigator.vibrate(50);
-  const vwContainer = document.querySelector(".validate-warnings");
-  if (vwContainer) {
-    vwContainer.style.display = "none";
-    vwContainer.innerHTML = "";
-  }
   showUndoSnackbar(`${t("entry.saved")} \xB7 ${record.wt.toFixed(1)}kg`);
-  setTimeout(() => {
-    document.getElementById("chart")?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, 100);
 }
 function showUndoSnackbar(message) {
   statusMessage = message;
@@ -31574,8 +25736,6 @@ function undoLastSave() {
   }
   persist();
   setStatus(t("undo.done"));
-  render();
-  drawChart();
 }
 async function preprocessImageForOCR(source) {
   const canvas = document.createElement("canvas");
@@ -31635,44 +25795,30 @@ async function handlePhotoSelection(event) {
   imagePreviewUrl = URL.createObjectURL(file);
   state.form.imageName = file.name;
   detectedWeights = [];
-  const photoBtn = app.querySelector('[data-action="pick-native-photo"]') || app.querySelector('label[for="photoInput"]');
-  if (photoBtn) photoBtn.classList.add("loading");
-  setStatus(t("status.photoAnalyzing"));
-  render();
-  try {
-    const candidates = await detectWeightsFromImage(file);
-    detectedWeights = candidates;
-    const picked = pickWeightCandidate(candidates, state.records.at(-1)?.wt ?? null);
-    if (picked) {
-      state.form.weight = picked.toFixed(1);
-      state.form.pickerInt = Math.floor(picked);
-      state.form.pickerDec = Math.round((picked - Math.floor(picked)) * 10);
-    }
-    if (candidates.length > 0) {
-      setStatus(t("status.photoReady"));
-    } else if (supportsTextDetection) {
-      setStatus(t("status.photoNoDetection"));
-    } else {
-      setStatus(t("entry.photoFallback"));
-    }
-  } catch {
-    detectedWeights = [];
-    setStatus(t("status.photoNoDetection"), "error");
-  } finally {
-    if (photoBtn) photoBtn.classList.remove("loading");
+  const candidates = await detectWeightsFromImage(file);
+  detectedWeights = candidates;
+  const picked = pickWeightCandidate(candidates, state.records.at(-1)?.wt ?? null);
+  if (picked) {
+    state.form.weight = picked.toFixed(1);
+    state.form.pickerInt = Math.floor(picked);
+    state.form.pickerDec = Math.round((picked - Math.floor(picked)) * 10);
+  }
+  if (candidates.length > 0) {
+    setStatus(t("status.photoReady"));
+  } else if (supportsTextDetection) {
+    setStatus(t("status.photoNoDetection"));
+  } else {
+    setStatus(t("entry.photoFallback"));
   }
   render();
 }
 async function pickNativePhoto() {
-  const photoBtn = app.querySelector('[data-action="pick-native-photo"]');
-  if (photoBtn) photoBtn.classList.add("loading");
   try {
     const permissions = await Camera2.checkPermissions();
     if (permissions.photos === "denied" || permissions.camera === "denied") {
       const requested = await Camera2.requestPermissions({ permissions: ["photos", "camera"] });
       if (requested.photos === "denied" || requested.camera === "denied") {
         setStatus(t("status.permissionDenied"), "error");
-        if (photoBtn) photoBtn.classList.remove("loading");
         return;
       }
     }
@@ -31686,16 +25832,12 @@ async function pickNativePhoto() {
       promptLabelPhoto: t("camera.photo"),
       promptLabelPicture: t("camera.picture")
     });
-    if (imagePreviewUrl && imagePreviewUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(imagePreviewUrl);
-    }
     imagePreviewUrl = photo.webPath || "";
     state.form.imageName = photo.path?.split("/").pop() || "camera-photo.jpeg";
     detectedWeights = [];
     if (photo.webPath) {
       try {
-        const response = await fetchWithTimeout(photo.webPath);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const response = await fetch(photo.webPath);
         const blob = await response.blob();
         const candidates = await detectWeightsFromImage(blob);
         detectedWeights = candidates;
@@ -31713,10 +25855,8 @@ async function pickNativePhoto() {
     setStatus(detectedWeights.length ? t("status.photoReady") : t("status.photoNoDetection"));
   } catch {
     setStatus(t("status.permissionDenied"), "error");
-    if (photoBtn) photoBtn.classList.remove("loading");
     return;
   }
-  if (photoBtn) photoBtn.classList.remove("loading");
   render();
 }
 async function toggleVoiceInput() {
@@ -31754,30 +25894,15 @@ async function toggleVoiceInput() {
     }
     render();
   };
-  recognition.onerror = (e) => {
+  recognition.onerror = () => {
     voiceActive = false;
-    try {
-      recognition.abort();
-    } catch {
-    }
-    if (e.error === "no-speech") {
-      setStatus(t("status.voiceNoSpeech"), "warn");
-    } else {
-      setStatus(t("status.voiceError"), "error");
-    }
-    render();
+    setStatus(t("status.voiceError"), "error");
   };
   recognition.onend = () => {
     voiceActive = false;
     render();
   };
-  try {
-    recognition.start();
-  } catch {
-    voiceActive = false;
-    setStatus(t("entry.voiceUnsupported"), "error");
-    render();
-  }
+  recognition.start();
 }
 async function toggleNativeVoiceInput() {
   try {
@@ -31888,19 +26013,13 @@ function handleCSVImport(e) {
       e.target.value = "";
       return;
     }
-    const prevRecords = [...state.records];
     let merged = [...state.records];
     for (const rec of records) {
       merged = upsertRecord(merged, rec);
     }
     merged = trimRecords(merged);
     state.records = merged;
-    if (!persist()) {
-      state.records = prevRecords;
-      setStatus(t("status.storageError"), "error");
-      e.target.value = "";
-      return;
-    }
+    persist();
     let msg = t("import.csv.success").replace("{count}", records.length);
     if (errors.length) {
       msg += " " + t("import.csv.errors").replace("{count}", errors.length);
@@ -31908,10 +26027,6 @@ function handleCSVImport(e) {
     setStatus(msg);
     e.target.value = "";
     render();
-  };
-  reader.onerror = () => {
-    setStatus(t("import.error"), "error");
-    e.target.value = "";
   };
   reader.readAsText(file);
 }
@@ -31953,28 +26068,14 @@ function downloadFile(content, filename, mimeType) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
-  document.body.appendChild(anchor);
   anchor.click();
-  document.body.removeChild(anchor);
-  setTimeout(() => URL.revokeObjectURL(url), 1e3);
+  URL.revokeObjectURL(url);
 }
 async function shareChart() {
   const canvas = document.getElementById("chart");
   if (!canvas) return;
-  const shareBtn = app.querySelector('[data-action="share-chart"]');
-  if (shareBtn?.disabled) return;
-  if (shareBtn) {
-    shareBtn.disabled = true;
-    shareBtn.classList.add("loading");
-  }
   try {
-    const blob = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("toBlob timeout")), 5e3);
-      canvas.toBlob((b) => {
-        clearTimeout(timer);
-        resolve(b);
-      }, "image/png");
-    });
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
     if (!blob) {
       setStatus(t("share.error"), "error");
       return;
@@ -31992,18 +26093,11 @@ async function shareChart() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `weight-chart-${todayLocal()}.png`;
-    document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1e3);
+    URL.revokeObjectURL(url);
     setStatus(t("share.done"));
   } catch {
     setStatus(t("share.error"), "error");
-  } finally {
-    if (shareBtn) {
-      shareBtn.disabled = false;
-      shareBtn.classList.remove("loading");
-    }
   }
 }
 function spawnConfetti() {
@@ -32063,38 +26157,22 @@ function handleImportData(event) {
         setStatus(t("import.invalid"), "error");
         return;
       }
-      const validImportRecords = data.records.filter(
-        (r) => r.dt && /^\d{4}-\d{2}-\d{2}$/.test(r.dt) && Number.isFinite(r.wt) && r.wt >= 20 && r.wt <= 300
-      );
+      const validImportRecords = data.records.filter((r) => r.dt && Number.isFinite(r.wt));
       if (!validImportRecords.length) {
         setStatus(t("import.csv.empty"), "error");
         return;
       }
       if (!window.confirm(t("import.confirm").replace("{count}", validImportRecords.length))) return;
-      const prevRecords = [...state.records];
-      const prevSettings = { ...state.settings };
-      const prevProfile = { ...state.profile };
       const beforeCount = state.records.length;
       for (const record of validImportRecords) {
         state.records = upsertRecord(state.records, record);
       }
       state.records = trimRecords(state.records, MAX_RECORDS);
       const newCount = state.records.length - beforeCount;
-      if (data.settings) {
-        if (data.settings.goalWeight != null && Number.isFinite(Number(data.settings.goalWeight))) {
-          state.settings.goalWeight = data.settings.goalWeight;
-        }
-        if (data.settings.theme && THEME_LIST.some((th) => th.id === data.settings.theme)) {
-          state.settings.theme = data.settings.theme;
-        }
-      }
       if (data.profile && !state.profile.name) {
-        state.profile = sanitizeProfile({ ...createDefaultProfile(), ...data.profile });
+        state.profile = { ...state.profile, ...data.profile };
       }
       if (!persist()) {
-        state.records = prevRecords;
-        state.settings = prevSettings;
-        state.profile = prevProfile;
         setStatus(t("status.storageError"), "error");
         return;
       }
@@ -32113,7 +26191,6 @@ function resetData() {
 
 (${state.records.length} ${t("chart.records")})` : t("confirm.reset");
   if (!window.confirm(msg)) return;
-  if (!window.confirm(t("confirm.resetFinal"))) return;
   state = {
     ...loadState(),
     profile: createDefaultProfile(),
@@ -32132,9 +26209,6 @@ function resetData() {
   quickWeight = 65;
   voiceTranscript = "";
   detectedWeights = [];
-  if (imagePreviewUrl && imagePreviewUrl.startsWith("blob:")) {
-    URL.revokeObjectURL(imagePreviewUrl);
-  }
   imagePreviewUrl = "";
   activeEntryMode = "manual";
   showAllRecords = false;
@@ -32154,31 +26228,11 @@ function resetData() {
     setStatus(t("status.storageError"), "error");
     return;
   }
-  if (undoTimer) {
-    clearTimeout(undoTimer);
-    undoTimer = null;
-  }
-  if (reminderTimer) {
-    clearInterval(reminderTimer);
-    reminderTimer = null;
-  }
-  if (searchDebounceTimer) {
-    clearTimeout(searchDebounceTimer);
-    searchDebounceTimer = null;
-  }
-  lastUndoState = null;
-  lastNotifiedDate = "";
   setStatus(t("status.reset"));
-  render();
-  drawChart();
 }
 function drawChart() {
   const canvas = document.getElementById("chart");
   if (!canvas) return;
-  if (canvas._tooltipTimer) {
-    clearTimeout(canvas._tooltipTimer);
-    canvas._tooltipTimer = null;
-  }
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   canvas.width = rect.width * dpr;
@@ -32194,8 +26248,7 @@ function drawChart() {
   let chartRecords = state.records;
   if (chartPeriod !== "all") {
     const days2 = parseInt(chartPeriod, 10);
-    if (Number.isNaN(days2)) return;
-    const d = /* @__PURE__ */ new Date(todayLocal() + "T00:00:00");
+    const d = /* @__PURE__ */ new Date();
     d.setDate(d.getDate() - days2);
     const cutoff = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     chartRecords = state.records.filter((r) => r.dt >= cutoff);
@@ -32229,8 +26282,7 @@ function drawChart() {
     context.moveTo(padX, y);
     context.lineTo(width - padX, y);
     context.stroke();
-    const weightVal = max - index / 4 * range;
-    const weightLabel = weightVal % 1 === 0 ? String(Math.round(weightVal)) : weightVal.toFixed(1);
+    const weightLabel = (max - index / 4 * range).toFixed(1);
     context.fillStyle = cs.getPropertyValue("--muted").trim() || "#6b7280";
     context.font = "11px sans-serif";
     context.textAlign = "right";
@@ -32313,10 +26365,10 @@ function drawChart() {
       movingAvg.push(sum / windowSize);
     }
     context.save();
-    context.setLineDash([6, 5]);
+    context.setLineDash([4, 4]);
     context.strokeStyle = cs.getPropertyValue("--accent-3").trim() || "#0ea5e9";
-    context.lineWidth = 1.8;
-    context.globalAlpha = 0.65;
+    context.lineWidth = 1.5;
+    context.globalAlpha = 0.6;
     context.beginPath();
     movingAvg.forEach((avg, i) => {
       const x = toX(i);
@@ -32397,12 +26449,7 @@ function drawChart() {
   context.fillStyle = cs.getPropertyValue("--muted").trim() || "#6b7280";
   context.font = "12px sans-serif";
   context.textAlign = "center";
-  const labelCount = chartRecords.length > 60 ? 5 : chartRecords.length > 20 ? 4 : 3;
-  const labelIndices = Array.from(
-    { length: labelCount },
-    (_, i) => Math.round(i * (chartRecords.length - 1) / (labelCount - 1))
-  ).filter((v, i, a) => a.indexOf(v) === i);
-  labelIndices.forEach((index) => {
+  [0, Math.floor((chartRecords.length - 1) / 2), chartRecords.length - 1].filter((value, index, array) => array.indexOf(value) === index).forEach((index) => {
     const record = chartRecords[index];
     context.fillText(record.dt.slice(5), toX(index), height - 8);
   });
@@ -32445,7 +26492,7 @@ function drawChart() {
     canvas._tooltipTimer = setTimeout(() => {
       const tip = document.getElementById("chartTooltip");
       if (tip) tip.style.display = "none";
-    }, 3500);
+    }, 3e3);
   };
   canvas._chartMoveHandler = (e) => {
     showTooltipForEvent(e);
@@ -32472,7 +26519,7 @@ function drawChart() {
     canvas._tooltipTimer = setTimeout(() => {
       const tip = document.getElementById("chartTooltip");
       if (tip) tip.style.display = "none";
-    }, 3500);
+    }, 2e3);
   };
   canvas.addEventListener("touchmove", canvas._chartTouchHandler, { passive: false });
   canvas.addEventListener("touchend", canvas._chartTouchEndHandler);
@@ -32519,11 +26566,6 @@ function saveReminder() {
       initReminder();
       setStatus(t("reminder.saved"));
       render();
-    }).catch(() => {
-      state.settings.reminderEnabled = false;
-      setStatus(t("reminder.denied"), "error");
-      persist();
-      render();
     });
     return;
   }
@@ -32549,6 +26591,7 @@ function initReminder() {
   }
   if (!state.settings.reminderEnabled || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
+  let lastNotifiedDate = "";
   reminderTimer = setInterval(() => {
     const now = /* @__PURE__ */ new Date();
     const todayStr = todayLocal();
@@ -32568,12 +26611,6 @@ function initReminder() {
 }
 var GOOGLE_CLIENT_ID = window.__GOOGLE_CLIENT_ID__ || "";
 var BACKUP_FILENAME = "weight-rainbow-backup.json";
-var DRIVE_TIMEOUT = 3e4;
-function fetchWithTimeout(url, opts = {}) {
-  const ctrl = new AbortController();
-  const id = setTimeout(() => ctrl.abort(), DRIVE_TIMEOUT);
-  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(id));
-}
 var gTokenClient = null;
 var gToken = null;
 var gTokenExpiresAt = 0;
@@ -32598,13 +26635,7 @@ function googleGetToken() {
       reject(new Error("not_configured"));
       return;
     }
-    if (gToken && Date.now() < gTokenExpiresAt) {
-      resolve(gToken);
-      return;
-    }
-    const timeout = setTimeout(() => reject(new Error("auth_timeout")), DRIVE_TIMEOUT);
     c.callback = (r) => {
-      clearTimeout(timeout);
       if (r.error) reject(new Error(r.error));
       else {
         gToken = r.access_token;
@@ -32612,7 +26643,8 @@ function googleGetToken() {
         resolve(r.access_token);
       }
     };
-    c.requestAccessToken();
+    if (gToken && Date.now() < gTokenExpiresAt) resolve(gToken);
+    else c.requestAccessToken();
   });
 }
 async function googleBackup() {
@@ -32620,12 +26652,8 @@ async function googleBackup() {
     setStatus(t("google.notConfigured"), "error");
     return;
   }
-  const backupBtn = app.querySelector('[data-action="google-backup"]');
-  if (backupBtn?.disabled) return;
-  if (backupBtn) {
-    backupBtn.disabled = true;
-    backupBtn.classList.add("loading");
-  }
+  const btn = app.querySelector('[data-action="google-backup"]');
+  btn?.classList.add("loading");
   try {
     const tk = await googleGetToken();
     const data = {
@@ -32639,10 +26667,19 @@ async function googleBackup() {
         note: r.note ?? "",
         createdAt: r.createdAt
       })),
-      settings: { ...state.settings },
-      profile: { ...state.profile }
+      profile: {
+        name: state.profile.name,
+        heightCm: state.profile.heightCm,
+        age: state.profile.age,
+        gender: state.profile.gender
+      },
+      settings: {
+        goalWeight: state.settings.goalWeight,
+        theme: state.settings.theme,
+        language: state.settings.language
+      }
     };
-    const sr = await fetchWithTimeout(
+    const sr = await fetch(
       `https://www.googleapis.com/drive/v3/files?q=name='${BACKUP_FILENAME}'+and+trashed=false&spaces=appDataFolder&fields=files(id)`,
       { headers: { Authorization: `Bearer ${tk}` } }
     );
@@ -32652,7 +26689,7 @@ async function googleBackup() {
     const bd = JSON.stringify(data, null, 2);
     let ur;
     if (ex) {
-      ur = await fetchWithTimeout(
+      ur = await fetch(
         `https://www.googleapis.com/upload/drive/v3/files/${ex.id}?uploadType=media`,
         { method: "PATCH", headers: { Authorization: `Bearer ${tk}`, "Content-Type": "application/json" }, body: bd }
       );
@@ -32667,7 +26704,7 @@ Content-Type: application/json\r
 \r
 ${bd}\r
 --${boundary}--`;
-      ur = await fetchWithTimeout(
+      ur = await fetch(
         "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
         { method: "POST", headers: { Authorization: `Bearer ${tk}`, "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipartBody }
       );
@@ -32677,10 +26714,7 @@ ${bd}\r
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
   } finally {
-    if (backupBtn) {
-      backupBtn.disabled = false;
-      backupBtn.classList.remove("loading");
-    }
+    btn?.classList.remove("loading");
   }
 }
 async function googleRestore() {
@@ -32688,15 +26722,11 @@ async function googleRestore() {
     setStatus(t("google.notConfigured"), "error");
     return;
   }
-  const restoreBtn = app.querySelector('[data-action="google-restore"]');
-  if (restoreBtn?.disabled) return;
-  if (restoreBtn) {
-    restoreBtn.disabled = true;
-    restoreBtn.classList.add("loading");
-  }
+  const btn = app.querySelector('[data-action="google-restore"]');
+  btn?.classList.add("loading");
   try {
     const tk = await googleGetToken();
-    const sr = await fetchWithTimeout(
+    const sr = await fetch(
       `https://www.googleapis.com/drive/v3/files?q=name='${BACKUP_FILENAME}'+and+trashed=false&spaces=appDataFolder&fields=files(id)`,
       { headers: { Authorization: `Bearer ${tk}` } }
     );
@@ -32707,30 +26737,18 @@ async function googleRestore() {
       setStatus(t("google.noData"), "error");
       return;
     }
-    const cr = await fetchWithTimeout(
+    const cr = await fetch(
       `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
       { headers: { Authorization: `Bearer ${tk}` } }
     );
     if (!cr.ok) throw new Error("drive_error");
-    let bd;
-    try {
-      bd = await cr.json();
-    } catch {
-      throw new Error("drive_error");
-    }
+    const bd = await cr.json();
     if (!bd.records?.length) {
       setStatus(t("google.noData"), "error");
       return;
     }
     const validBackupRecords = bd.records.filter((r) => r.dt && Number.isFinite(r.wt));
-    if (!validBackupRecords.length) {
-      setStatus(t("google.noData"), "error");
-      return;
-    }
     if (!window.confirm(t("google.restoreConfirm") + ` (${validBackupRecords.length} ${t("chart.records")})`)) return;
-    const prevRecords = [...state.records];
-    const prevSettings = { ...state.settings };
-    const prevProfile = { ...state.profile };
     const beforeCount = state.records.length;
     let m = [...state.records];
     for (const r of validBackupRecords) {
@@ -32738,19 +26756,11 @@ async function googleRestore() {
     }
     state.records = trimRecords(m, MAX_RECORDS);
     const newCount = state.records.length - beforeCount;
-    if (bd.settings) {
-      if (bd.settings.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;
-      if (bd.settings.theme) state.settings.theme = bd.settings.theme;
-      if (bd.settings.reminderEnabled != null) state.settings.reminderEnabled = bd.settings.reminderEnabled;
-      if (bd.settings.reminderTime) state.settings.reminderTime = bd.settings.reminderTime;
-    }
+    if (bd.settings?.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;
     if (bd.profile && !state.profile.name && !state.profile.heightCm) {
-      state.profile = sanitizeProfile({ ...createDefaultProfile(), ...bd.profile });
+      state.profile = { ...createDefaultProfile(), ...bd.profile };
     }
     if (!persist()) {
-      state.records = prevRecords;
-      state.settings = prevSettings;
-      state.profile = prevProfile;
       setStatus(t("status.storageError"), "error");
       return;
     }
@@ -32759,10 +26769,7 @@ async function googleRestore() {
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
   } finally {
-    if (restoreBtn) {
-      restoreBtn.disabled = false;
-      restoreBtn.classList.remove("loading");
-    }
+    btn?.classList.remove("loading");
   }
 }
 if (GOOGLE_CLIENT_ID) {
@@ -32777,21 +26784,18 @@ if (GOOGLE_CLIENT_ID) {
 function handlePhotoZoom() {
   if (!imagePreviewUrl) return;
   const ov = document.createElement("div");
-  ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;cursor:zoom-out;animation:fadeIn 0.2s ease-out";
+  ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
   ov.setAttribute("role", "dialog");
-  ov.setAttribute("aria-modal", "true");
   ov.setAttribute("aria-label", t("photo.zoomHint"));
   const im = document.createElement("img");
   im.src = imagePreviewUrl;
   im.alt = t("entry.photoPreview");
-  im.style.cssText = "max-width:95vw;max-height:95dvh;object-fit:contain;border-radius:12px";
+  im.style.cssText = "max-width:95vw;max-height:95vh;object-fit:contain;border-radius:12px";
   ov.appendChild(im);
   ov.tabIndex = -1;
-  const triggerEl = document.activeElement;
   const dismiss = () => {
     ov.remove();
     document.removeEventListener("keydown", onKey);
-    if (triggerEl && document.contains(triggerEl)) triggerEl.focus();
   };
   const onKey = (e) => {
     if (e.key === "Escape") dismiss();
@@ -32806,12 +26810,6 @@ window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(drawChart, 150);
 });
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") {
-    scheduleRender();
-    drawChart();
-  }
-});
 window.addEventListener("beforeunload", () => {
   if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
   if (reminderTimer) clearInterval(reminderTimer);
@@ -32824,15 +26822,10 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && voiceActive) {
     event.preventDefault();
     void toggleVoiceInput();
-  } else if (event.key === "Escape" && rainbowVisible) {
+  }
+  if (event.key === "Escape" && rainbowVisible) {
     rainbowVisible = false;
     document.getElementById("rainbowOverlay")?.remove();
-  }
-  if ((event.metaKey || event.ctrlKey) && event.key === "z" && !event.shiftKey) {
-    if (lastUndoState) {
-      event.preventDefault();
-      undoLastSave();
-    }
   }
   if ((event.metaKey || event.ctrlKey) && event.key === "k") {
     event.preventDefault();
@@ -32840,25 +26833,7 @@ window.addEventListener("keydown", (event) => {
     if (searchInput) {
       searchInput.focus();
       searchInput.select();
-    } else if (state.records.length <= 3) {
-      setStatus(t("records.searchMinRecords"), "warn");
     }
-  }
-});
-var scrollTicking = false;
-window.addEventListener("scroll", () => {
-  if (!scrollTicking) {
-    scrollTicking = true;
-    requestAnimationFrame(() => {
-      const btn = document.getElementById("scrollTopBtn");
-      if (btn) btn.classList.toggle("visible", window.scrollY > 400);
-      scrollTicking = false;
-    });
-  }
-}, { passive: true });
-document.addEventListener("click", (e) => {
-  if (e.target.id === "scrollTopBtn" || e.target.closest("#scrollTopBtn")) {
-    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 });
 /*! Bundled license information:

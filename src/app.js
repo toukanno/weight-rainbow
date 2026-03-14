@@ -75,6 +75,18 @@ import {
   calcBMIHistory,
   calcWeightHeatmap,
   calcStreakRewards,
+  calcShareText,
+  calcEntryCountByMonth,
+  calcDailyFluctuation,
+  calcGoalCountdown,
+  calcWeekOverWeek,
+  calcTrendSummary,
+  calcTrackingAnniversary,
+  calcWeightConfidence,
+  calcMonthlyChange,
+  calcWeightSparkline,
+  calcDataCompleteness,
+  calcPersonalBest,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -121,7 +133,7 @@ let statusKind = "ok";
 let showAllRecords = false;
 let quickWeight = 65.0;
 let rainbowVisible = false;
-let activeTab = "input"; // "input" | "graph" | "calendar" | "settings"
+let activeTab = "input"; // "input" | "graph" | "calendar" | "records" | "settings"
 let rainbowDetail = "";
 let summaryPeriod = "week";
 let chartPeriod = "all"; // "7", "30", "90", "all"
@@ -563,6 +575,18 @@ function render() {
           ${renderWeightVelocity()}
           ${renderCalorieEstimate()}
           ${renderBodyFatStats()}
+          ${renderShareProgress()}
+          ${renderEntryCountByMonth()}
+          ${renderDailyFluctuation()}
+          ${renderGoalCountdown()}
+          ${renderWeekOverWeek()}
+          ${renderTrendSummary()}
+          ${renderTrackingAnniversary()}
+          ${renderWeightConfidence()}
+          ${renderMonthlyChange()}
+          ${renderWeightSparkline()}
+          ${renderDataCompleteness()}
+          ${renderPersonalBest()}
           ${state.records.length >= 3 ? `
           <div class="analytics-toggle-section">
             <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -743,7 +767,20 @@ function render() {
           </div>
         </section>
 
-        <!-- Records List -->
+        <!-- Data management -->
+        <section class="panel">
+          <div class="data-actions">
+            <button type="button" class="btn secondary" data-action="export-data">${t("settings.export")}</button>
+            <label class="btn secondary" for="importInput">${t("import.button")}</label>
+            <input id="importInput" type="file" accept=".json" class="hidden" />
+            <button type="button" class="btn ghost" data-action="reset-data">${t("settings.reset")}</button>
+          </div>
+        </section>
+      </div>
+      ` : ""}
+
+      ${activeTab === "records" ? `
+      <div class="tab-page tab-records">
         <section class="panel records-panel">
           <div class="section-header">
             <div>
@@ -758,26 +795,16 @@ function render() {
           </div>` : ""}
           <div class="record-list">
             ${state.records.length ? renderRecordList() : `<div class="empty-state">
-              <div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">📊</div>
+              <div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true"></div>
               <div class="helper">${t("records.empty")}</div>
             </div>`}
           </div>
           ${renderSourceBreakdown()}
           <div class="export-grid">
-            <button type="button" class="btn secondary" data-action="export-excel">📊 ${t("export.excel")}</button>
-            <button type="button" class="btn secondary" data-action="export-csv">📄 ${t("export.csv")}</button>
-            <button type="button" class="btn ghost" data-action="import-csv">📤 ${t("import.csv")}</button>
+            <button type="button" class="btn secondary" data-action="export-excel">${t("export.excel")}</button>
+            <button type="button" class="btn secondary" data-action="export-csv">${t("export.csv")}</button>
+            <button type="button" class="btn ghost" data-action="import-csv">${t("import.csv")}</button>
             <input type="file" id="csvImportInput" accept=".csv" style="display:none" />
-          </div>
-        </section>
-
-        <!-- Data management -->
-        <section class="panel">
-          <div class="data-actions">
-            <button type="button" class="btn secondary" data-action="export-data">💾 ${t("settings.export")}</button>
-            <label class="btn secondary" for="importInput">📥 ${t("import.button")}</label>
-            <input id="importInput" type="file" accept=".json" class="hidden" />
-            <button type="button" class="btn ghost" data-action="reset-data">🗑️ ${t("settings.reset")}</button>
           </div>
         </section>
       </div>
@@ -786,19 +813,23 @@ function render() {
       <!-- Bottom Tab Bar -->
       <nav class="bottom-tabs" role="tablist" aria-label="Navigation">
         <button type="button" class="bottom-tab ${activeTab === "input" ? "active" : ""}" data-tab="input" role="tab" aria-selected="${activeTab === "input"}">
-          <span class="bottom-tab-icon">✏️</span>
+          <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16m8-8H4"/></svg>
           <span class="bottom-tab-label">${t("tab.input")}</span>
         </button>
         <button type="button" class="bottom-tab ${activeTab === "graph" ? "active" : ""}" data-tab="graph" role="tab" aria-selected="${activeTab === "graph"}">
-          <span class="bottom-tab-icon">📊</span>
+          <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
           <span class="bottom-tab-label">${t("tab.graph")}</span>
         </button>
         <button type="button" class="bottom-tab ${activeTab === "calendar" ? "active" : ""}" data-tab="calendar" role="tab" aria-selected="${activeTab === "calendar"}">
-          <span class="bottom-tab-icon">📅</span>
+          <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           <span class="bottom-tab-label">${t("tab.calendar")}</span>
         </button>
+        <button type="button" class="bottom-tab ${activeTab === "records" ? "active" : ""}" data-tab="records" role="tab" aria-selected="${activeTab === "records"}">
+          <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          <span class="bottom-tab-label">${t("tab.records")}</span>
+        </button>
         <button type="button" class="bottom-tab ${activeTab === "settings" ? "active" : ""}" data-tab="settings" role="tab" aria-selected="${activeTab === "settings"}">
-          <span class="bottom-tab-icon">⚙️</span>
+          <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
           <span class="bottom-tab-label">${t("tab.settings")}</span>
         </button>
       </nav>
@@ -1672,6 +1703,255 @@ function renderDayOfWeekAvg() {
   `;
 }
 
+function renderShareProgress() {
+  const goal = Number(state.settings.goalWeight);
+  const heightCm = state.profile?.heightCm || 0;
+  const data = calcShareText(state.records, goal, heightCm);
+  if (!data) return "";
+
+  const lines = [
+    `${t("sht.current")}: ${data.currentWt}kg`,
+    `${t("sht.change")}: ${data.sign}${data.change}kg (${data.days}${t("sht.days")})`,
+    data.streak > 1 ? `${t("sht.streak")}: ${data.streak}${t("sht.days")}` : "",
+    data.bmi ? `BMI: ${data.bmi}` : "",
+    data.goalPct != null ? `${t("sht.goal")}: ${data.goalPct}%` : "",
+  ].filter(Boolean);
+
+  return `
+    <div class="sht-section">
+      <div class="helper">${t("sht.title")}</div>
+      <div class="sht-preview">${lines.join(" | ")}</div>
+      <button type="button" class="btn ghost sht-btn" data-action="copy-share">${t("sht.btn")}</button>
+    </div>
+  `;
+}
+
+function renderEntryCountByMonth() {
+  const data = calcEntryCountByMonth(state.records);
+  if (!data) return "";
+
+  const bars = data.months.map((m) => {
+    const pct = Math.round((m.count / data.maxCount) * 100);
+    const label = m.yearMonth.slice(5); // MM only
+    return `<div class="ecm-col">
+      <div class="ecm-bar-wrap"><div class="ecm-bar" style="height:${pct}%"></div></div>
+      <div class="ecm-count">${m.count}</div>
+      <div class="ecm-label">${label}</div>
+    </div>`;
+  }).join("");
+
+  return `
+    <div class="ecm-section">
+      <div class="helper">${t("ecm.title")}</div>
+      <div class="ecm-chart">${bars}</div>
+    </div>
+  `;
+}
+
+function renderDailyFluctuation() {
+  const data = calcDailyFluctuation(state.records);
+  if (!data) return "";
+  const barMax = data.maxFluctuation || 1;
+  const bars = data.fluctuations.map((f) => {
+    const pct = Math.round((f.change / barMax) * 100);
+    const color = f.change <= 0.3 ? "var(--accent)" : f.change <= 0.5 ? "var(--warning, orange)" : "var(--danger, #ef4444)";
+    return `<div class="dfl-bar" style="height:${pct}%;background:${color}" title="${f.dt}: ${f.change}kg"></div>`;
+  }).join("");
+  return `
+    <div class="dfl-section">
+      <div class="helper">${t("dfl.title")}</div>
+      <div class="dfl-stats">
+        <span>${t("dfl.avg")}: ${data.avgFluctuation}kg</span>
+        <span>${t("dfl.max")}: ${data.maxFluctuation}kg</span>
+        <span>${t("dfl.stable")}: ${data.stablePct}%</span>
+      </div>
+      <div class="dfl-chart">${bars}</div>
+      <div class="helper" style="font-size:0.6rem;margin-top:4px">${t("dfl.hint")}</div>
+    </div>
+  `;
+}
+
+function renderGoalCountdown() {
+  const goal = Number(state.settings.goalWeight);
+  if (!goal) return "";
+  const data = calcGoalCountdown(state.records, goal);
+  if (!data) return "";
+
+  if (data.reached) {
+    return `<div class="gcd-section"><div class="helper">${t("gcd.title")}</div><div class="gcd-reached">${t("gcd.reached")}</div></div>`;
+  }
+
+  const arrow = data.direction === "lose" ? "↓" : "↑";
+  let etaText;
+  if (data.etaDays != null) {
+    etaText = `${t("gcd.eta")}: ~${data.etaDays}${t("sht.days")}`;
+  } else {
+    etaText = t("gcd.notrend");
+  }
+
+  return `
+    <div class="gcd-section">
+      <div class="helper">${t("gcd.title")}</div>
+      <div class="gcd-main">
+        <span class="gcd-arrow">${arrow}</span>
+        <span class="gcd-remaining">${t("gcd.remaining")} ${data.absRemaining}kg</span>
+      </div>
+      <div class="gcd-progress">
+        <div class="gcd-bar" style="width:${data.pct}%"></div>
+      </div>
+      <div class="gcd-detail">
+        <span>${data.latest}kg → ${data.goal}kg</span>
+        <span>${etaText}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderWeekOverWeek() {
+  const data = calcWeekOverWeek(state.records);
+  if (!data) return "";
+  const sign = data.change > 0 ? "+" : "";
+  const cls = data.direction === "down" ? "loss" : data.direction === "up" ? "gain" : "neutral";
+  return `
+    <div class="wow-section">
+      <div class="helper">${t("wow.title")}</div>
+      <div class="wow-grid">
+        <div class="wow-col">
+          <div class="wow-label">${t("wow.last")}</div>
+          <div class="wow-val">${data.lastWeekAvg}kg</div>
+          <div class="wow-count">(${data.lastWeekCount})</div>
+        </div>
+        <div class="wow-arrow ${cls}">${sign}${data.change}kg</div>
+        <div class="wow-col">
+          <div class="wow-label">${t("wow.this")}</div>
+          <div class="wow-val">${data.thisWeekAvg}kg</div>
+          <div class="wow-count">(${data.thisWeekCount})</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderTrendSummary() {
+  const data = calcTrendSummary(state.records);
+  if (!data) return "";
+  const icons = { losing_fast: "🔥", losing: "📉", stable: "⚖️", gaining: "📈", gaining_fast: "⚠️", insufficient: "📊" };
+  const icon = icons[data.status] || "";
+  const msg = t(`trs.${data.status}`);
+  const detail = data.status !== "insufficient" ? `${t("trs.in")}${data.days}${t("trs.days")}: ${data.changeKg > 0 ? "+" : ""}${data.changeKg}kg` : "";
+  return `
+    <div class="trs-section">
+      <div class="helper">${t("trs.title")}</div>
+      <div class="trs-card trs-${data.status}">
+        <span class="trs-icon">${icon}</span>
+        <div class="trs-text">
+          <div class="trs-msg">${msg}</div>
+          ${detail ? `<div class="trs-detail">${detail}</div>` : ""}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderTrackingAnniversary() {
+  const data = calcTrackingAnniversary(state.records);
+  if (!data || !data.milestone) return "";
+  const badge = t(`tka.m${data.milestone}`);
+  const nextText = data.nextMilestoneDays != null ? `${t("tka.next")} ${data.nextMilestoneDays}${t("tka.days")}` : "";
+  return `
+    <div class="tka-section">
+      <div class="helper">${t("tka.title")}</div>
+      <div class="tka-card">
+        <div class="tka-days">${data.totalDays}${t("tka.days")}</div>
+        <div class="tka-badge">${badge}</div>
+        ${nextText ? `<div class="tka-next">${nextText}</div>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function renderWeightConfidence() {
+  const data = calcWeightConfidence(state.records);
+  if (!data) return "";
+  const f7 = data.forecasts[0];
+  return `
+    <div class="wcf-section">
+      <div class="helper">${t("wcf.title")}</div>
+      <div class="wcf-card">
+        <div class="wcf-center">${data.latest}kg</div>
+        <div class="wcf-range">${t("wcf.range")}: ${f7.low}kg ~ ${f7.high}kg</div>
+        <div class="wcf-sd">${t("wcf.sd")}: ±${data.stdDev}kg</div>
+      </div>
+      <div class="helper" style="font-size:0.6rem;margin-top:4px">${t("wcf.hint")}</div>
+    </div>
+  `;
+}
+
+function renderMonthlyChange() {
+  const data = calcMonthlyChange(state.records);
+  if (!data) return "";
+  const rows = data.months.map((m) => {
+    const label = m.yearMonth.slice(5);
+    if (m.change === null) return `<div class="mch-row"><span class="mch-label">${label}</span><span class="mch-val mch-na">${t("mch.nodata")}</span></div>`;
+    const cls = m.change < 0 ? "loss" : m.change > 0 ? "gain" : "neutral";
+    const sign = m.change > 0 ? "+" : "";
+    return `<div class="mch-row"><span class="mch-label">${label}</span><span class="mch-val ${cls}">${sign}${m.change}kg</span></div>`;
+  }).join("");
+  return `
+    <div class="mch-section">
+      <div class="helper">${t("mch.title")}</div>
+      <div class="mch-list">${rows}</div>
+    </div>
+  `;
+}
+
+function renderWeightSparkline() {
+  const data = calcWeightSparkline(state.records);
+  if (!data) return "";
+  return `
+    <div class="spk-section">
+      <div class="helper">${t("spk.title")}</div>
+      <div class="spk-line">${data.sparkline}</div>
+      <div class="spk-range">${data.min}kg — ${data.max}kg</div>
+    </div>
+  `;
+}
+
+function renderDataCompleteness() {
+  const data = calcDataCompleteness(state.records);
+  if (!data) return "";
+  const color = data.grade === "A" ? "var(--accent)" : data.grade === "B" ? "var(--accent)" : data.grade === "C" ? "var(--warning, orange)" : "var(--danger, #ef4444)";
+  return `
+    <div class="dcp-section">
+      <div class="helper">${t("dcp.title")}</div>
+      <div class="dcp-card">
+        <div class="dcp-grade" style="color:${color}">${data.grade}</div>
+        <div class="dcp-info">
+          <div class="dcp-pct">${data.pct}%</div>
+          <div class="dcp-detail">${data.recordedDays}${t("dcp.of")}${data.totalDays}${t("dcp.days")}</div>
+        </div>
+        <div class="dcp-bar-wrap"><div class="dcp-bar" style="width:${data.pct}%;background:${color}"></div></div>
+      </div>
+    </div>
+  `;
+}
+
+function renderPersonalBest() {
+  const data = calcPersonalBest(state.records);
+  if (!data) return "";
+  return `
+    <div class="pb-section">
+      <div class="helper">${t("pb.title")}</div>
+      <div class="pb-card">
+        ${data.isNewLow ? `<div class="pb-new">${t("pb.newlow")}</div>` : ""}
+        <div class="pb-row"><span>${t("pb.low")}</span><span class="pb-val">${data.allTimeLow}kg <span class="pb-dt">(${data.lowDt})</span></span></div>
+        <div class="pb-row"><span>${t("pb.high")}</span><span class="pb-val">${data.allTimeHigh}kg</span></div>
+        ${!data.isNewLow ? `<div class="pb-dist">${t("pb.from")}: +${data.distFromLow}kg</div>` : ""}
+      </div>
+    </div>
+  `;
+}
+
 function renderRecordList() {
   let filtered = filterRecords(state.records, recordSearchQuery);
   filtered = filterRecordsByDateRange(filtered, recordDateFrom, recordDateTo);
@@ -1757,6 +2037,20 @@ function bindEvents() {
   app.querySelector('[data-action="toggle-analytics"]')?.addEventListener("click", () => {
     showAdvancedAnalytics = !showAdvancedAnalytics;
     render();
+  });
+  app.querySelector('[data-action="copy-share"]')?.addEventListener("click", () => {
+    const goal = Number(state.settings.goalWeight);
+    const heightCm = state.profile?.heightCm || 0;
+    const d = calcShareText(state.records, goal, heightCm);
+    if (!d) return;
+    const txt = [
+      `${t("sht.current")}: ${d.currentWt}kg`,
+      `${t("sht.change")}: ${d.sign}${d.change}kg (${d.days}${t("sht.days")})`,
+      d.streak > 1 ? `${t("sht.streak")}: ${d.streak}${t("sht.days")}` : "",
+      d.bmi ? `BMI: ${d.bmi}` : "",
+      d.goalPct != null ? `${t("sht.goal")}: ${d.goalPct}%` : "",
+    ].filter(Boolean).join("\n");
+    navigator.clipboard.writeText(txt).then(() => setStatus(t("sht.copied"))).catch(() => {});
   });
   app.querySelector("#recordSearch")?.addEventListener("input", (e) => {
     recordSearchQuery = e.target.value;
