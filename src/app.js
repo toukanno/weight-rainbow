@@ -736,7 +736,7 @@ function render() {
 
           ${renderRecentEntries()}
 
-          <section class="panel">
+          <section class="panel" id="chartSection">
             <div class="section-header">
               <div>
                 <h2>${t("section.chart")}</h2>
@@ -901,7 +901,7 @@ function render() {
           ${renderMonthlyAverages()}
 
           <!-- Calendar Panel -->
-          <section class="panel">
+          <section class="panel" id="calendarSection">
             <div class="section-header">
               <div>
                 <h2>${t("calendar.title")}</h2>
@@ -958,7 +958,7 @@ function render() {
         </div>
 
         <div class="column">
-          <section class="panel">
+          <section class="panel" id="settingsSection">
             <div class="section-header">
               <div>
                 <h2>${t("section.settings")}</h2>
@@ -1137,6 +1137,24 @@ function render() {
         </div>
       </div>
     </main>
+    <nav class="footer-nav" aria-label="メインナビゲーション">
+      <button type="button" class="footer-nav-item" data-footer-target="entrySection">
+        <svg viewBox="0 0 24 24"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 1 1 3.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+        <span>${t("footer.input")}</span>
+      </button>
+      <button type="button" class="footer-nav-item" data-footer-target="calendarSection">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        <span>${t("footer.calendar")}</span>
+      </button>
+      <button type="button" class="footer-nav-item" data-footer-target="chartSection">
+        <svg viewBox="0 0 24 24"><polyline points="4 18 8 12 12 15 16 8 20 12"/><line x1="4" y1="20" x2="20" y2="20"/></svg>
+        <span>${t("footer.graph")}</span>
+      </button>
+      <button type="button" class="footer-nav-item" data-footer-target="settingsSection">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>${t("footer.settings")}</span>
+      </button>
+    </nav>
     <button type="button" class="scroll-top-btn" id="scrollTopBtn" aria-label="${t("scroll.top")}" title="${t("scroll.top")}">↑</button>
     ${rainbowVisible ? `
     <div class="rainbow-overlay" id="rainbowOverlay" role="alert" aria-live="assertive">
@@ -3651,6 +3669,18 @@ function renderPickerDecOptions(selected) {
 }
 
 function bindEvents() {
+  // Footer navigation
+  app.querySelectorAll("[data-footer-target]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = document.getElementById(btn.dataset.footerTarget);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      app.querySelectorAll(".footer-nav-item").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+    });
+  });
+
   // Arrow key navigation for tablists (WCAG requirement)
   app.querySelectorAll('[role="tablist"]').forEach((tablist) => {
     tablist.addEventListener("keydown", (e) => {
