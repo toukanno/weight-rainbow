@@ -3647,6 +3647,184 @@
         }
         a { color: #222 !important; text-decoration: none !important; }
       }
+
+      /* === SmartDiet-style Tab Layout === */
+      .tab-layout {
+        padding-bottom: 80px !important;
+      }
+
+      .tab-page {
+        display: grid;
+        gap: 14px;
+      }
+
+      /* Bottom Tab Bar */
+      .bottom-tabs {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        background: var(--surface-strong);
+        border-top: 1px solid var(--border);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        z-index: 1000;
+        padding: 4px 0;
+        padding-bottom: max(4px, env(safe-area-inset-bottom, 0));
+      }
+
+      .bottom-tab {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        padding: 8px 4px 6px;
+        min-height: 52px;
+        background: none;
+        border: none;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: color 0.2s, transform 0.1s;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .bottom-tab.active {
+        color: var(--accent);
+      }
+
+      .bottom-tab:active {
+        transform: scale(0.92);
+      }
+
+      .bottom-tab-icon {
+        font-size: 22px;
+        line-height: 1;
+      }
+
+      .bottom-tab-label {
+        font-size: 10px;
+        line-height: 1.2;
+      }
+
+      /* Input tab header (SmartDiet style) */
+      .input-header {
+        text-align: center;
+        padding: 16px 16px 8px;
+      }
+
+      .input-title {
+        font-size: 1.1rem !important;
+        font-weight: 700;
+        margin: 0 !important;
+        letter-spacing: -0.01em;
+      }
+
+      .input-current-weight {
+        font-size: 2.8rem;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin: 4px 0;
+      }
+
+      .input-diff {
+        font-size: 1.1rem;
+        font-weight: 700;
+      }
+      .input-diff.positive { color: var(--warn, #f59e0b); }
+      .input-diff.negative { color: var(--ok, #10b981); }
+      .input-diff.zero { color: var(--muted); }
+
+      .input-meta-row {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 6px;
+        flex-wrap: wrap;
+      }
+
+      .streak-badge-sm {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: var(--accent);
+      }
+      .streak-badge-sm.rainbow { color: var(--ok, #10b981); }
+
+      .trend-sm {
+        font-size: 0.85rem;
+      }
+
+      .freshness-sm {
+        font-size: 0.72rem;
+        color: var(--muted);
+      }
+
+      .motivation-sm {
+        font-size: 0.8rem;
+        color: var(--accent);
+        font-weight: 600;
+        margin-top: 6px !important;
+      }
+
+      .weight-field-main {
+        text-align: center;
+      }
+
+      .save-btn-main {
+        width: 100%;
+        padding: 16px !important;
+        font-size: 1.1rem !important;
+        border-radius: 20px !important;
+      }
+
+      .save-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .goal-mini {
+        padding: 12px 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+      }
+
+      .goal-mini-label {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+
+      .goal-mini-text {
+        font-size: 0.75rem;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+
+      /* Override old layout for tab mode */
+      .tab-layout .hero { display: none; }
+      .tab-layout .content-grid {
+        display: block !important;
+        margin-top: 0;
+      }
+
+      /* Mobile-first single column */
+      @media (max-width: 768px) {
+        .app-shell.tab-layout {
+          width: calc(100% - 16px);
+          padding: 8px 0 80px;
+        }
+      }
     </style>
   </head>
   <body data-theme="prism">
