@@ -75,79 +75,6 @@ import {
   calcBMIHistory,
   calcWeightHeatmap,
   calcStreakRewards,
-  calcWeightConfidence,
-  calcProgressSummary,
-  calcMilestoneTimeline,
-  calcVolatilityIndex,
-  calcPeriodComparison,
-  calcGoalCountdown,
-  calcBodyComposition,
-  generateWeightSummary,
-  getFrequentNotes,
-  detectDuplicates,
-  validateWeightEntry,
-  calcWeeklyAverages,
-  calcMonthlyRecordingMap,
-  calcWeightTrendIndicator,
-  calcNoteTagStats,
-  calcIdealWeightRange,
-  calcDataFreshness,
-  calcMultiPeriodRate,
-  calcRecordMilestone,
-  generateAICoachReport,
-  calcDashboardSummary,
-  getRecentEntries,
-  calcMonthlyAverages,
-  calcLongTermProgress,
-  calcWeightFluctuation,
-  calcWeightAnomalies,
-  calcSuccessRate,
-  calcRecordingRate,
-  calcMilestoneHistory,
-  calcWeightJourney,
-  calcGoalScenarios,
-  calcStreakCalendar,
-  calcMovingAvgCrossover,
-  calcPredictionAccuracy,
-  calcConsistencyScore,
-  calcWeightRangeSummary,
-  calcTrendStreak,
-  calcBMITrend,
-  calcWeeklySummaryComparison,
-  calcGoalProgressRing,
-  calcBodyFatTrend,
-  calcDailyTarget,
-  calcMonthPhaseAvg,
-  calcStreakFreezeInfo,
-  calcRecentWeightBars,
-  calcWeightAnniversary,
-  calcDailyChangeDist,
-  calcGoalStreak,
-  calcThenVsNow,
-  calcQuickWeightPresets,
-  calcRecordCompleteness,
-  calcWeightPace,
-  calcWeightSmoothness,
-  calcPeriodBreakdown,
-  calcMotivationLevel,
-  calcWeightBand,
-  calcBestWeighDay,
-  calcMiniSparkline,
-  calcEntrySummary,
-  calcGoalDistance,
-  calcTimeSlotPattern,
-  calcStreakBadges,
-  calcProgressTimeline,
-  calcForecastConfidence,
-  calcWeightZones,
-  calcWeightChangeRate,
-  calcWeighInConsistency,
-  calcPlateauPeriods,
-  calcWeightPercentileRank,
-  calcWeightTrendArrow,
-  calcBodyCompositionBreakdown,
-  calcWeeklyReportCard,
-  calcNoteWordFrequency,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -167,7 +94,7 @@ window.onerror = function(msg, src, line, col, err) {
       <h2 style="color:#dc2626;">エラーが発生しました / An error occurred</h2>
       <p style="color:#666;margin:12px 0;">${escHtml(msg)}</p>
       <p style="color:#999;font-size:0.8rem;">Line ${line}:${col}</p>
-      <button type="button" onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">再読み込み / Reload</button>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">再読み込み / Reload</button>
     </div>`;
   }
 };
@@ -194,12 +121,10 @@ let statusKind = "ok";
 let showAllRecords = false;
 let quickWeight = 65.0;
 let rainbowVisible = false;
-let _rainbowDismissTimer = 0;
 let rainbowDetail = "";
 let summaryPeriod = "week";
 let chartPeriod = "all"; // "7", "30", "90", "all"
 let reminderTimer = null;
-let lastNotifiedDate = "";
 let calendarYear = new Date().getFullYear();
 let calendarMonth = new Date().getMonth();
 let showMonthlyStats = false;
@@ -208,6 +133,7 @@ let recordSearchQuery = "";
 let recordDateFrom = "";
 let recordDateTo = "";
 let searchDebounceTimer = null;
+let activeTab = "home";
 
 // Initialize quick weight from last record
 {
@@ -227,8 +153,8 @@ try {
   app.innerHTML = `<div style="padding:40px 20px;text-align:center;font-family:system-ui;">
     <h2 style="color:#dc2626;">${t("error.init")}</h2>
     <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
-    <button type="button" onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
-    <button type="button" onclick="if(confirm('${escHtml(t("error.resetConfirm"))}')){localStorage.clear();location.reload()}" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">${t("error.resetData")}</button>
+    <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
+    <button onclick="localStorage.clear();location.reload()" style="margin-top:8px;padding:8px 24px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#333;font-size:1rem;">${t("error.resetData")}</button>
   </div>`;
 }
 
@@ -252,35 +178,21 @@ if (window.matchMedia) {
   applySystemTheme();
 }
 
-function sanitizeProfile(p) {
-  const defaults = createDefaultProfile();
-  const hc = String(p.heightCm ?? "");
-  const ag = String(p.age ?? "");
-  return {
-    name: typeof p.name === "string" ? p.name.slice(0, 50) : defaults.name,
-    heightCm: hc === "" || (Number.isFinite(Number(hc)) && Number(hc) >= 50 && Number(hc) <= 300) ? hc : defaults.heightCm,
-    age: ag === "" || (Number.isFinite(Number(ag)) && Number(ag) >= 1 && Number(ag) <= 150) ? ag : defaults.age,
-    gender: ["male", "female", "nonbinary", "other", "unspecified", ""].includes(p.gender) ? p.gender : defaults.gender,
-  };
-}
-
 function loadState() {
   const rawRecords = safeParse(STORAGE_KEYS.records, []);
   const records = Array.isArray(rawRecords)
     ? rawRecords.filter((r) => r && r.dt && Number.isFinite(r.wt))
     : [];
-  const sorted = [...records].sort((a, b) => (a.dt > b.dt ? -1 : a.dt < b.dt ? 1 : 0));
-  const lastWeight = sorted.length > 0 ? sorted[0].wt : 65;
   return {
     records,
-    profile: sanitizeProfile({ ...createDefaultProfile(), ...safeParse(STORAGE_KEYS.profile, {}) }),
+    profile: { ...createDefaultProfile(), ...safeParse(STORAGE_KEYS.profile, {}) },
     settings: { ...createDefaultSettings(), ...safeParse(STORAGE_KEYS.settings, {}) },
     form: {
       weight: "",
       date: todayLocal(),
       imageName: "",
-      pickerInt: Math.floor(lastWeight),
-      pickerDec: Math.round((lastWeight - Math.floor(lastWeight)) * 10),
+      pickerInt: 65,
+      pickerDec: 0,
       bodyFat: "",
       note: "",
     },
@@ -301,13 +213,7 @@ function persist() {
     window.localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(state.profile));
     window.localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(state.settings));
     return true;
-  } catch (e) {
-    if (e instanceof DOMException && e.name === "QuotaExceededError") {
-      setStatus(t("error.storageQuota"), "error");
-    } else {
-      console.error("[persist] storage error:", e?.name, e?.message);
-      setStatus(t("status.storageError"), "error");
-    }
+  } catch {
     return false;
   }
 }
@@ -321,53 +227,37 @@ function showFirstLaunchModal() {
         <h2 id="langModalTitle">ようこそ / Welcome</h2>
         <p>言語を選択してください<br>Choose your language</p>
         <div class="lang-modal-buttons">
-          <button type="button" data-lang="ja" aria-label="日本語を選択">🇯🇵 日本語</button>
-          <button type="button" data-lang="en" aria-label="Select English">🇬🇧 English</button>
+          <button type="button" data-lang="ja">🇯🇵 日本語</button>
+          <button type="button" data-lang="en">🇬🇧 English</button>
         </div>
       </div>
     </div>
   `;
   app.querySelector("[data-lang]")?.focus();
-  const selectLang = (lang) => {
-    state.settings.language = lang;
-    t = createTranslator(lang);
-    try {
-      window.localStorage.setItem(STORAGE_KEYS.firstLaunchDone, "1");
-    } catch { /* ignore */ }
-    persist();
-    render();
-  };
   app.querySelectorAll("[data-lang]").forEach((button) => {
-    button.addEventListener("click", () => selectLang(button.dataset.lang));
-  });
-  const overlay = app.querySelector(".lang-modal-overlay");
-  overlay?.addEventListener("click", (e) => {
-    if (e.target === overlay) selectLang("ja");
-  });
-  document.addEventListener("keydown", function onEsc(e) {
-    if (e.key === "Escape") {
-      document.removeEventListener("keydown", onEsc);
-      selectLang("ja");
-    }
+    button.addEventListener("click", () => {
+      const lang = button.dataset.lang;
+      state.settings.language = lang;
+      t = createTranslator(lang);
+      try {
+        window.localStorage.setItem(STORAGE_KEYS.firstLaunchDone, "1");
+      } catch { /* ignore */ }
+      persist();
+      render();
+    });
   });
 }
 
 let statusClearTimer = null;
-let statusFadeTimer = null;
 function setStatus(message, kind = "ok") {
   statusMessage = message;
   statusKind = kind;
   clearTimeout(statusClearTimer);
-  clearTimeout(statusFadeTimer);
   if (kind === "ok" && message) {
-    statusFadeTimer = setTimeout(() => {
-      const el = app.querySelector(".status");
-      if (el) el.classList.add("status-fade-out");
-    }, 4000);
     statusClearTimer = setTimeout(() => {
       statusMessage = "";
       render();
-    }, 4600);
+    }, 4000);
   }
   render();
 }
@@ -393,7 +283,7 @@ function formatBMI(bmi) {
 }
 
 function formatNote(note) {
-  return escHtml(note).replace(/#([\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF66-\uFF9F]+)/g, '<span class="note-hashtag">#$1</span>');
+  return escapeAttr(note).replace(/#([\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF66-\uFF9F]+)/g, '<span class="note-hashtag">#$1</span>');
 }
 
 function getMotivationalMessage(streak, trend, records, goalProgress) {
@@ -413,29 +303,19 @@ function getMotivationalMessage(streak, trend, records, goalProgress) {
   return "";
 }
 
-let _renderRAF = 0;
-function scheduleRender() {
-  if (!_renderRAF) {
-    _renderRAF = requestAnimationFrame(() => { _renderRAF = 0; render(); });
-  }
-}
-
 function render() {
   try {
-  const scrollY = window.scrollY;
   document.documentElement.lang = state.settings.language;
   document.title = t("app.title");
   const description = document.querySelector('meta[name="description"]');
   if (description) description.setAttribute("content", t("app.description"));
   document.body.dataset.theme = state.settings.theme;
-  // Update browser theme-color to match current theme accent (deferred to ensure CSS applied)
-  requestAnimationFrame(() => {
-    const themeColor = document.querySelector('meta[name="theme-color"]');
-    if (themeColor) {
-      const accent = getComputedStyle(document.body).getPropertyValue("--accent").trim();
-      if (accent) themeColor.setAttribute("content", accent);
-    }
-  });
+  // Update browser theme-color to match current theme accent
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  if (themeColor) {
+    const accent = getComputedStyle(document.body).getPropertyValue("--accent").trim();
+    if (accent) themeColor.setAttribute("content", accent);
+  }
 
   const stats = calcStats(state.records, state.profile);
   const dailyDiff = calcDailyDiff(state.records);
@@ -474,18 +354,13 @@ function render() {
     : null;
   const previewLarge = previewDiff !== null && Math.abs(previewDiff) >= 2;
 
-  // Search filter count (computed once, used in both header and record list)
-  const filteredBySearch = recordSearchQuery ? filterRecords(state.records, recordSearchQuery) : state.records;
-  const filteredSearchCount = filteredBySearch.length;
-
   // Duplicate date warning
   const selectedDate = state.form.date || todayLocal();
   const existingRecord = state.records.find((r) => r.dt === selectedDate);
 
   app.innerHTML = `
-    <a href="#entrySection" class="skip-link">${t("a11y.skipToEntry")}</a>
     <main class="app-shell">
-      <section class="hero">
+      <section class="hero" ${activeTab !== "home" ? 'style="display:none"' : ""}>
         <div class="hero-top">
           <div>
             <div class="eyebrow">${t("status.ready")}</div>
@@ -572,10 +447,8 @@ function render() {
         </div>` : ""}
       </section>
 
-      ${renderAICoach()}
-
       <div class="content-grid">
-        <div class="column">
+        <div class="column" data-tab="home" ${activeTab !== "home" ? 'style="display:none"' : ""}>
           <section class="panel">
             <div class="section-header">
               <div>
@@ -587,7 +460,7 @@ function render() {
             <div class="input-grid">
               <div class="field">
                 <label for="name">${t("profile.name")}</label>
-                <input id="name" name="name" maxlength="40" autocomplete="name" value="${escapeAttr(state.profile.name)}" />
+                <input id="name" name="name" maxlength="40" value="${escapeAttr(state.profile.name)}" />
               </div>
               <div class="field">
                 <label for="gender">${t("profile.gender")}</label>
@@ -600,16 +473,16 @@ function render() {
               </div>
               <div class="field">
                 <label for="heightCm">${t("profile.height")}</label>
-                <input id="heightCm" name="heightCm" inputmode="decimal" autocomplete="off" value="${escapeAttr(state.profile.heightCm)}" />
+                <input id="heightCm" name="heightCm" inputmode="decimal" value="${escapeAttr(state.profile.heightCm)}" />
               </div>
               <div class="field">
                 <label for="age">${t("profile.age")}</label>
-                <input id="age" name="age" inputmode="numeric" autocomplete="off" value="${escapeAttr(state.profile.age)}" />
+                <input id="age" name="age" inputmode="numeric" value="${escapeAttr(state.profile.age)}" />
               </div>
             </div>
           </section>
 
-          <section class="panel" id="entrySection">
+          <section class="panel">
             <div class="section-header">
               <div>
                 <h2>${t("section.entry")}</h2>
@@ -638,15 +511,10 @@ function render() {
                     </select>
                     <span class="picker-unit">${t("picker.kg")}</span>
                   </div>
-                  ${(() => {
-                    const presets = calcQuickWeightPresets(state.records);
-                    if (presets.length === 0) return "";
-                    return `<div class="weight-presets">${presets.map((p) => `<button type="button" class="weight-preset-btn" data-pick-weight="${p.weight}" title="${t("preset." + p.label)}">${t("preset." + p.label)} ${p.weight}kg</button>`).join("")}</div>`;
-                  })()}
                 </div>
                 <div class="field">
                   <label for="recordDate">${t("entry.date")}</label>
-                  <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" min="2000-01-01" max="${todayLocal()}" autocomplete="off" />
+                  <input id="recordDate" name="date" type="date" value="${escapeAttr(state.form.date)}" max="${todayLocal()}" />
                   <div class="date-shortcuts">
                     <button type="button" class="date-shortcut" data-date-shortcut="today">${t("diff.today")}</button>
                     <button type="button" class="date-shortcut" data-date-shortcut="yesterday">${t("diff.yesterday")}</button>
@@ -659,7 +527,7 @@ function render() {
               </div>
               <div class="field">
                 <label for="entryNote">${t("entry.note")}</label>
-                <input id="entryNote" name="note" type="text" maxlength="100" autocomplete="off" placeholder="${escapeAttr(t("entry.noteHint"))}" value="${escapeAttr(state.form.note)}" />
+                <input id="entryNote" name="note" type="text" maxlength="100" placeholder="${escapeAttr(t("entry.noteHint"))}" value="${escapeAttr(state.form.note)}" />
                 ${(state.form.note || "").length > 50 ? `<div class="hint-small" style="text-align:right;">${(state.form.note || "").length}/100</div>` : ""}
                 <div class="note-tags-row" role="group" aria-label="${t("note.tags")}">
                   ${NOTE_TAGS.map((tag) => {
@@ -667,14 +535,6 @@ function render() {
                     return `<button type="button" class="note-tag${active ? " active" : ""}" data-note-tag="${tag}">${t("note.tag." + tag)}</button>`;
                   }).join("")}
                 </div>
-                ${(() => {
-                  const freq = getFrequentNotes(state.records, 4);
-                  if (freq.length === 0) return "";
-                  return `<div class="quick-notes-row">
-                    <span class="quick-notes-label">${t("quickNote.label")}:</span>
-                    ${freq.map((n) => `<button type="button" class="quick-note-chip" data-quick-note="${escapeAttr(n.text)}">${escapeAttr(n.text.length > 15 ? n.text.slice(0, 15) + "…" : n.text)}</button>`).join("")}
-                  </div>`;
-                })()}
               </div>
 
               <!-- Quick Record Section -->
@@ -691,7 +551,7 @@ function render() {
                   <button type="button" data-quick-adj="+1.0" aria-label="+1.0 kg">+1.0</button>
                 </div>
                 <div class="quick-buttons" style="margin-top:10px;">
-                  <button type="button" class="quick-save" data-action="quick-save" aria-label="${t("quick.save")}">${t("quick.save")}</button>
+                  <button type="button" class="quick-save" data-action="quick-save">${t("quick.save")}</button>
                 </div>
               </div>
 
@@ -717,11 +577,11 @@ function render() {
                   <input id="photoInput" type="file" accept="image/*" capture="environment" class="hidden" />`}
                 </div>
                 ${imagePreviewUrl ? `
-                  <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" data-action="zoom-photo" role="button" tabindex="0" aria-label="${t("photo.zoomHint")}" />
+                  <img class="photo-preview" src="${imagePreviewUrl}" alt="${t("entry.photoPreview")}" data-action="zoom-photo" />
                   <p class="helper hint-small" style="margin-top: 4px; text-align: center;">${t("photo.zoomHint")}</p>
                   ${!supportsTextDetection && !detectedWeights.length ? `<p class="helper" style="margin-top: 8px; text-align: center;">${t("photo.manualHint")}</p>` : ""}
                 ` : ""}
-                ${detectedWeights.length ? `<div style="margin-top: 12px;"><div class="helper">${t("entry.photoDetected")}</div><div class="chip-row" style="margin-top: 8px;">${detectedWeights.map((weight) => `<button type="button" class="chip" data-pick-weight="${weight}" aria-label="${formatWeight(weight)} kg">${formatWeight(weight)}</button>`).join("")}</div></div>` : ""}
+                ${detectedWeights.length ? `<div style="margin-top: 12px;"><div class="helper">${t("entry.photoDetected")}</div><div class="chip-row" style="margin-top: 8px;">${detectedWeights.map((weight) => `<button type="button" class="chip" data-pick-weight="${weight}">${formatWeight(weight)}</button>`).join("")}</div></div>` : ""}
                 ${!supportsTextDetection && !imagePreviewUrl ? `<span class="helper">${t("entry.photoFallback")}</span>` : ""}
               </div>
 
@@ -741,7 +601,6 @@ function render() {
                   <div class="helper hint-small desktop-only">⌘+Enter</div>
                 </div>
               </div>
-              <div class="validate-warnings" role="alert" aria-live="assertive" style="display:none"></div>
             </div>
 
             <div class="status ${statusKind === "error" ? "warn" : ""}" role="status" aria-live="polite">
@@ -749,10 +608,10 @@ function render() {
               ${lastUndoState ? `<button type="button" class="undo-btn" data-action="undo">${t("undo.button")}</button>` : ""}
             </div>
           </section>
+        </div>
 
-          ${renderRecentEntries()}
-
-          <section class="panel" id="chartSection">
+        <div class="column" data-tab="graph" ${activeTab !== "graph" ? 'style="display:none"' : ""}>
+          <section class="panel">
             <div class="section-header">
               <div>
                 <h2>${t("section.chart")}</h2>
@@ -818,57 +677,15 @@ function render() {
                 : t("insight.weekSame")
               }</div>` : ""}
             </div>` : ""}
-            ${renderDashboard()}
-            ${renderDataFreshness()}
-            ${renderRecordMilestone()}
-            ${renderTrendIndicator()}
             ${renderMomentumScore()}
             ${renderStreakRewards()}
-            ${renderGoalCountdown()}
-            ${renderGoalScenarios()}
             ${renderNextMilestones()}
             ${renderDayOfWeekAvg()}
             ${renderStability()}
             ${renderBMIDistribution()}
-            ${renderIdealWeight()}
             ${renderWeightVelocity()}
-            ${renderMultiPeriodRate()}
             ${renderCalorieEstimate()}
-            ${renderWeightConfidence()}
             ${renderBodyFatStats()}
-            ${renderWeeklyAverages()}
-            ${renderRecordingCalendar()}
-            ${renderLongTermProgress()}
-            ${renderWeightFluctuation()}
-            ${renderSuccessRate()}
-            ${renderRecordingRate()}
-            ${renderStreakCalendar()}
-            ${renderConsistencyScore()}
-            ${renderWeightRangeSummary()}
-            ${renderTrendStreak()}
-            ${renderBMITrend()}
-            ${renderBodyFatTrend()}
-            ${renderWeeklySummaryComparison()}
-            ${renderGoalProgressRing()}
-            ${renderDailyTarget()}
-            ${renderMonthPhaseAvg()}
-            ${renderStreakFreeze()}
-            ${renderRecentWeightBars()}
-            ${renderWeightAnniversary()}
-            ${renderTrendForecast()}
-            ${renderGoalStreak()}
-            ${renderThenVsNow()}
-            ${renderWeightPace()}
-            ${renderPeriodBreakdown()}
-            ${renderMotivation()}
-            ${renderWeightBand()}
-            ${renderMiniSparkline()}
-            ${renderEntrySummary()}
-            ${renderGoalDistance()}
-            ${renderStreakBadges()}
-            ${renderWeightTrendArrow()}
-            ${renderWeeklyReportCard()}
-            ${renderGoalMilestones()}
             ${state.records.length >= 3 ? `
             <div class="analytics-toggle-section">
               <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -894,47 +711,19 @@ function render() {
                 ${renderWeightRegression()}
                 ${renderBMIHistory()}
                 ${renderWeightHeatmap()}
-                ${renderProgressSummary()}
-                ${renderMilestoneTimeline()}
-                ${renderVolatilityIndex()}
-                ${renderPeriodComparison()}
-                ${renderBodyComposition()}
-                ${renderShareSummary()}
-                ${renderDuplicateCheck()}
-                ${renderNoteTagStats()}
-                ${renderWeightAnomalies()}
-                ${renderMilestoneHistory()}
-                ${renderWeightJourney()}
-                ${renderMovingAvgCrossover()}
-                ${renderPredictionAccuracy()}
-                ${renderDailyChangeDist()}
-                ${renderRecordCompleteness()}
-                ${renderWeightSmoothness()}
-                ${renderBestWeighDay()}
-                ${renderTimeSlotPattern()}
-                ${renderProgressTimeline()}
-                ${renderForecastConfidence()}
-                ${renderWeightZones()}
-                ${renderWeightChangeRate()}
-                ${renderWeighInConsistency()}
-                ${renderPlateauPeriods()}
-                ${renderWeightPercentileRank()}
-                ${renderBodyCompositionBreakdown()}
-                ${renderNoteWordFrequency()}
               </div>
               ` : ""}
             </div>
             ` : ""}
           </section>
+        </div>
 
+        <div class="column" data-tab="calendar" ${activeTab !== "calendar" ? 'style="display:none"' : ""}>
           <!-- Monthly Stats Panel -->
           ${renderMonthlyStats()}
 
-          <!-- Monthly Averages Chart -->
-          ${renderMonthlyAverages()}
-
           <!-- Calendar Panel -->
-          <section class="panel" id="calendarSection">
+          <section class="panel">
             <div class="section-header">
               <div>
                 <h2>${t("calendar.title")}</h2>
@@ -943,7 +732,9 @@ function render() {
             </div>
             ${renderCalendar()}
           </section>
+        </div>
 
+        <div class="column" data-tab="search" ${activeTab !== "search" ? 'style="display:none"' : ""}>
           <!-- Records List Panel -->
           <section class="panel records-panel">
             <div class="section-header">
@@ -956,24 +747,23 @@ function render() {
             ${state.records.length > 3 ? `
             <div class="record-search">
               <input id="recordSearch" type="search" placeholder="${escapeAttr(t("records.search"))}" value="${escapeAttr(recordSearchQuery)}" autocomplete="off" aria-label="${t("records.search")}" />
-              ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filteredSearchCount)}</span>` : `<span class="helper hint-small desktop-only">⌘K</span>`}
+              ${recordSearchQuery ? `<span class="helper">${t("records.searchResult").replace("{count}", filterRecords(state.records, recordSearchQuery).length)}</span>` : `<span class="helper hint-small desktop-only">⌘K</span>`}
             </div>
             <div class="record-date-range">
               <div class="helper hint-small">${t("records.dateRange")}</div>
               <div class="date-range-fields">
-                <label>${t("records.from")}<input id="dateRangeFrom" type="date" autocomplete="off" value="${escapeAttr(recordDateFrom)}" max="${todayLocal()}" /></label>
-                <label>${t("records.to")}<input id="dateRangeTo" type="date" autocomplete="off" value="${escapeAttr(recordDateTo)}" max="${todayLocal()}" /></label>
+                <label>${t("records.from")}<input id="dateRangeFrom" type="date" value="${escapeAttr(recordDateFrom)}" max="${todayLocal()}" /></label>
+                <label>${t("records.to")}<input id="dateRangeTo" type="date" value="${escapeAttr(recordDateTo)}" max="${todayLocal()}" /></label>
                 ${recordDateFrom || recordDateTo ? `<button type="button" class="btn ghost" data-action="clear-date-range">${t("records.clearRange")}</button>` : ""}
               </div>
             </div>` : ""}
-            ${state.records.length ? `<div class="export-row"><button type="button" class="btn ghost" data-action="export-csv">📤 ${t("export.csv")}</button><button type="button" class="btn ghost" data-action="import-csv">📥 ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>` : `<div class="export-row"><button type="button" class="btn ghost" data-action="import-csv">📥 ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>`}
+            ${state.records.length ? `<div class="export-row"><button type="button" class="btn ghost" data-action="export-csv">📥 ${t("export.csv")}</button><button type="button" class="btn ghost" data-action="import-csv">📤 ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>` : `<div class="export-row"><button type="button" class="btn ghost" data-action="import-csv">📤 ${t("import.csv")}</button><input type="file" id="csvImportInput" accept=".csv" style="display:none" /></div>`}
             <div class="record-list">
               ${state.records.length ? renderRecordList() : `<div class="empty-state">
-                <span class="empty-emoji" aria-hidden="true">📊</span>
-                <div class="empty-msg">${t("records.empty")}</div>
-                <div class="empty-hint">${t("records.emptyHint")}</div>
+                <div style="font-size:2.4rem;margin-bottom:8px;" aria-hidden="true">📊</div>
+                <div class="helper">${t("records.empty")}</div>
                 <div class="empty-state-actions">
-                  <button type="button" class="btn" data-mode="manual" aria-label="${t("entry.manual")}">✏️ ${t("entry.manual")}</button>
+                  <button type="button" class="btn secondary" data-mode="manual" aria-label="${t("entry.manual")}">✏️ ${t("entry.manual")}</button>
                   <button type="button" class="btn secondary" data-mode="voice" aria-label="${t("entry.voice")}">🎤 ${t("entry.voice")}</button>
                   <button type="button" class="btn secondary" data-mode="photo" aria-label="${t("entry.photo")}">📷 ${t("entry.photo")}</button>
                 </div>
@@ -990,8 +780,8 @@ function render() {
           </section>
         </div>
 
-        <div class="column">
-          <section class="panel" id="settingsSection">
+        <div class="column" data-tab="settings" ${activeTab !== "settings" ? 'style="display:none"' : ""}>
+          <section class="panel">
             <div class="section-header">
               <div>
                 <h2>${t("section.settings")}</h2>
@@ -1170,25 +960,28 @@ function render() {
         </div>
       </div>
     </main>
-    <nav class="footer-nav" aria-label="メインナビゲーション">
-      <button type="button" class="footer-nav-item" data-footer-target="entrySection">
-        <svg viewBox="0 0 24 24"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 1 1 3.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-        <span>${t("footer.input")}</span>
+    <nav class="bottom-nav" role="navigation" aria-label="メインナビゲーション">
+      <button type="button" class="bottom-nav-item ${activeTab === "home" ? "active" : ""}" data-nav="home">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span>${t("nav.home")}</span>
       </button>
-      <button type="button" class="footer-nav-item" data-footer-target="calendarSection">
-        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-        <span>${t("footer.calendar")}</span>
+      <button type="button" class="bottom-nav-item ${activeTab === "search" ? "active" : ""}" data-nav="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <span>${t("nav.search")}</span>
       </button>
-      <button type="button" class="footer-nav-item" data-footer-target="chartSection">
-        <svg viewBox="0 0 24 24"><polyline points="4 18 8 12 12 15 16 8 20 12"/><line x1="4" y1="20" x2="20" y2="20"/></svg>
-        <span>${t("footer.graph")}</span>
+      <button type="button" class="bottom-nav-item ${activeTab === "calendar" ? "active" : ""}" data-nav="calendar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span>${t("nav.calendar")}</span>
       </button>
-      <button type="button" class="footer-nav-item" data-footer-target="settingsSection">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        <span>${t("footer.settings")}</span>
+      <button type="button" class="bottom-nav-item ${activeTab === "graph" ? "active" : ""}" data-nav="graph">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>${t("nav.graph")}</span>
+      </button>
+      <button type="button" class="bottom-nav-item ${activeTab === "settings" ? "active" : ""}" data-nav="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>${t("nav.settings")}</span>
       </button>
     </nav>
-    <button type="button" class="scroll-top-btn" id="scrollTopBtn" aria-label="${t("scroll.top")}" title="${t("scroll.top")}">↑</button>
     ${rainbowVisible ? `
     <div class="rainbow-overlay" id="rainbowOverlay" role="alert" aria-live="assertive">
       <div class="confetti-container" id="confettiContainer"></div>
@@ -1203,14 +996,12 @@ function render() {
 
   bindEvents();
   drawChart();
-  window.scrollTo(0, scrollY);
 
   if (rainbowVisible) {
     spawnConfetti();
     // Vibrate on supported devices for haptic feedback
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-    clearTimeout(_rainbowDismissTimer);
-    _rainbowDismissTimer = setTimeout(() => {
+    setTimeout(() => {
       const overlay = document.getElementById("rainbowOverlay");
       if (overlay) {
         overlay.classList.add("fade-out");
@@ -1219,7 +1010,7 @@ function render() {
           overlay.remove();
         }, 600);
       }
-    }, 4200);
+    }, 3500);
   }
   } catch (e) {
     console.error("[WeightRainbow] Render error:", e);
@@ -1227,7 +1018,7 @@ function render() {
       <h2 style="color:#dc2626;">${t("error.render")}</h2>
       <p style="color:#666;margin:12px 0;">${escHtml(e.message)}</p>
       <p style="color:#999;font-size:0.8rem;">${e.stack ? e.stack.split('\n').slice(0, 3).map(l => escHtml(l)).join('<br>') : ''}</p>
-      <button type="button" onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 24px;border-radius:8px;border:none;background:#ff5f6d;color:#fff;font-size:1rem;">${t("error.reload")}</button>
     </div>`;
   }
 }
@@ -1253,7 +1044,7 @@ function renderMonthlyStats() {
           const changeCls = m.change < 0 ? "loss" : m.change > 0 ? "gain" : "neutral";
           return `
             <div class="monthly-stats-row">
-              <div class="monthly-label">${new Date(m.month + "-01T00:00:00").toLocaleDateString(state.settings.language === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "short" })}</div>
+              <div class="monthly-label">${new Date(m.month + "-01").toLocaleDateString(state.settings.language === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "short" })}</div>
               <div class="monthly-values">
                 <span title="${t("summary.avg")}">${t("summary.avg")}: ${m.avg.toFixed(1)}kg</span>
                 <span title="${t("summary.min")}">↓${m.min.toFixed(1)}</span>
@@ -1281,7 +1072,7 @@ function renderCalendar() {
     <button type="button" data-action="cal-prev" aria-label="${t("calendar.prev")}">${t("calendar.prev")}</button>
     <span class="calendar-label">${new Date(calendarYear, calendarMonth).toLocaleDateString(state.settings.language === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "long" })}</span>
     <button type="button" data-action="cal-next" aria-label="${t("calendar.next")}">${t("calendar.next")}</button>
-    ${!isCurrentMonthView ? `<button type="button" class="btn ghost" data-action="cal-today" style="margin-left:4px;font-size:0.75rem;">${t("diff.today")}</button>` : ""}
+    ${!isCurrentMonthView ? `<button type="button" class="btn ghost" data-action="cal-today" style="margin-left:4px;font-size:0.72rem;">${t("diff.today")}</button>` : ""}
   </div>`;
   html += `<div class="calendar-grid">`;
   for (const key of dayNames) {
@@ -1303,10 +1094,10 @@ function renderCalendar() {
     if (hasRecord && change !== undefined) {
       if (change < 0) {
         const alpha = Math.min(50, Math.round(Math.abs(change) * 30 + 15));
-        bg = `background: color-mix(in srgb, var(--ok) ${alpha}%, transparent)`;
+        bg = `background: color-mix(in srgb, var(--ok, #10b981) ${alpha}%, transparent)`;
       } else if (change > 0) {
         const alpha = Math.min(50, Math.round(change * 30 + 15));
-        bg = `background: color-mix(in srgb, var(--warn) ${alpha}%, transparent)`;
+        bg = `background: color-mix(in srgb, var(--warn, #f59e0b) ${alpha}%, transparent)`;
       } else {
         bg = `background: color-mix(in srgb, var(--accent) 20%, transparent)`;
       }
@@ -1315,9 +1106,9 @@ function renderCalendar() {
       const intensity = d.intensity !== null ? d.intensity : 0;
       bg = `background: color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, transparent)`;
     }
-    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${Number(d.wt).toFixed(1)}kg${changeLabel}` : ""}"${hasRecord ? ` aria-label="${d.day}${t("calendar.dayUnit")} ${Number(d.wt).toFixed(1)}kg${changeLabel}"` : ""}>
+    html += `<div class="calendar-cell${hasRecord ? " has-record" : ""}${isToday ? " today" : ""}" style="${bg}" title="${hasRecord ? `${d.wt}kg${changeLabel}` : ""}"${hasRecord ? ` aria-label="${d.day}${t("calendar.dayUnit")} ${d.wt}kg${changeLabel}"` : ""}>
       <span class="calendar-day">${d.day}</span>
-      ${hasRecord ? `<span class="calendar-wt">${Number(d.wt).toFixed(1)}</span>` : ""}
+      ${hasRecord ? `<span class="calendar-wt">${d.wt}</span>` : ""}
     </div>`;
   }
   html += `</div>`;
@@ -1378,7 +1169,7 @@ function renderSourceBreakdown() {
         ${entries.map(([src, count]) => {
           const icon = sourceIcons[src] || "📊";
           const pct = Math.round((count / state.records.length) * 100);
-          return `<span class="source-chip"><span class="source-icon" aria-hidden="true">${icon}</span> ${t("entry.source." + src)} <strong>${count}</strong> (${pct}%)</span>`;
+          return `<span class="source-chip"><span class="source-icon">${icon}</span> ${t("entry.source." + src)} <strong>${count}</strong> (${pct}%)</span>`;
         }).join("")}
       </div>
     </div>
@@ -1398,7 +1189,7 @@ function renderWeekdayWeekend() {
           <div class="wdwe-value">${wdwe.weekdayAvg.toFixed(1)}kg</div>
           <div class="hint-small">${wdwe.weekdayCount} ${t("chart.records")}</div>
         </div>
-        <div class="wdwe-vs">${t("wdwe.vs")}</div>
+        <div class="wdwe-vs">vs</div>
         <div class="wdwe-col">
           <div class="wdwe-label">${t("wdwe.weekend")}</div>
           <div class="wdwe-value">${wdwe.weekendAvg.toFixed(1)}kg</div>
@@ -1419,10 +1210,10 @@ function renderDataHealth() {
   if (!health) return "";
   const level = health.score >= 80 ? "high" : health.score >= 50 ? "medium" : "low";
   const issueHtml = health.issues.length === 0
-    ? `<div class="helper hint-small" style="color:var(--ok);font-weight:600;">${t("health.perfect")}</div>`
+    ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("health.perfect")}</div>`
     : health.issues.slice(0, 3).map((issue) => {
       if (issue.type === "gap") return `<div class="health-issue">📅 ${t("health.gap").replace("{days}", issue.days).replace("{from}", issue.from).replace("{to}", issue.to)}</div>`;
-      if (issue.type === "outlier") return `<div class="health-issue">📊 ${t("health.outlier").replace("{date}", issue.date).replace("{weight}", Number(issue.weight).toFixed(1)).replace("{expected}", Number(issue.expected).toFixed(1))}</div>`;
+      if (issue.type === "outlier") return `<div class="health-issue">📊 ${t("health.outlier").replace("{date}", issue.date).replace("{weight}", issue.weight).replace("{expected}", issue.expected)}</div>`;
       if (issue.type === "noBMI") return `<div class="health-issue">📏 ${t("health.noBMI")}</div>`;
       return "";
     }).join("");
@@ -1522,7 +1313,7 @@ function renderWeeklyFrequency() {
       <div class="helper">${t("freq.title")}</div>
       <div class="freq-chart">${bars}</div>
       <div class="helper hint-small">${t("freq.avg").replace("{avg}", freq.avgPerWeek)} · ${t("freq.hint").replace("{weeks}", freq.weeks)}</div>
-      ${hasPerfect ? `<div class="helper hint-small" style="color:var(--ok);font-weight:600;margin-top:2px;">${t("freq.perfect")}</div>` : ""}
+      ${hasPerfect ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;margin-top:2px;">${t("freq.perfect")}</div>` : ""}
     </div>
   `;
 }
@@ -1556,15 +1347,15 @@ function renderWeightVelocity() {
 function renderWeightVariance() {
   const v = calcWeightVariance(state.records);
   if (!v) return "";
-  const levelColor = v.level === "veryLow" || v.level === "low" ? "var(--ok)" : v.level === "moderate" ? "var(--warn)" : "var(--error)";
+  const levelColor = v.level === "veryLow" || v.level === "low" ? "var(--ok, #10b981)" : v.level === "moderate" ? "var(--warn, #f59e0b)" : "var(--error, #ef4444)";
   return `
     <div class="variance-section">
       <div class="helper">${t("variance.title")}</div>
       <div class="variance-badge" style="color:${levelColor};font-weight:700;">${t("variance." + v.level)}</div>
       <div class="variance-stats">
-        <span>${t("variance.cv").replace("{cv}", Number(v.cv).toFixed(1))}</span>
-        <span>${t("variance.swing").replace("{swing}", Number(v.maxSwing).toFixed(1))}</span>
-        <span>${t("variance.daily").replace("{avg}", Number(v.avgDailySwing).toFixed(1))}</span>
+        <span>${t("variance.cv").replace("{cv}", v.cv)}</span>
+        <span>${t("variance.swing").replace("{swing}", v.maxSwing)}</span>
+        <span>${t("variance.daily").replace("{avg}", v.avgDailySwing)}</span>
       </div>
       <div class="helper hint-small">${t("variance.hint").replace("{count}", v.count)}</div>
     </div>
@@ -1574,7 +1365,7 @@ function renderWeightVariance() {
 function renderWeightPlateau() {
   const p = calcWeightPlateau(state.records);
   if (!p) return "";
-  const statusColor = p.isPlateau ? "var(--warn)" : "var(--ok)";
+  const statusColor = p.isPlateau ? "var(--warn, #f59e0b)" : "var(--ok, #10b981)";
   const statusIcon = p.isPlateau ? "⏸" : "📈";
   return `
     <div class="plateau-section">
@@ -1619,7 +1410,7 @@ function renderCalorieEstimate() {
   const renderPeriod = (data, labelKey) => {
     if (!data) return "";
     const status = data.dailyKcal > 50 ? "surplus" : data.dailyKcal < -50 ? "deficit" : "balanced";
-    const color = status === "deficit" ? "var(--ok)" : status === "surplus" ? "var(--warn)" : "var(--text)";
+    const color = status === "deficit" ? "var(--ok, #10b981)" : status === "surplus" ? "var(--warn, #f59e0b)" : "var(--text)";
     return `
       <div class="calorie-card">
         <div class="calorie-label">${t("calorie." + labelKey)}</div>
@@ -1643,7 +1434,7 @@ function renderCalorieEstimate() {
 function renderMomentumScore() {
   const m = calcMomentumScore(state.records, state.settings.goalWeight);
   if (!m) return "";
-  const color = m.level === "great" ? "var(--ok)" : m.level === "good" ? "var(--accent)" : m.level === "fair" ? "var(--warn)" : "var(--error)";
+  const color = m.level === "great" ? "var(--ok, #10b981)" : m.level === "good" ? "var(--accent)" : m.level === "fair" ? "var(--warn, #f59e0b)" : "var(--error, #ef4444)";
   const pct = m.score;
   return `
     <div class="momentum-section">
@@ -1685,16 +1476,16 @@ function renderSeasonality() {
     if (avg === null) return `<div class="season-bar-wrap"><div class="season-bar-label">${t("season.month." + (i + 1))}</div><div class="season-bar" style="height:0"></div></div>`;
     const diff = avg - s.overallAvg;
     const pct = Math.min(100, Math.max(5, 50 + diff * 10));
-    const color = i === s.lightestMonth ? "var(--ok)" : i === s.heaviestMonth ? "var(--warn)" : "var(--accent)";
-    return `<div class="season-bar-wrap"><div class="season-bar" style="height:${pct}%;background:${color};" title="${Number(avg).toFixed(1)}kg"></div><div class="season-bar-label">${t("season.month." + (i + 1))}</div></div>`;
+    const color = i === s.lightestMonth ? "var(--ok, #10b981)" : i === s.heaviestMonth ? "var(--warn, #f59e0b)" : "var(--accent)";
+    return `<div class="season-bar-wrap"><div class="season-bar" style="height:${pct}%;background:${color};" title="${avg}kg"></div><div class="season-bar-label">${t("season.month." + (i + 1))}</div></div>`;
   }).join("");
   return `
     <div class="season-section">
       <div class="helper">${t("season.title")}</div>
       <div class="season-chart">${bars}</div>
       <div class="season-info">
-        <div>${t("season.lightest").replace("{month}", s.lightestMonth + 1).replace("{avg}", Number(s.monthAvgs[s.lightestMonth]).toFixed(1))}</div>
-        <div>${t("season.heaviest").replace("{month}", s.heaviestMonth + 1).replace("{avg}", Number(s.monthAvgs[s.heaviestMonth]).toFixed(1))}</div>
+        <div>${t("season.lightest").replace("{month}", s.lightestMonth + 1).replace("{avg}", s.monthAvgs[s.lightestMonth])}</div>
+        <div>${t("season.heaviest").replace("{month}", s.heaviestMonth + 1).replace("{avg}", s.monthAvgs[s.heaviestMonth])}</div>
         <div>${t("season.range").replace("{range}", s.seasonalRange)}</div>
       </div>
       <div class="helper hint-small">${t("season.hint")}</div>
@@ -1709,7 +1500,7 @@ function renderWeightDistribution() {
     const pct = d.maxCount > 0 ? Math.round((b.count / d.maxCount) * 100) : 0;
     const isCurrent = i === d.latestBucket;
     const isMode = i === d.modeBucket;
-    const color = isCurrent ? "var(--accent)" : isMode ? "var(--ok)" : "color-mix(in srgb, var(--accent) 40%, transparent)";
+    const color = isCurrent ? "var(--accent)" : isMode ? "var(--ok, #10b981)" : "color-mix(in srgb, var(--accent) 40%, transparent)";
     return `<div class="dist-bar-wrap">
       ${isCurrent ? `<div class="dist-current-marker">${t("dist.current")}</div>` : ""}
       <div class="dist-bar" style="height:${Math.max(2, pct)}%;background:${color};" title="${b.start}-${b.end}kg: ${b.count}"></div>
@@ -1737,11 +1528,11 @@ function renderDayOfWeekChange() {
     const pct = Math.round((Math.abs(avg) / maxAbs) * 50);
     const isGain = avg > 0.01;
     const isLoss = avg < -0.01;
-    const color = isLoss ? "var(--ok)" : isGain ? "var(--warn)" : "var(--text)";
+    const color = isLoss ? "var(--ok, #10b981)" : isGain ? "var(--warn, #f59e0b)" : "var(--text)";
     const isBest = i === d.bestDay;
     const isWorst = i === d.worstDay;
     return `<div class="dow-change-col ${isBest ? "best" : ""} ${isWorst ? "worst" : ""}">
-      <div class="dow-change-val" style="color:${color};">${avg > 0 ? "+" : ""}${Number(avg).toFixed(2)}</div>
+      <div class="dow-change-val" style="color:${color};">${avg > 0 ? "+" : ""}${avg}</div>
       <div class="dow-change-bar-track"><div class="dow-change-bar" style="height:${pct}%;background:${color};"></div></div>
       <div class="dow-change-label">${t("day." + i)}</div>
     </div>`;
@@ -1751,8 +1542,8 @@ function renderDayOfWeekChange() {
       <div class="helper">${t("dowChange.title")}</div>
       <div class="dow-change-chart">${bars}</div>
       <div class="dow-change-info">
-        ${d.bestDay !== null ? `<div>${t("dowChange.best").replace("{day}", t("day." + d.bestDay)).replace("{avg}", Number(d.avgs[d.bestDay]).toFixed(2))}</div>` : ""}
-        ${d.worstDay !== null ? `<div>${t("dowChange.worst").replace("{day}", t("day." + d.worstDay)).replace("{avg}", Number(d.avgs[d.worstDay]).toFixed(2))}</div>` : ""}
+        ${d.bestDay !== null ? `<div>${t("dowChange.best").replace("{day}", t("day." + d.bestDay)).replace("{avg}", d.avgs[d.bestDay])}</div>` : ""}
+        ${d.worstDay !== null ? `<div>${t("dowChange.worst").replace("{day}", t("day." + d.worstDay)).replace("{avg}", d.avgs[d.worstDay])}</div>` : ""}
       </div>
       <div class="helper hint-small">${t("dowChange.hint")}</div>
     </div>
@@ -1784,8 +1575,8 @@ function renderPersonalRecords() {
 function renderWeightRegression() {
   const reg = calcWeightRegression(state.records);
   if (!reg) return "";
-  const dirColor = reg.direction === "losing" ? "var(--ok)" : reg.direction === "gaining" ? "var(--warn)" : "var(--text)";
-  const fitColor = reg.fit === "strong" ? "var(--ok)" : reg.fit === "moderate" ? "var(--warn)" : "var(--text)";
+  const dirColor = reg.direction === "losing" ? "var(--ok, #10b981)" : reg.direction === "gaining" ? "var(--warn, #f59e0b)" : "var(--text)";
+  const fitColor = reg.fit === "strong" ? "var(--ok, #10b981)" : reg.fit === "moderate" ? "var(--warn, #f59e0b)" : "var(--text)";
   const r2Pct = Math.round(reg.r2 * 100);
   return `
     <div class="regression-section">
@@ -1811,7 +1602,7 @@ function renderWeightRegression() {
 function renderBMIHistory() {
   const bh = calcBMIHistory(state.records);
   if (!bh) return "";
-  const zoneColors = { under: "var(--accent-3)", normal: "var(--ok)", over: "var(--warn)", obese: "var(--error)" };
+  const zoneColors = { under: "#3b82f6", normal: "#10b981", over: "#f59e0b", obese: "#ef4444" };
   const zoneBar = ["under", "normal", "over", "obese"]
     .filter((z) => bh.zones[z] > 0)
     .map((z) => `<div class="bmi-hist-seg" style="width:${bh.zones[z]}%;background:${zoneColors[z]};" title="${t("bmi." + z)} ${bh.zones[z]}%"></div>`)
@@ -1839,14 +1630,14 @@ function renderBMIHistory() {
 function renderWeightHeatmap() {
   const hm = calcWeightHeatmap(state.records);
   if (!hm) return "";
-  const dayLabels = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].map((d) => t("recCal." + d));
+  const dayLabels = ["S", "M", "T", "W", "T", "F", "S"];
   const rows = dayLabels.map((label, dayIdx) => {
     const cells = hm.weeks.map((week) => {
       const day = week[dayIdx];
       if (day.isFuture) return `<div class="heatmap-cell" data-level="0"></div>`;
       const dir = day.direction || "";
       const title = day.weight != null
-        ? `${day.date}: ${Number(day.weight).toFixed(1)}kg${day.change != null ? ` (${day.change > 0 ? "+" : ""}${day.change.toFixed(1)}kg)` : ""}`
+        ? `${day.date}: ${day.weight}kg${day.change != null ? ` (${day.change > 0 ? "+" : ""}${day.change}kg)` : ""}`
         : `${day.date}: ${t("heatmap.noData")}`;
       return `<div class="heatmap-cell ${dir}" data-level="${day.level}" title="${title}"></div>`;
     }).join("");
@@ -1883,7 +1674,7 @@ function renderStreakRewards() {
     <div class="streak-reward-section">
       <div class="helper">${t("streakReward.title")}</div>
       <div class="streak-reward-main">
-        <span class="streak-reward-icon" aria-hidden="true">${icon}</span>
+        <span class="streak-reward-icon">${icon}</span>
         <div class="streak-reward-info">
           <div class="streak-reward-badge">${t("streakReward." + sr.level)}</div>
           <div class="streak-reward-days">${t("streakReward.days").replace("{streak}", sr.streak)}</div>
@@ -1896,1952 +1687,6 @@ function renderStreakRewards() {
       <div class="helper hint-small">${t("streakReward.hint")}</div>
     </div>
   `;
-}
-
-function renderWeightConfidence() {
-  const fc = calcWeightConfidence(state.records);
-  if (!fc) return "";
-  const confColors = { high: "var(--ok)", medium: "var(--warn)", low: "var(--error)" };
-  const confColor = confColors[fc.confidence] || confColors.low;
-  const rows = fc.forecasts.map((f) => `
-    <div class="forecast-row">
-      <span class="forecast-label">${t("forecast.days").replace("{days}", f.days)}</span>
-      <span class="forecast-value">${t("forecast.predicted").replace("{wt}", f.predicted)}</span>
-      <span class="forecast-range">${t("forecast.range").replace("{low}", f.low).replace("{high}", f.high)}</span>
-    </div>
-  `).join("");
-  return `
-    <div class="forecast-section">
-      <div class="helper">${t("forecast.title")}</div>
-      <div class="forecast-meta">
-        <span class="forecast-rate">${t("forecast.rate").replace("{rate}", fc.weeklyRate > 0 ? "+" + fc.weeklyRate : String(fc.weeklyRate))}</span>
-        <span class="forecast-conf" style="color:${confColor};">${t("forecast.confidence")}: ${t("forecast." + fc.confidence)}</span>
-      </div>
-      <div class="forecast-table">${rows}</div>
-      <div class="helper hint-small">${t("forecast.hint").replace("{n}", fc.dataPoints)}</div>
-    </div>
-  `;
-}
-
-function renderProgressSummary() {
-  const ps = calcProgressSummary(state.records);
-  if (!ps) return "";
-  const trendColors = { improving: "var(--ok)", gaining: "var(--error)", stable: "var(--accent-3)" };
-  const trendColor = trendColors[ps.trend] || trendColors.stable;
-  const changeStr = ps.change > 0 ? "+" + ps.change : String(ps.change);
-  const totalStr = ps.totalChange > 0 ? "+" + ps.totalChange : String(ps.totalChange);
-  return `
-    <div class="progress-section">
-      <div class="helper">${t("progress.title")}</div>
-      <div class="progress-period">${t("progress.period").replace("{from}", ps.firstDate).replace("{to}", ps.lastDate).replace("{days}", ps.totalDays).replace("{count}", ps.recordCount)}</div>
-      <div class="progress-compare">
-        <div class="progress-half">
-          <span class="progress-half-label">${t("progress.firstHalf")}</span>
-          <span class="progress-half-value">${ps.firstHalfAvg}kg</span>
-        </div>
-        <div class="progress-arrow">${ps.change < 0 ? "↓" : ps.change > 0 ? "↑" : "→"}</div>
-        <div class="progress-half">
-          <span class="progress-half-label">${t("progress.secondHalf")}</span>
-          <span class="progress-half-value">${ps.secondHalfAvg}kg</span>
-        </div>
-      </div>
-      <div class="progress-stats">
-        <span>${t("progress.change")}: <strong style="color:${trendColor}">${changeStr}kg</strong></span>
-        <span>${t("progress.totalChange").replace("{change}", totalStr)}</span>
-      </div>
-      <div class="progress-trend" style="color:${trendColor}">${t("progress." + ps.trend)}</div>
-      <div class="progress-stability">${ps.moreStable ? t("progress.moreStable") : t("progress.lessStable")}</div>
-    </div>
-  `;
-}
-
-function renderMilestoneTimeline() {
-  const tl = calcMilestoneTimeline(state.records);
-  if (!tl || tl.events.length === 0) return "";
-  const icons = { low: "⬇️", mark: "🎯", bmi: "📊" };
-  const items = tl.events.map((e) => {
-    let label = "";
-    if (e.type === "low") label = t("timeline.low").replace("{wt}", Number(e.weight).toFixed(1));
-    else if (e.type === "mark") label = t("timeline.mark").replace("{mark}", e.mark);
-    else if (e.type === "bmi") {
-      label = e.to === "normal"
-        ? t("timeline.bmi.normal")
-        : t("timeline.bmi.change").replace("{from}", e.from).replace("{to}", e.to);
-    }
-    return `<div class="timeline-item"><span class="timeline-icon" aria-hidden="true">${icons[e.type]}</span><div class="timeline-content"><span class="timeline-date">${e.date}</span><span class="timeline-label">${label}</span></div></div>`;
-  }).join("");
-  return `
-    <div class="timeline-section">
-      <div class="helper">${t("timeline.title")}</div>
-      <div class="timeline-list">${items}</div>
-      <div class="helper hint-small">${t("timeline.hint").replace("{count}", tl.events.length)}</div>
-    </div>
-  `;
-}
-
-function renderVolatilityIndex() {
-  const vi = calcVolatilityIndex(state.records);
-  if (!vi) return "";
-  const levelColors = { low: "var(--ok)", moderate: "var(--warn)", high: "var(--error)" };
-  const color = levelColors[vi.level] || levelColors.moderate;
-  // Scale bar: map overall avg to 0-100 (0.3=low threshold, 0.8=high threshold)
-  const pct = Math.min(100, Math.round((vi.overall / 1.2) * 100));
-  return `
-    <div class="volatility-section">
-      <div class="helper">${t("volatility.title")}</div>
-      <div class="volatility-badge" style="color:${color}">${t("volatility." + vi.level)}</div>
-      <div class="volatility-bar-track">
-        <div class="volatility-bar-fill" style="width:${pct}%;background:${color}"></div>
-      </div>
-      <div class="volatility-stats">
-        <span>${t("volatility.overall").replace("{val}", Number(vi.overall).toFixed(1))}</span>
-        <span>${t("volatility.recent").replace("{val}", Number(vi.recent).toFixed(1))}</span>
-        <span>${t("volatility.max").replace("{val}", Number(vi.maxSwing).toFixed(1))}</span>
-      </div>
-      <div class="volatility-trend">${t("volatility." + vi.trend)}</div>
-      <div class="helper hint-small">${t("volatility.hint")}</div>
-    </div>
-  `;
-}
-
-function renderPeriodComparison() {
-  const pc = calcPeriodComparison(state.records);
-  if (!pc) return "";
-
-  function renderPair(label, period, curLabel, prevLabel) {
-    if (!period.current && !period.previous) return "";
-    const cur = period.current;
-    const prev = period.previous;
-    const diffStr = period.avgDiff != null
-      ? (period.avgDiff > 0 ? "+" + period.avgDiff.toFixed(1) : period.avgDiff.toFixed(1))
-      : "—";
-    const diffColor = period.avgDiff != null
-      ? (period.avgDiff < 0 ? "var(--ok)" : period.avgDiff > 0 ? "var(--error)" : "var(--text)")
-      : "var(--text)";
-    return `
-      <div class="compare-pair">
-        <div class="compare-pair-title">${label}</div>
-        <div class="compare-row">
-          <div class="compare-cell">
-            <span class="compare-label">${curLabel}</span>
-            <span class="compare-value">${cur ? t("compare.avg").replace("{val}", cur.avg) : t("compare.noData")}</span>
-            ${cur ? `<span class="compare-count">${t("compare.records").replace("{n}", cur.count)}</span>` : ""}
-          </div>
-          <div class="compare-cell">
-            <span class="compare-label">${prevLabel}</span>
-            <span class="compare-value">${prev ? t("compare.avg").replace("{val}", prev.avg) : t("compare.noData")}</span>
-            ${prev ? `<span class="compare-count">${t("compare.records").replace("{n}", prev.count)}</span>` : ""}
-          </div>
-        </div>
-        ${period.avgDiff != null ? `<div class="compare-diff" style="color:${diffColor}">${t("compare.diff").replace("{val}", diffStr)}</div>` : ""}
-      </div>
-    `;
-  }
-
-  return `
-    <div class="compare-section">
-      <div class="helper">${t("compare.title")}</div>
-      ${renderPair(t("compare.weekly"), pc.weekly, t("compare.thisWeek"), t("compare.lastWeek"))}
-      ${renderPair(t("compare.monthly"), pc.monthly, t("compare.thisMonth"), t("compare.lastMonth"))}
-    </div>
-  `;
-}
-
-function renderGoalCountdown() {
-  const goalWeight = Number(state.settings.goalWeight);
-  if (!goalWeight) return "";
-  const gc = calcGoalCountdown(state.records, goalWeight);
-  if (!gc) return "";
-  if (gc.reached) {
-    return `
-      <div class="countdown-section countdown-reached">
-        <div class="helper">${t("countdown.title")}</div>
-        <div class="countdown-congrats">${t("countdown.reached")}</div>
-      </div>
-    `;
-  }
-  return `
-    <div class="countdown-section">
-      <div class="helper">${t("countdown.title")}</div>
-      <div class="countdown-current">${t("countdown.current").replace("{wt}", Number(gc.latest).toFixed(1)).replace("{goal}", Number(gc.goal).toFixed(1))}</div>
-      <div class="countdown-remaining">${t("countdown.remaining").replace("{val}", Number(gc.absRemaining).toFixed(1))}</div>
-      <div class="countdown-bar-track">
-        <div class="countdown-bar-fill" style="width:${gc.pct}%"></div>
-      </div>
-      <div class="countdown-pct">${t("countdown.pct").replace("{pct}", Math.round(gc.pct))}</div>
-      <div class="countdown-eta">${gc.etaDays ? t("countdown.eta").replace("{days}", gc.etaDays) : t("countdown.noEta")}</div>
-    </div>
-  `;
-}
-
-function renderBodyComposition() {
-  const bc = calcBodyComposition(state.records);
-  if (!bc) return "";
-  const bfStr = bc.bfChange > 0 ? "+" + bc.bfChange : String(bc.bfChange);
-  const fatStr = bc.fatMassChange > 0 ? "+" + bc.fatMassChange : String(bc.fatMassChange);
-  const leanStr = bc.leanMassChange > 0 ? "+" + bc.leanMassChange : String(bc.leanMassChange);
-  return `
-    <div class="body-comp-section">
-      <div class="helper">${t("bodyComp.title")}</div>
-      <div class="body-comp-trend body-comp-trend-${bc.trend}">${t("bodyComp." + bc.trend)}</div>
-      <div class="body-comp-bf">${t("bodyComp.bf").replace("{first}", bc.firstBf).replace("{latest}", bc.latestBf).replace("{change}", bfStr)}</div>
-      <div class="body-comp-masses">
-        <div class="body-comp-mass fat">${t("bodyComp.fatMass").replace("{change}", fatStr)}</div>
-        <div class="body-comp-mass lean">${t("bodyComp.leanMass").replace("{change}", leanStr)}</div>
-      </div>
-      <div class="helper hint-small">${t("bodyComp.hint").replace("{n}", bc.dataPoints)}</div>
-    </div>
-  `;
-}
-
-function renderShareSummary() {
-  const summary = generateWeightSummary(state.records, state.profile);
-  if (!summary) return "";
-  const changeStr = summary.weight.totalChange > 0 ? "+" + summary.weight.totalChange : String(summary.weight.totalChange);
-  const lines = [
-    t("share.period").replace("{from}", summary.period.from).replace("{to}", summary.period.to).replace("{days}", summary.period.days),
-    t("share.weight").replace("{first}", summary.weight.first).replace("{latest}", summary.weight.latest).replace("{change}", changeStr),
-    t("share.range").replace("{min}", summary.weight.min).replace("{max}", summary.weight.max).replace("{avg}", summary.weight.avg),
-    t("share.records").replace("{n}", summary.records),
-  ];
-  if (summary.bmi) {
-    lines.push(t("share.bmi").replace("{bmi}", summary.bmi.bmi).replace("{zone}", summary.bmi.zone));
-  }
-  lines.push(t("share.footer"));
-  const text = lines.join("\n");
-  return `
-    <div class="share-summary-section">
-      <div class="helper">${t("share.title")}</div>
-      <pre class="share-summary-text">${text}</pre>
-      <button type="button" class="btn ghost share-summary-btn" data-action="copy-summary" data-text="${escapeAttr(text)}">${t("share.btn")}</button>
-    </div>
-  `;
-}
-
-function renderDuplicateCheck() {
-  const dd = detectDuplicates(state.records);
-  if (dd.duplicates.length === 0 && dd.suspicious.length === 0) return "";
-  const items = [];
-  for (const d of dd.duplicates) {
-    items.push(`<div class="dupes-item dupes-warn">${t("dupes.duplicate").replace("{date}", d.date).replace("{count}", d.count)}</div>`);
-  }
-  for (const s of dd.suspicious) {
-    items.push(`<div class="dupes-item dupes-info">${t("dupes.suspicious").replace("{weight}", s.weight).replace("{count}", s.count).replace("{from}", s.from).replace("{to}", s.to)}</div>`);
-  }
-  return `
-    <div class="dupes-section">
-      <div class="helper">${t("dupes.title")}</div>
-      ${items.join("")}
-    </div>
-  `;
-}
-
-function renderWeeklyAverages() {
-  const weeks = calcWeeklyAverages(state.records, 8);
-  const withData = weeks.filter((w) => w.avg !== null);
-  if (withData.length < 2) return "";
-  const allAvgs = withData.map((w) => w.avg);
-  const minAvg = Math.min(...allAvgs);
-  const maxAvg = Math.max(...allAvgs);
-  const range = maxAvg - minAvg || 1;
-  const bars = weeks.map((w, i) => {
-    if (w.avg === null) {
-      return `<div class="weekly-avg-bar-wrap"><div class="weekly-avg-bar empty"></div><div class="weekly-avg-label">${t("weeklyAvg.noData")}</div></div>`;
-    }
-    const pct = Math.max(10, ((w.avg - minAvg) / range) * 80 + 10);
-    const prev = i > 0 ? weeks[i - 1] : null;
-    const change = prev && prev.avg !== null ? Math.round((w.avg - prev.avg) * 10) / 10 : null;
-    const changeClass = change !== null ? (change < -0.1 ? "down" : change > 0.1 ? "up" : "flat") : "";
-    const startLabel = w.weekStart.slice(5).replace("-", "/");
-    return `<div class="weekly-avg-bar-wrap">
-      <div class="weekly-avg-value">${w.avg.toFixed(1)}</div>
-      <div class="weekly-avg-bar ${changeClass}" style="height:${pct}%"></div>
-      <div class="weekly-avg-label">${startLabel}</div>
-      ${change !== null ? `<div class="weekly-avg-change ${changeClass}">${change > 0 ? "+" : ""}${change.toFixed(1)}</div>` : ""}
-    </div>`;
-  });
-  return `
-    <div class="weekly-avg-section">
-      <div class="helper">${t("weeklyAvg.title")}</div>
-      <div class="weekly-avg-chart">${bars.join("")}</div>
-    </div>
-  `;
-}
-
-function renderRecordingCalendar() {
-  if (state.records.length === 0) return "";
-  const cal = calcMonthlyRecordingMap(state.records);
-  const todayStr = todayLocal();
-  const dayHeaders = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
-    .map((d) => `<div class="rec-cal-header">${t("recCal." + d)}</div>`).join("");
-  const firstDow = cal.days[0].dayOfWeek;
-  const blanks = Array.from({ length: firstDow }, () => `<div class="rec-cal-blank"></div>`).join("");
-  const cells = cal.days.map((d) => {
-    const isToday = d.date === todayStr;
-    const isFuture = d.date > todayStr;
-    const cls = isFuture ? "future" : d.recorded ? "recorded" : "missed";
-    const title = d.recorded ? `${d.date}: ${d.weight.toFixed(1)}kg` : d.date;
-    return `<div class="rec-cal-cell ${cls}${isToday ? " today" : ""}" title="${title}"><span>${d.day}</span></div>`;
-  }).join("");
-  const elapsed = cal.days.filter((d) => d.date <= todayStr).length;
-  const adjustedRate = elapsed > 0 ? Math.round((cal.recordedCount / elapsed) * 100) : 0;
-  const rateText = t("recCal.rate").replace("{rate}", adjustedRate).replace("{count}", cal.recordedCount).replace("{total}", elapsed);
-  return `
-    <div class="rec-cal-section">
-      <div class="helper">${t("recCal.title")}</div>
-      <div class="rec-cal-grid">${dayHeaders}${blanks}${cells}</div>
-      <div class="helper hint-small" style="margin-top:6px">${rateText}</div>
-    </div>
-  `;
-}
-
-function renderTrendIndicator() {
-  const trend = calcWeightTrendIndicator(state.records);
-  if (!trend) return "";
-  const arrow = trend.direction === "down" ? "↓" : trend.direction === "up" ? "↑" : "→";
-  const cls = trend.direction === "down" ? "trend-down" : trend.direction === "up" ? "trend-up" : "trend-stable";
-  let msg;
-  if (trend.direction === "down") {
-    msg = `${Math.abs(trend.change).toFixed(1)}kg ${t("trend.down")}`;
-  } else if (trend.direction === "up") {
-    msg = `+${trend.change.toFixed(1)}kg ${t("trend.up")}`;
-  } else {
-    msg = t("trend.stable");
-  }
-  const recentText = t("trend.recent").replace("{avg}", trend.recentAvg.toFixed(1));
-  return `
-    <div class="trend-card ${cls}">
-      <span class="trend-arrow">${arrow}</span>
-      <div class="trend-text">
-        <div class="trend-msg">${msg}</div>
-        <div class="trend-detail">${recentText}</div>
-      </div>
-    </div>
-  `;
-}
-
-function renderNoteTagStats() {
-  const stats = calcNoteTagStats(state.records);
-  if (stats.tags.length === 0) return "";
-  const tagIcons = { exercise: "🏃", diet: "🥗", cheatday: "🍕", sick: "🤒", travel: "✈️", stress: "😰", sleep: "😴", alcohol: "🍺" };
-  const rows = stats.tags.slice(0, 6).map((t_) => {
-    const icon = tagIcons[t_.tag] || "🏷️";
-    const changeSign = t_.avgChange > 0 ? "+" : "";
-    const changeClass = t_.avgChange < 0 ? "tag-stat-down" : t_.avgChange > 0 ? "tag-stat-up" : "";
-    return `<div class="tag-stat-row">
-      <span class="tag-stat-name">${icon} ${escapeAttr(t_.tag)}</span>
-      <span class="tag-stat-count">${t("tagStats.count").replace("{count}", t_.count).replace("{pct}", t_.pct)}</span>
-      <span class="tag-stat-change ${changeClass}">${changeSign}${t_.avgChange.toFixed(1)}kg</span>
-    </div>`;
-  }).join("");
-  return `
-    <div class="tag-stats-section">
-      <div class="helper">${t("tagStats.title")}</div>
-      ${rows}
-    </div>
-  `;
-}
-
-function renderIdealWeight() {
-  if (!state.profile.heightCm || state.records.length === 0) return "";
-  const latest = [...state.records].sort((a, b) => a.dt.localeCompare(b.dt)).pop();
-  const ideal = calcIdealWeightRange(Number(state.profile.heightCm), latest.wt);
-  if (!ideal) return "";
-  const zoneLabel = t("ideal." + ideal.zone);
-  const rangeText = t("ideal.range").replace("{min}", Number(ideal.minWeight).toFixed(1)).replace("{max}", Number(ideal.maxWeight).toFixed(1));
-  const currentText = t("ideal.current").replace("{weight}", Number(ideal.currentWeight).toFixed(1)).replace("{bmi}", Number(ideal.currentBMI).toFixed(1));
-  const centerText = t("ideal.center").replace("{mid}", Number(ideal.midWeight).toFixed(1));
-  // Position marker on a gradient bar
-  const idealStart = Math.round(((18.5 - 15) / 15) * 100);
-  const idealEnd = Math.round(((24.9 - 15) / 15) * 100);
-  return `
-    <div class="ideal-section">
-      <div class="helper">${t("ideal.title")}</div>
-      <div class="ideal-bar-container">
-        <div class="ideal-bar">
-          <div class="ideal-zone ideal-under" style="width:${idealStart}%"></div>
-          <div class="ideal-zone ideal-normal" style="width:${idealEnd - idealStart}%"></div>
-          <div class="ideal-zone ideal-over" style="width:${100 - idealEnd}%"></div>
-          <div class="ideal-marker" style="left:${ideal.position}%"></div>
-        </div>
-        <div class="ideal-labels">
-          <span>${t("ideal.underweight")}</span>
-          <span>${t("ideal.normal")}</span>
-          <span>${t("ideal.overweight")}</span>
-        </div>
-      </div>
-      <div class="helper hint-small">${currentText} — ${zoneLabel}</div>
-      <div class="helper hint-small">${rangeText}</div>
-      <div class="helper hint-small">${centerText}</div>
-    </div>
-  `;
-}
-
-function renderMonthlyAverages() {
-  const months = calcMonthlyAverages(state.records, 6);
-  const withData = months.filter((m) => m.avg !== null);
-  if (withData.length < 2) return "";
-  const allAvgs = withData.map((m) => m.avg);
-  const minAvg = Math.min(...allAvgs);
-  const maxAvg = Math.max(...allAvgs);
-  const range = maxAvg - minAvg || 1;
-  const bars = months.map((m, i) => {
-    if (m.avg === null) {
-      return `<div class="mavg-bar-wrap"><div class="mavg-bar empty"></div><div class="mavg-label">${t("monthAvg.label").replace("{m}", m.label.slice(5))}</div></div>`;
-    }
-    const pct = Math.max(10, ((m.avg - minAvg) / range) * 80 + 10);
-    const prev = i > 0 ? months[i - 1] : null;
-    const cls = prev && prev.avg !== null ? (m.avg < prev.avg ? "down" : m.avg > prev.avg ? "up" : "") : "";
-    return `<div class="mavg-bar-wrap">
-      <div class="mavg-value">${m.avg.toFixed(1)}</div>
-      <div class="mavg-bar ${cls}" style="height:${pct}%"></div>
-      <div class="mavg-label">${t("monthAvg.label").replace("{m}", m.label.slice(5))}</div>
-      <div class="mavg-count">${m.count}</div>
-    </div>`;
-  }).join("");
-  return `
-    <div class="mavg-section">
-      <div class="helper">${t("monthAvg.title")}</div>
-      <div class="mavg-chart">${bars}</div>
-    </div>
-  `;
-}
-
-function renderLongTermProgress() {
-  const progress = calcLongTermProgress(state.records);
-  if (!progress || progress.periods.every((p) => !p.hasData)) return "";
-  const labelMap = { "1m": "ltp.1m", "3m": "ltp.3m", "6m": "ltp.6m", "1y": "ltp.1y", "all": "ltp.all" };
-  const rows = progress.periods
-    .filter((p) => p.hasData)
-    .map((p) => {
-      const sign = p.change > 0 ? "+" : "";
-      const cls = p.change < 0 ? "down" : p.change > 0 ? "up" : "";
-      return `<div class="ltp-row">
-        <span class="ltp-label">${t(labelMap[p.label])}</span>
-        <span class="ltp-past">${p.pastWeight.toFixed(1)}</span>
-        <span class="ltp-arrow">→</span>
-        <span class="ltp-current">${progress.current.toFixed(1)}</span>
-        <span class="ltp-change ${cls}">${sign}${p.change.toFixed(1)}kg (${sign}${p.pctChange}%)</span>
-      </div>`;
-    })
-    .join("");
-  return `
-    <div class="ltp-section">
-      <div class="helper">${t("ltp.title")}</div>
-      ${rows}
-    </div>
-  `;
-}
-
-function renderWeightFluctuation() {
-  const fluct = calcWeightFluctuation(state.records);
-  if (!fluct) return "";
-  const withData = fluct.periods.filter((p) => p.hasData);
-  if (withData.length === 0) return "";
-  const labelMap = { "7d": "fluct.7d", "30d": "fluct.30d" };
-  const rows = withData.map((p) => {
-    const pos = Math.max(0, Math.min(100, p.position));
-    return `<div class="fluct-row">
-      <span class="fluct-label">${t(labelMap[p.label])}</span>
-      <div class="fluct-bar-wrap">
-        <span class="fluct-min">${p.min.toFixed(1)}</span>
-        <div class="fluct-bar">
-          <div class="fluct-marker" style="left:${pos}%"></div>
-        </div>
-        <span class="fluct-max">${p.max.toFixed(1)}</span>
-      </div>
-      <span class="fluct-range">${t("fluct.range")} ${p.range.toFixed(1)}kg</span>
-    </div>`;
-  }).join("");
-  return `
-    <div class="fluct-section">
-      <div class="helper">${t("fluct.title")}</div>
-      ${rows}
-    </div>
-  `;
-}
-
-function renderWeightAnomalies() {
-  const anomalies = calcWeightAnomalies(state.records);
-  if (anomalies.length === 0) return "";
-  const rows = anomalies.slice(0, 5).map((a) => {
-    const text = t("anomaly.entry")
-      .replace("{date}", a.dt.slice(5).replace("-", "/"))
-      .replace("{wt}", a.wt.toFixed(1))
-      .replace("{expected}", a.expected.toFixed(1))
-      .replace("{diff}", a.diff.toFixed(1));
-    return `<div class="anomaly-row">⚠️ ${text}</div>`;
-  }).join("");
-  return `
-    <div class="anomaly-section">
-      <div class="helper">${t("anomaly.title")}</div>
-      <div class="helper hint-small">${t("anomaly.hint")}</div>
-      ${rows}
-    </div>
-  `;
-}
-
-function renderSuccessRate() {
-  const sr = calcSuccessRate(state.records);
-  if (!sr) return "";
-  const total = sr.down + sr.same + sr.up;
-  const downPct = Math.round((sr.down / total) * 100);
-  const samePct = Math.round((sr.same / total) * 100);
-  const upPct = 100 - downPct - samePct;
-  return `
-    <div class="success-section">
-      <div class="helper">${t("success.title")}</div>
-      <div class="success-rate-big">${sr.successRate}%</div>
-      <div class="success-bar">
-        <div class="success-seg down" style="width:${downPct}%" title="${t("success.down")} ${downPct}%"></div>
-        <div class="success-seg same" style="width:${samePct}%" title="${t("success.same")} ${samePct}%"></div>
-        <div class="success-seg up" style="width:${upPct}%" title="${t("success.up")} ${upPct}%"></div>
-      </div>
-      <div class="success-legend">
-        <span class="success-leg-item"><span class="success-dot down"></span>${t("success.down")} ${sr.down}</span>
-        <span class="success-leg-item"><span class="success-dot same"></span>${t("success.same")} ${sr.same}</span>
-        <span class="success-leg-item"><span class="success-dot up"></span>${t("success.up")} ${sr.up}</span>
-      </div>
-      ${sr.recentRate !== null ? `<div class="helper hint-small" style="margin-top:4px;">${t("success.recent")}: ${sr.recentRate}%</div>` : ""}
-    </div>
-  `;
-}
-
-function renderRecordingRate() {
-  const rr = calcRecordingRate(state.records);
-  if (!rr) return "";
-  const summary = t("recRate.summary").replace("{recorded}", rr.recordedDays).replace("{total}", rr.totalDays);
-  const weekBars = rr.weeks.map((w) => {
-    const pct = w.total > 0 ? Math.round((w.recorded / w.total) * 100) : 0;
-    return `<div class="rr-week">
-      <div class="rr-bar-track"><div class="rr-bar-fill" style="width:${pct}%"></div></div>
-      <span class="rr-week-label">${w.recorded}/${w.total}</span>
-    </div>`;
-  }).join("");
-  return `
-    <div class="rr-section">
-      <div class="helper">${t("recRate.title")}</div>
-      <div class="rr-rate-big">${rr.rate}%</div>
-      <div class="helper hint-small">${summary}</div>
-      <div class="helper hint-small" style="margin-top:6px;">${t("recRate.weeks")}</div>
-      <div class="rr-weeks">${weekBars}</div>
-    </div>
-  `;
-}
-
-function renderMilestoneHistory() {
-  const mh = calcMilestoneHistory(state.records);
-  if (!mh || mh.milestones.length === 0) return "";
-  const dirLabel = mh.direction === "down" ? t("msHist.down") : t("msHist.up");
-  const recent = mh.milestones.slice(-8).reverse();
-  const rows = recent.map((m) => {
-    const text = t("msHist.reached")
-      .replace("{kg}", m.kg)
-      .replace("{date}", m.date.slice(5).replace("-", "/"))
-      .replace("{days}", m.daysFromStart);
-    return `<div class="msh-row">${mh.direction === "down" ? "📉" : "📈"} ${text}</div>`;
-  }).join("");
-  return `
-    <div class="msh-section">
-      <div class="helper">${t("msHist.title")}</div>
-      <div class="helper hint-small">${dirLabel}</div>
-      ${rows}
-    </div>
-  `;
-}
-
-function renderWeightJourney() {
-  const journey = calcWeightJourney(state.records);
-  if (!journey || journey.phases.length === 0) return "";
-  const typeLabel = { loss: "journey.loss", gain: "journey.gain", maintain: "journey.maintain" };
-  const typeIcon = { loss: "📉", gain: "📈", maintain: "➡️" };
-  const typeCls = { loss: "loss", gain: "gain", maintain: "maintain" };
-  const rows = journey.phases.slice(-6).map((p) => {
-    const sign = p.change > 0 ? "+" : "";
-    return `<div class="jny-row ${typeCls[p.type]}">
-      <span class="jny-icon">${typeIcon[p.type]}</span>
-      <span class="jny-type">${t(typeLabel[p.type])}</span>
-      <span class="jny-dates">${p.startDate.slice(5).replace("-", "/")}〜${p.endDate.slice(5).replace("-", "/")}</span>
-      <span class="jny-change">${sign}${p.change.toFixed(1)}kg</span>
-      <span class="jny-days">${p.days}d</span>
-    </div>`;
-  }).join("");
-  const totalSign = journey.totalChange > 0 ? "+" : "";
-  return `
-    <div class="jny-section">
-      <div class="helper">${t("journey.title")}</div>
-      ${rows}
-      <div class="jny-total">${t("journey.total")}: ${totalSign}${journey.totalChange.toFixed(1)}kg</div>
-    </div>
-  `;
-}
-
-function renderGoalScenarios() {
-  const goalWeight = Number(state.settings.goalWeight);
-  const scenarios = calcGoalScenarios(state.records, goalWeight);
-  if (!scenarios) return "";
-  const labelMap = { gentle: "scenario.gentle", moderate: "scenario.moderate", aggressive: "scenario.aggressive" };
-  const rows = scenarios.scenarios.map((s) => {
-    const weeksText = t("scenario.weeks").replace("{weeks}", s.weeks);
-    return `<div class="scn-row">
-      <span class="scn-label">${t(labelMap[s.label])}</span>
-      <span class="scn-rate">${Math.abs(s.pace).toFixed(2)}kg${t("scenario.perWeek")}</span>
-      <span class="scn-weeks">${weeksText}</span>
-      <span class="scn-date">${s.date.slice(2).replace(/-/g, "/")}</span>
-    </div>`;
-  }).join("");
-  return `
-    <div class="scn-section">
-      <div class="helper">${t("scenario.title")}</div>
-      ${rows}
-    </div>
-  `;
-}
-
-function renderStreakCalendar() {
-  if (state.records.length < 3) return "";
-  const cal = calcStreakCalendar(state.records, 12);
-  const cells = cal.weeks.map((week) => {
-    const days = week.map((d) => {
-      const cls = d.recorded ? "sc-day filled" : "sc-day";
-      const todayCls = d.isToday ? " sc-today" : "";
-      return `<div class="${cls}${todayCls}" title="${d.date}"></div>`;
-    }).join("");
-    return `<div class="sc-week">${days}</div>`;
-  }).join("");
-  const summary = t("streakCal.summary")
-    .replace("{recorded}", cal.totalRecorded)
-    .replace("{total}", cal.totalDays);
-  return `
-    <div class="sc-section">
-      <div class="helper">${t("streakCal.title")}</div>
-      <div class="sc-grid">${cells}</div>
-      <div class="helper hint-small">${summary}</div>
-    </div>
-  `;
-}
-
-function renderMovingAvgCrossover() {
-  const data = calcMovingAvgCrossover(state.records);
-  if (!data.shortMA) return "";
-
-  const trendLabel = data.currentTrend === "downtrend" ? t("cross.downtrend")
-    : data.currentTrend === "uptrend" ? t("cross.uptrend") : t("cross.neutral");
-  const trendIcon = data.currentTrend === "downtrend" ? "📉" : data.currentTrend === "uptrend" ? "📈" : "➡️";
-  const trendCls = data.currentTrend === "downtrend" ? "mac-down" : data.currentTrend === "uptrend" ? "mac-up" : "mac-neutral";
-
-  const crossRows = data.crossovers.length
-    ? data.crossovers.slice(-5).reverse().map((c) => {
-        const icon = c.type === "golden" ? "🟢" : "🔴";
-        const label = c.type === "golden" ? t("cross.golden") : t("cross.death");
-        return `<div class="mac-row"><span class="mac-icon">${icon}</span><span class="mac-date">${c.date.slice(5).replace("-", "/")}</span><span class="mac-label">${label}</span></div>`;
-      }).join("")
-    : `<div class="helper hint-small">${t("cross.none")}</div>`;
-
-  return `
-    <div class="mac-section">
-      <div class="helper">${t("cross.title")}</div>
-      <div class="mac-trend ${trendCls}">
-        <span class="mac-trend-icon">${trendIcon}</span>
-        <span class="mac-trend-text">${trendLabel}</span>
-      </div>
-      <div class="mac-ma-row">
-        <span>${t("cross.shortMA")}: <strong>${data.shortMA.toFixed(1)}kg</strong></span>
-        <span>${t("cross.longMA")}: <strong>${data.longMA.toFixed(1)}kg</strong></span>
-      </div>
-      ${crossRows}
-    </div>
-  `;
-}
-
-function renderPredictionAccuracy() {
-  const data = calcPredictionAccuracy(state.records);
-  if (data.accuracy === null) return "";
-
-  const ratingLabels = { excellent: t("pred.excellent"), good: t("pred.good"), fair: t("pred.fair"), poor: t("pred.poor") };
-  const ratingColors = { excellent: "pa-excellent", good: "pa-good", fair: "pa-fair", poor: "pa-poor" };
-  const ratingLabel = ratingLabels[data.rating] || data.rating;
-  const ratingCls = ratingColors[data.rating] || "";
-
-  const recentRows = data.predictions.slice(-5).reverse().map((p) =>
-    `<div class="pa-row"><span class="pa-date">${p.date.slice(5).replace("-", "/")}</span><span class="pa-pred">${p.predicted.toFixed(1)}</span><span class="pa-arrow">→</span><span class="pa-actual">${p.actual.toFixed(1)}</span><span class="pa-err ${p.error <= 0.5 ? "pa-hit" : "pa-miss"}">±${p.error.toFixed(1)}</span></div>`
-  ).join("");
-
-  return `
-    <div class="pa-section">
-      <div class="helper">${t("pred.title")}</div>
-      <div class="pa-summary">
-        <div class="pa-stat">
-          <span class="pa-big ${ratingCls}">${data.accuracy}%</span>
-          <span class="pa-label">${t("pred.accuracy")}</span>
-        </div>
-        <div class="pa-stat">
-          <span class="pa-big">${data.avgError.toFixed(1)}kg</span>
-          <span class="pa-label">${t("pred.avgError")}</span>
-        </div>
-        <div class="pa-badge ${ratingCls}">${ratingLabel}</div>
-      </div>
-      <div class="pa-recent">
-        <div class="helper hint-small">${t("pred.recent")}</div>
-        <div class="pa-header"><span>${""}</span><span>${t("pred.predicted")}</span><span></span><span>${t("pred.actual")}</span><span></span></div>
-        ${recentRows}
-      </div>
-    </div>
-  `;
-}
-
-function renderConsistencyScore() {
-  const goalWeight = Number(state.settings.goalWeight);
-  const data = calcConsistencyScore(state.records, goalWeight);
-  if (data.score === null) return "";
-
-  const gradeColors = { S: "cs-s", A: "cs-a", B: "cs-b", C: "cs-c", D: "cs-d" };
-  const gradeCls = gradeColors[data.grade] || "";
-
-  const bar = (label, value) =>
-    `<div class="cs-bar-row"><span class="cs-bar-label">${label}</span><div class="cs-bar-track"><div class="cs-bar-fill" style="width:${value}%"></div></div><span class="cs-bar-val">${value}</span></div>`;
-
-  return `
-    <div class="cs-section">
-      <div class="helper">${t("cscore.title")}</div>
-      <div class="cs-top">
-        <div class="cs-score-circle ${gradeCls}">
-          <span class="cs-score-num">${data.score}</span>
-          <span class="cs-score-label">/100</span>
-        </div>
-        <div class="cs-grade ${gradeCls}">${data.grade}</div>
-      </div>
-      <div class="cs-bars">
-        ${bar(t("cscore.recording"), data.components.recording)}
-        ${bar(t("cscore.stability"), data.components.stability)}
-        ${bar(t("cscore.momentum"), data.components.momentum)}
-      </div>
-    </div>
-  `;
-}
-
-function renderWeightRangeSummary() {
-  const data = calcWeightRangeSummary(state.records);
-  if (!data.periods.length) return "";
-
-  const labelMap = { "7d": t("wrange.7d"), "30d": t("wrange.30d"), "90d": t("wrange.90d"), "all": t("wrange.all") };
-  // Find global min/max for visual scaling
-  const globalMin = Math.min(...data.periods.map((p) => p.min));
-  const globalMax = Math.max(...data.periods.map((p) => p.max));
-  const spread = globalMax - globalMin || 1;
-
-  const rows = data.periods.map((p) => {
-    const leftPct = ((p.min - globalMin) / spread * 80).toFixed(1);
-    const widthPct = Math.max(2, ((p.range) / spread * 80)).toFixed(1);
-    const avgPct = ((p.avg - globalMin) / spread * 80).toFixed(1);
-    return `<div class="wr-row">
-      <span class="wr-label">${labelMap[p.label] || p.label}</span>
-      <div class="wr-bar-wrap">
-        <div class="wr-bar" style="left:${leftPct}%;width:${widthPct}%">
-          <div class="wr-avg-marker" style="left:${p.range > 0 ? ((p.avg - p.min) / p.range * 100).toFixed(1) : 50}%"></div>
-        </div>
-      </div>
-      <span class="wr-vals">${p.min.toFixed(1)}–${p.max.toFixed(1)}</span>
-    </div>`;
-  }).join("");
-
-  return `
-    <div class="wr-section">
-      <div class="helper">${t("wrange.title")}</div>
-      <div class="wr-legend">
-        <span>${t("wrange.min")}: ${globalMin.toFixed(1)}</span>
-        <span>${t("wrange.max")}: ${globalMax.toFixed(1)}</span>
-      </div>
-      ${rows}
-    </div>
-  `;
-}
-
-function renderTrendStreak() {
-  const data = calcTrendStreak(state.records);
-  if (!data.direction || data.count < 2) return "";
-
-  const msgKey = `tstreak.${data.direction}`;
-  const msg = t(msgKey).replace("{count}", data.count);
-  const cls = data.direction === "down" ? "ts-down" : data.direction === "up" ? "ts-up" : "ts-flat";
-  const changeSign = data.totalChange > 0 ? "+" : "";
-
-  return `
-    <div class="ts-section ${cls}">
-      <div class="ts-msg">${msg}</div>
-      <div class="ts-detail">
-        <span>${t("tstreak.change")}: <strong>${changeSign}${data.totalChange.toFixed(1)}kg</strong></span>
-        <span>${t("tstreak.period")}: ${data.startDate.slice(5).replace("-", "/")} → ${data.endDate.slice(5).replace("-", "/")}</span>
-      </div>
-    </div>
-  `;
-}
-
-function renderBMITrend() {
-  const data = calcBMITrend(state.records);
-  if (!data.current) return "";
-
-  const dirLabel = t(`bmiTrend.${data.direction}`);
-  const dirCls = data.direction === "down" ? "bt-down" : data.direction === "up" ? "bt-up" : "bt-neutral";
-  const changeSign = data.change > 0 ? "+" : "";
-
-  // Sparkline: render as inline SVG
-  const pts = data.points;
-  const svgW = 200, svgH = 40;
-  const bMin = data.min - 0.5, bMax = data.max + 0.5, bRange = bMax - bMin || 1;
-  const pathD = pts.map((p, i) => {
-    const x = (i / Math.max(pts.length - 1, 1)) * svgW;
-    const y = svgH - ((p.bmi - bMin) / bRange) * svgH;
-    return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
-
-  return `
-    <div class="bt-section">
-      <div class="helper">${t("bmiTrend.title")}</div>
-      <div class="bt-top">
-        <div class="bt-current">
-          <span class="bt-big">${data.current.toFixed(1)}</span>
-          <span class="bt-badge ${dirCls}">${changeSign}${data.change.toFixed(1)} ${dirLabel}</span>
-        </div>
-        <svg class="bt-spark" viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none">
-          <path d="${pathD}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/>
-        </svg>
-      </div>
-      <div class="bt-meta">
-        <span>${t("bmiTrend.range")}: ${data.min.toFixed(1)} – ${data.max.toFixed(1)}</span>
-        <span>${pts.length} ${t("chart.records")}</span>
-      </div>
-    </div>
-  `;
-}
-
-function renderWeeklySummaryComparison() {
-  const data = calcWeeklySummaryComparison(state.records);
-  if (!data.diffs) return "";
-
-  const tw = data.thisWeek;
-  const lw = data.lastWeek;
-  const d = data.diffs;
-
-  function diffCell(val) {
-    if (val === 0) return `<span class="wc-zero">±0</span>`;
-    const cls = val < 0 ? "wc-neg" : "wc-pos";
-    return `<span class="${cls}">${val > 0 ? "+" : ""}${typeof val === "number" && !Number.isInteger(val) ? val.toFixed(1) : val}</span>`;
-  }
-
-  const metrics = [
-    { label: t("wcomp.avg"), tw: tw.avg.toFixed(1), lw: lw.avg.toFixed(1), diff: d.avg },
-    { label: t("wcomp.min"), tw: tw.min.toFixed(1), lw: lw.min.toFixed(1), diff: d.min },
-    { label: t("wcomp.max"), tw: tw.max.toFixed(1), lw: lw.max.toFixed(1), diff: d.max },
-    { label: t("wcomp.count"), tw: tw.count, lw: lw.count, diff: d.count },
-  ];
-
-  const rows = metrics.map((m) =>
-    `<div class="wc-row"><span class="wc-label">${m.label}</span><span class="wc-val">${m.lw}</span><span class="wc-val">${m.tw}</span><span class="wc-val">${diffCell(m.diff)}</span></div>`
-  ).join("");
-
-  return `
-    <div class="wc-section">
-      <div class="helper">${t("wcomp.title")}</div>
-      <div class="wc-header"><span></span><span>${t("wcomp.lastWeek")}</span><span>${t("wcomp.thisWeek")}</span><span>${t("wcomp.diff")}</span></div>
-      ${rows}
-    </div>
-  `;
-}
-
-function renderGoalProgressRing() {
-  const goalWeight = Number(state.settings.goalWeight);
-  const data = calcGoalProgressRing(state.records, goalWeight);
-  if (!data) return "";
-
-  const r = 54, cx = 60, cy = 60, stroke = 10;
-  const circ = 2 * Math.PI * r;
-  const offset = circ - (data.percent / 100) * circ;
-  const trackColor = "var(--border)";
-  const fillColor = data.percent >= 100 ? "var(--ok)" : data.onTrack ? "var(--accent)" : "var(--error)";
-
-  const statusLabel = data.percent >= 100 ? t("gring.done")
-    : data.onTrack ? t("gring.onTrack") : t("gring.offTrack");
-  const statusCls = data.percent >= 100 ? "gr-done" : data.onTrack ? "gr-on" : "gr-off";
-  const rateSign = data.weeklyRate > 0 ? "-" : data.weeklyRate < 0 ? "+" : "";
-  const etaText = data.estimatedWeeks ? t("gring.eta").replace("{weeks}", data.estimatedWeeks) : "";
-
-  return `
-    <div class="gr-section">
-      <div class="helper">${t("gring.title")}</div>
-      <div class="gr-layout">
-        <svg class="gr-ring" viewBox="0 0 120 120">
-          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${trackColor}" stroke-width="${stroke}"/>
-          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${fillColor}" stroke-width="${stroke}"
-            stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}"
-            stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"
-            style="transition:stroke-dashoffset 0.5s ease"/>
-          <text x="${cx}" y="${cy - 6}" text-anchor="middle" class="gr-pct-text">${data.percent}%</text>
-          <text x="${cx}" y="${cy + 14}" text-anchor="middle" class="gr-goal-text">${data.goalWeight.toFixed(1)}kg</text>
-        </svg>
-        <div class="gr-stats">
-          <div class="gr-stat"><span class="gr-stat-label">${t("gring.lost")}</span><span class="gr-stat-val">${data.lost.toFixed(1)}kg</span></div>
-          <div class="gr-stat"><span class="gr-stat-label">${t("gring.remaining")}</span><span class="gr-stat-val">${data.remaining.toFixed(1)}kg</span></div>
-          <div class="gr-stat"><span class="gr-stat-label">${t("gring.rate")}</span><span class="gr-stat-val">${rateSign}${Math.abs(data.weeklyRate).toFixed(1)}kg/w</span></div>
-          <div class="gr-badge ${statusCls}">${statusLabel}</div>
-          ${etaText ? `<div class="gr-eta">${etaText}</div>` : ""}
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function renderBodyFatTrend() {
-  const data = calcBodyFatTrend(state.records);
-  if (!data.current || data.points.length < 2) return "";
-
-  const dirLabel = t(`bfTrend.${data.direction}`);
-  const dirCls = data.direction === "down" ? "bft-down" : data.direction === "up" ? "bft-up" : "bft-neutral";
-  const changeSign = data.change > 0 ? "+" : "";
-
-  // Sparkline SVG
-  const pts = data.points;
-  const svgW = 200, svgH = 40;
-  const bMin = data.min - 0.5, bMax = data.max + 0.5, bRange = bMax - bMin || 1;
-  const pathD = pts.map((p, i) => {
-    const x = (i / Math.max(pts.length - 1, 1)) * svgW;
-    const y = svgH - ((p.bf - bMin) / bRange) * svgH;
-    return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
-
-  return `
-    <div class="bft-section">
-      <div class="helper">${t("bfTrend.title")}</div>
-      <div class="bft-top">
-        <div class="bft-current">
-          <span class="bft-big">${data.current.toFixed(1)}%</span>
-          <span class="bft-badge ${dirCls}">${changeSign}${data.change.toFixed(1)}% ${dirLabel}</span>
-        </div>
-        <svg class="bft-spark" viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none">
-          <path d="${pathD}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/>
-        </svg>
-      </div>
-      <div class="bft-meta">
-        <span>${t("bfTrend.avg")}: ${data.avg.toFixed(1)}%</span>
-        <span>${t("bfTrend.range")}: ${data.min.toFixed(1)}–${data.max.toFixed(1)}%</span>
-      </div>
-    </div>
-  `;
-}
-
-function renderDailyTarget() {
-  const goalWeight = Number(state.settings.goalWeight);
-  if (!goalWeight || state.records.length < 2) return "";
-  const data = calcDailyTarget(state.records, goalWeight);
-  if (!data) return "";
-
-  let statusMsg, statusCls;
-  if (data.onTarget) {
-    statusMsg = t("dtarget.onTarget");
-    statusCls = "dt-on";
-  } else if (data.isAbove) {
-    statusMsg = t("dtarget.above").replace("{diff}", Math.abs(data.diff).toFixed(1));
-    statusCls = "dt-above";
-  } else {
-    statusMsg = t("dtarget.below").replace("{diff}", Math.abs(data.diff).toFixed(1));
-    statusCls = "dt-below";
-  }
-
-  const paceStr = t("dtarget.pace").replace("{pace}", Math.abs(data.pace).toFixed(2));
-
-  return `
-    <div class="dt-section">
-      <div class="helper">${t("dtarget.title")}</div>
-      <div class="dt-grid">
-        <div class="dt-cell">
-          <span class="dt-label">${t("dtarget.target")}</span>
-          <span class="dt-val">${data.target}kg</span>
-        </div>
-        <div class="dt-cell">
-          <span class="dt-label">${t("dtarget.current")}</span>
-          <span class="dt-val">${data.current}kg</span>
-        </div>
-      </div>
-      <div class="dt-status ${statusCls}">${statusMsg}</div>
-      <div class="dt-pace">${paceStr}</div>
-    </div>
-  `;
-}
-
-function renderMonthPhaseAvg() {
-  const data = calcMonthPhaseAvg(state.records);
-  if (!data) return "";
-
-  const phaseLabels = {
-    early: t("mphase.early"),
-    mid: t("mphase.mid"),
-    late: t("mphase.late"),
-    end: t("mphase.end"),
-  };
-
-  const rows = data.phases.map((p) => {
-    if (p.avg === null) return "";
-    const changeStr = p.change !== null && p.change !== 0
-      ? `<span class="mp-change ${p.change > 0 ? "mp-up" : "mp-down"}">${p.change > 0 ? "+" : ""}${p.change.toFixed(2)}kg</span>`
-      : "";
-    return `
-      <div class="mp-row">
-        <span class="mp-label">${phaseLabels[p.label]}</span>
-        <span class="mp-avg">${p.avg}kg</span>
-        ${changeStr}
-        <span class="mp-count">${p.count} ${t("mphase.records")}</span>
-      </div>
-    `;
-  }).join("");
-
-  const statusMsg = data.hasPattern ? t("mphase.pattern") : t("mphase.noPattern");
-  const statusCls = data.hasPattern ? "mp-has-pattern" : "mp-stable";
-
-  return `
-    <div class="mp-section">
-      <div class="helper">${t("mphase.title")}</div>
-      ${rows}
-      <div class="mp-status ${statusCls}">${statusMsg}</div>
-    </div>
-  `;
-}
-
-function renderStreakFreeze() {
-  const data = calcStreakFreezeInfo(state.records);
-  if (data.currentStreak < 3 && data.freezesEarned === 0) return "";
-
-  return `
-    <div class="sf-section">
-      <div class="helper">${t("sfreeze.title")}</div>
-      <div class="sf-grid">
-        <div class="sf-cell">
-          <span class="sf-num">${data.currentStreak}</span>
-          <span class="sf-label">${t("sfreeze.current")}</span>
-        </div>
-        <div class="sf-cell">
-          <span class="sf-num">${data.longestStreak}</span>
-          <span class="sf-label">${t("sfreeze.longest")}</span>
-        </div>
-        <div class="sf-cell sf-highlight">
-          <span class="sf-num">${data.freezesAvailable}</span>
-          <span class="sf-label">${t("sfreeze.available")}</span>
-        </div>
-      </div>
-      <div class="sf-detail">
-        <span>${t("sfreeze.earned")}: ${data.freezesEarned}</span>
-        <span>${t("sfreeze.used")}: ${data.freezesUsed}</span>
-      </div>
-      <div class="sf-info">${t("sfreeze.info")}</div>
-    </div>
-  `;
-}
-
-function renderRecentWeightBars() {
-  const goalWeight = Number(state.settings.goalWeight);
-  const data = calcRecentWeightBars(state.records, goalWeight, 7);
-  if (!data) return "";
-
-  const barsHtml = data.bars.map((b) => {
-    const changeCls = b.change !== null ? (b.change < 0 ? "rb-down" : b.change > 0 ? "rb-up" : "") : "";
-    const changeStr = b.change !== null ? `<span class="rb-change ${changeCls}">${b.change > 0 ? "+" : ""}${b.change.toFixed(1)}</span>` : "";
-    return `
-      <div class="rb-col">
-        <div class="rb-val">${b.wt.toFixed(1)}</div>
-        ${changeStr}
-        <div class="rb-bar-wrap">
-          <div class="rb-bar" style="height:${Math.max(b.pct, 3)}%"></div>
-        </div>
-        <div class="rb-date">${b.dt.slice(5).replace("-", "/")}</div>
-      </div>
-    `;
-  }).join("");
-
-  const goalLine = data.goalPct !== null
-    ? `<div class="rb-goal-line" style="bottom:${data.goalPct}%"><span class="rb-goal-label">${t("rbars.goal")}</span></div>`
-    : "";
-
-  return `
-    <div class="rb-section">
-      <div class="helper">${t("rbars.title")}</div>
-      <div class="rb-chart">
-        ${goalLine}
-        ${barsHtml}
-      </div>
-    </div>
-  `;
-}
-
-function renderWeightAnniversary() {
-  const data = calcWeightAnniversary(state.records);
-  if (!data || data.trackingDays < 7) return "";
-
-  const changeSign = data.totalChange > 0 ? "+" : "";
-  const changeCls = data.totalChange < 0 ? "av-loss" : data.totalChange > 0 ? "av-gain" : "";
-
-  const milestoneHtml = (data.milestones || []).map((m) => {
-    if (!m.reached && data.trackingDays < m.days * 0.8) return "";
-    const label = t(`anniv.${m.label}`);
-    if (m.reached) {
-      const mChangeSign = m.changeAtMilestone > 0 ? "+" : "";
-      const mCls = m.changeAtMilestone < 0 ? "av-loss" : m.changeAtMilestone > 0 ? "av-gain" : "";
-      return `<div class="av-milestone av-done"><span class="av-ms-label">${label}</span><span class="av-ms-val ${mCls}">${mChangeSign}${m.changeAtMilestone}kg</span></div>`;
-    }
-    const daysLeft = m.days - data.trackingDays;
-    return `<div class="av-milestone av-pending"><span class="av-ms-label">${label}</span><span class="av-ms-soon">${t("anniv.upcoming")} (${daysLeft}${t("sfreeze.days")})</span></div>`;
-  }).filter(Boolean).join("");
-
-  return `
-    <div class="av-section">
-      <div class="helper">${t("anniv.title")}</div>
-      <div class="av-header">${t("anniv.tracking").replace("{days}", data.trackingDays)}</div>
-      <div class="av-summary">
-        <span>${t("anniv.start")}: ${data.startWeight.toFixed(1)}kg</span>
-        <span class="${changeCls}">${t("anniv.total")}: ${changeSign}${data.totalChange}kg</span>
-      </div>
-      <div class="av-milestones">${milestoneHtml}</div>
-    </div>
-  `;
-}
-
-function renderTrendForecast() {
-  const data = calcTrendForecast(state.records, 14);
-  if (!data || data.forecast.length < 8) return "";
-
-  const weeklyChange = +(data.slope * 7).toFixed(2);
-  const trendLabel = weeklyChange < -0.05 ? t("tfc.losing") : weeklyChange > 0.05 ? t("tfc.gaining") : t("tfc.stable");
-  const trendCls = weeklyChange < -0.05 ? "fc-loss" : weeklyChange > 0.05 ? "fc-gain" : "fc-stable";
-
-  const day7 = data.forecast.find((f) => f.dayOffset === 7);
-  const day14 = data.forecast.find((f) => f.dayOffset === 14);
-  const current = data.forecast[0]?.weight;
-
-  return `
-    <div class="fc-section">
-      <div class="helper">${t("tfc.title")}</div>
-      <div class="fc-trend ${trendCls}">
-        ${trendLabel} · ${weeklyChange > 0 ? "+" : ""}${weeklyChange}kg ${t("tfc.perWeek")}
-      </div>
-      <div class="fc-grid">
-        ${day7 ? `<div class="fc-cell">
-          <span class="fc-label">${t("tfc.in7days")}</span>
-          <span class="fc-val">${day7.weight.toFixed(1)}kg</span>
-          <span class="fc-diff ${(day7.weight - current) < 0 ? "fc-loss" : "fc-gain"}">${(day7.weight - current) > 0 ? "+" : ""}${(day7.weight - current).toFixed(1)}</span>
-        </div>` : ""}
-        ${day14 ? `<div class="fc-cell">
-          <span class="fc-label">${t("tfc.in14days")}</span>
-          <span class="fc-val">${day14.weight.toFixed(1)}kg</span>
-          <span class="fc-diff ${(day14.weight - current) < 0 ? "fc-loss" : "fc-gain"}">${(day14.weight - current) > 0 ? "+" : ""}${(day14.weight - current).toFixed(1)}</span>
-        </div>` : ""}
-      </div>
-    </div>
-  `;
-}
-
-function renderDailyChangeDist() {
-  const data = calcDailyChangeDist(state.records);
-  if (!data || data.buckets.length < 2) return "";
-
-  const maxCount = Math.max(...data.buckets.map((b) => b.count));
-
-  const barsHtml = data.buckets.map((b) => {
-    const height = maxCount > 0 ? Math.max((b.count / maxCount) * 100, 3) : 3;
-    const cls = b.min >= 0 ? "cd-pos" : "cd-neg";
-    return `
-      <div class="cd-col">
-        <div class="cd-bar-wrap"><div class="cd-bar ${cls}" style="height:${height}%"></div></div>
-        <div class="cd-blabel">${b.label}</div>
-      </div>
-    `;
-  }).join("");
-
-  const avgSign = data.avgChange > 0 ? "+" : "";
-  const medSign = data.medianChange > 0 ? "+" : "";
-
-  return `
-    <div class="cd-section">
-      <div class="helper">${t("cdist.title")}</div>
-      <div class="cd-chart">${barsHtml}</div>
-      <div class="cd-stats">
-        <span>${t("cdist.avg")}: ${avgSign}${data.avgChange}kg</span>
-        <span>${t("cdist.median")}: ${medSign}${data.medianChange}kg</span>
-      </div>
-      <div class="cd-range">${t("cdist.normal")}: ${data.normalRange.low > 0 ? "+" : ""}${data.normalRange.low} ${t("cdist.to")} ${data.normalRange.high > 0 ? "+" : ""}${data.normalRange.high}kg</div>
-    </div>
-  `;
-}
-
-function renderGoalStreak() {
-  const goalWeight = Number(state.settings.goalWeight);
-  if (!goalWeight) return "";
-  const data = calcGoalStreak(state.records, goalWeight);
-  if (!data || data.streak < 2) return "";
-
-  if (data.direction === "achieved") {
-    return `
-      <div class="gs-section gs-achieved">
-        <div class="helper">${t("gstreak.title")}</div>
-        <div class="gs-msg">${t("gstreak.achieved")}</div>
-      </div>
-    `;
-  }
-
-  return `
-    <div class="gs-section">
-      <div class="helper">${t("gstreak.title")}</div>
-      <div class="gs-count">${data.streak}</div>
-      <div class="gs-label">${t("gstreak.days")}</div>
-      <div class="gs-detail">
-        <span>${t("gstreak.dist")}: ${data.currentDist}kg</span>
-        <span>${t("gstreak.closest")}: ${data.closestToGoal}kg</span>
-      </div>
-    </div>
-  `;
-}
-
-function renderThenVsNow() {
-  const data = calcThenVsNow(state.records, 7);
-  if (!data) return "";
-
-  const diffSign = data.diff > 0 ? "+" : "";
-  const diffCls = data.diff < 0 ? "tvn-loss" : data.diff > 0 ? "tvn-gain" : "";
-
-  return `
-    <div class="tvn-section">
-      <div class="helper">${t("tvn.title")}</div>
-      <div class="tvn-grid">
-        <div class="tvn-col tvn-then">
-          <div class="tvn-period">${t("tvn.then")}</div>
-          <div class="tvn-avg">${data.then.avg}kg</div>
-          <div class="tvn-range">${data.then.min}–${data.then.max}kg</div>
-        </div>
-        <div class="tvn-arrow">${data.diff < 0 ? "📉" : data.diff > 0 ? "📈" : "➡️"}</div>
-        <div class="tvn-col tvn-now">
-          <div class="tvn-period">${t("tvn.now")}</div>
-          <div class="tvn-avg">${data.now.avg}kg</div>
-          <div class="tvn-range">${data.now.min}–${data.now.max}kg</div>
-        </div>
-      </div>
-      <div class="tvn-diff ${diffCls}">${t("tvn.change")}: ${diffSign}${data.diff}kg</div>
-    </div>
-  `;
-}
-
-function renderRecordCompleteness() {
-  const data = calcRecordCompleteness(state.records);
-  if (!data || data.total < 3) return "";
-
-  const barColor = data.level === "excellent" ? "var(--ok)" : data.level === "good" ? "var(--accent-3)" : data.level === "fair" ? "var(--warn)" : "var(--muted)";
-
-  return `
-    <div class="rc-section">
-      <div class="helper">${t("rcomp.title")}</div>
-      <div class="rc-level" style="color:${barColor}">${t("rcomp.level." + data.level)}</div>
-      <div class="rc-bars">
-        <div class="rc-bar-row"><span class="rc-bar-label">${t("rcomp.bodyFat")}</span><div class="rc-bar-track"><div class="rc-bar-fill" style="width:${data.bodyFatPct}%;background:${barColor}"></div></div><span class="rc-bar-val">${data.bodyFatPct}%</span></div>
-        <div class="rc-bar-row"><span class="rc-bar-label">${t("rcomp.note")}</span><div class="rc-bar-track"><div class="rc-bar-fill" style="width:${data.notePct}%;background:${barColor}"></div></div><span class="rc-bar-val">${data.notePct}%</span></div>
-        <div class="rc-bar-row"><span class="rc-bar-label">${t("rcomp.tag")}</span><div class="rc-bar-track"><div class="rc-bar-fill" style="width:${data.tagPct}%;background:${barColor}"></div></div><span class="rc-bar-val">${data.tagPct}%</span></div>
-      </div>
-      ${data.level !== "excellent" ? `<div class="rc-tip">${t("rcomp.tip")}</div>` : ""}
-    </div>
-  `;
-}
-
-function renderWeightPace() {
-  const goalWeight = Number(state.settings.goalWeight);
-  const data = calcWeightPace(state.records, goalWeight);
-  if (!data) return "";
-
-  const paceColor = data.pace === "healthy" ? "var(--ok)" : data.pace === "too_fast" ? "var(--error)" : data.pace === "too_slow" ? "var(--warn)" : "var(--muted)";
-  const paceLabel = data.pace === "healthy" ? t("wpace.healthy_pace") : data.pace === "too_fast" ? t("wpace.too_fast") : data.pace === "too_slow" ? t("wpace.too_slow") : t("wpace.maintaining");
-  const sign = data.weeklyRate > 0 ? "+" : "";
-
-  return `
-    <div class="wp-section">
-      <div class="helper">${t("wpace.title")}</div>
-      <div class="wp-meter">
-        <div class="wp-rate" style="color:${paceColor}">${sign}${data.weeklyRate} kg/${t("wpace.weekly")}</div>
-        <div class="wp-badge" style="background:color-mix(in srgb, ${paceColor} 15%, transparent);color:${paceColor}">${paceLabel}</div>
-      </div>
-      ${data.pace !== "maintaining" ? `<div class="wp-range">${t("wpace.range").replace("{min}", String(data.healthyMin)).replace("{max}", String(data.healthyMax))}</div>` : ""}
-    </div>
-  `;
-}
-
-function renderWeightSmoothness() {
-  const data = calcWeightSmoothness(state.records);
-  if (!data) return "";
-
-  const color = data.score >= 70 ? "var(--ok)" : data.score >= 50 ? "var(--warn)" : "var(--error)";
-  const ratingLabel = t("wsm." + data.rating);
-
-  return `
-    <div class="wsm-section">
-      <div class="helper">${t("wsm.title")}</div>
-      <div class="wsm-meter">
-        <div class="wsm-score" style="color:${color}">${data.score}</div>
-        <div class="wsm-details">
-          <div class="wsm-rating" style="color:${color}">${ratingLabel}</div>
-          <div class="wsm-noise">${t("wsm.noise")}: ±${data.avgDailyNoise}kg</div>
-        </div>
-      </div>
-      <div class="wsm-bar-track"><div class="wsm-bar-fill" style="width:${data.score}%;background:${color}"></div></div>
-      ${data.score < 70 ? `<div class="wsm-tip">${t("wsm.tip")}</div>` : ""}
-    </div>
-  `;
-}
-
-function renderPeriodBreakdown() {
-  const data = calcPeriodBreakdown(state.records, 3);
-  if (!data || data.months.length === 0) return "";
-
-  const rows = data.months.map((m) => {
-    const changeStr = m.change !== null
-      ? `<span class="pbd-change ${m.change < 0 ? "pbd-loss" : m.change > 0 ? "pbd-gain" : ""}">${m.change > 0 ? "+" : ""}${m.change}kg</span>`
-      : `<span class="pbd-change">—</span>`;
-    return `<tr>
-      <td class="pbd-month">${m.yearMonth}</td>
-      <td class="pbd-avg">${m.avg}kg</td>
-      <td class="pbd-range-cell">${m.min}–${m.max}</td>
-      <td class="pbd-cnt">${m.count}</td>
-      <td>${changeStr}</td>
-    </tr>`;
-  }).join("");
-
-  return `
-    <div class="pbd-section">
-      <div class="helper">${t("pbd.title")}</div>
-      <table class="pbd-table">
-        <thead><tr>
-          <th></th><th>${t("pbd.avg")}</th><th>${t("pbd.range")}</th><th>${t("pbd.count")}</th><th>${t("pbd.change")}</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  `;
-}
-
-function renderMotivation() {
-  const data = calcMotivationLevel(state.records);
-  if (!data) return "";
-
-  const stars = "★".repeat(data.level) + "☆".repeat(5 - data.level);
-  const color = data.level >= 4 ? "var(--ok)" : data.level >= 3 ? "var(--accent-3)" : data.level >= 2 ? "var(--warn)" : "var(--muted)";
-  const msg = t("motiv.level" + data.level);
-  const trendMsg = t("motiv.trend." + data.trendDirection);
-
-  return `
-    <div class="mot-section">
-      <div class="helper">${t("motiv.title")}</div>
-      <div class="mot-stars" style="color:${color}">${stars}</div>
-      <div class="mot-msg" style="color:${color}">${msg}</div>
-      <div class="mot-details">
-        ${data.streakDays > 0 ? `<span class="mot-streak">${t("motiv.streak").replace("{days}", String(data.streakDays))}</span>` : ""}
-        <span class="mot-trend">${trendMsg}</span>
-      </div>
-    </div>
-  `;
-}
-
-function renderWeightBand() {
-  const data = calcWeightBand(state.records);
-  if (!data) return "";
-
-  return `
-    <div class="wb-section">
-      <div class="helper">${t("wband.title")}</div>
-      <div class="wb-visual">
-        <div class="wb-band">
-          <span class="wb-lo">${data.low}kg</span>
-          <span class="wb-mean">${data.mean}kg</span>
-          <span class="wb-hi">${data.high}kg</span>
-        </div>
-        <div class="wb-bar"><div class="wb-bar-center"></div></div>
-      </div>
-      <div class="wb-info">${t("wband.spread")}: ±${data.stdDev}kg</div>
-      ${data.bandwidth > 1.0 ? `<div class="wb-tip">${t("wband.tip")}</div>` : ""}
-    </div>
-  `;
-}
-
-function renderBestWeighDay() {
-  const data = calcBestWeighDay(state.records);
-  if (!data) return "";
-
-  const maxDiff = Math.max(...data.days.map((d) => d.diffFromBest), 0.1);
-  const bars = data.days.map((d) => {
-    const pct = Math.round((d.diffFromBest / maxDiff) * 100);
-    const isBest = d.day === data.bestDay;
-    const cls = isBest ? "bwd-bar-best" : "";
-    return `<div class="bwd-row">
-      <span class="bwd-day">${t("bwd.days." + d.day)}</span>
-      <div class="bwd-bar-track"><div class="bwd-bar-fill ${cls}" style="width:${isBest ? 0 : pct}%"></div></div>
-      <span class="bwd-avg">${d.avg}kg</span>
-    </div>`;
-  }).join("");
-
-  return `
-    <div class="bwd-section">
-      <div class="helper">${t("bwd.title")}</div>
-      ${bars}
-      <div class="bwd-best-label">${t("bwd.best")}: ${t("bwd.days." + data.bestDay)}</div>
-    </div>
-  `;
-}
-
-function renderMiniSparkline() {
-  const data = calcMiniSparkline(state.records, 10);
-  if (!data) return "";
-
-  const trendColor = data.trend === "down" ? "var(--ok)" : data.trend === "up" ? "var(--error)" : "var(--accent-3)";
-  const trendLabel = t("spark." + data.trend);
-
-  return `
-    <div class="spk-section">
-      <div class="helper">${t("spark.title")}</div>
-      <div class="spk-row">
-        <svg class="spk-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <path d="${data.svgPath}" fill="none" stroke="${trendColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-        </svg>
-        <div class="spk-info">
-          <div class="spk-trend" style="color:${trendColor}">${trendLabel}</div>
-          <div class="spk-range">${data.min}–${data.max}kg</div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function renderEntrySummary() {
-  const data = calcEntrySummary(state.records);
-  if (!data) return "";
-
-  const fmtDiff = (v) => {
-    const sign = v > 0 ? "+" : "";
-    const cls = v < 0 ? "esum-down" : v > 0 ? "esum-up" : "";
-    return `<span class="${cls}">${sign}${v}kg</span>`;
-  };
-
-  return `
-    <div class="esum-section">
-      <div class="helper">${t("esum.title")} (${data.latest.dt.slice(5).replace("-", "/")})</div>
-      <div class="esum-grid">
-        <div class="esum-item"><span class="esum-label">${t("esum.vsPrev")}</span>${fmtDiff(data.vsYesterday)}</div>
-        <div class="esum-item"><span class="esum-label">${t("esum.vsWeek")}</span>${fmtDiff(data.vsWeekAvg)}</div>
-        <div class="esum-item"><span class="esum-label">${t("esum.best")}</span><span>${data.allTimeBest}kg</span></div>
-      </div>
-      ${data.isNewBest ? `<div class="esum-new-best">${t("esum.newBest")}</div>` : ""}
-    </div>
-  `;
-}
-
-function renderGoalDistance() {
-  const goalWeight = Number(state.settings.goalWeight);
-  const data = calcGoalDistance(state.records, goalWeight);
-  if (!data) return "";
-
-  if (data.direction === "achieved") {
-    return `<div class="gd-section"><div class="gd-achieved">${t("gdist.achieved")}</div></div>`;
-  }
-
-  const etaStr = data.etaDays !== null
-    ? t("gdist.days").replace("{days}", String(data.etaDays))
-    : t("gdist.noEta");
-
-  return `
-    <div class="gd-section">
-      <div class="helper">${t("gdist.title")}</div>
-      <div class="gd-progress-track"><div class="gd-progress-fill" style="width:${data.progressPct}%"></div></div>
-      <div class="gd-info">
-        <span class="gd-remaining">${t("gdist.remaining")} ${data.remaining}kg</span>
-        <span class="gd-pct">${data.progressPct}%</span>
-      </div>
-      <div class="gd-eta">${t("gdist.eta")}: ${etaStr}</div>
-    </div>
-  `;
-}
-
-function renderTimeSlotPattern() {
-  const data = calcTimeSlotPattern(state.records);
-  if (!data) return "";
-
-  const maxCount = Math.max(...data.slots.map((s) => s.count), 1);
-  const bars = data.slots.map((s) => {
-    const pct = Math.round((s.count / maxCount) * 100);
-    const isBest = s.name === data.preferredSlot;
-    return `<div class="ts-row">
-      <span class="ts-label">${t("tslot." + s.name)}</span>
-      <div class="ts-bar-track"><div class="ts-bar-fill${isBest ? " ts-best" : ""}" style="width:${pct}%"></div></div>
-      <span class="ts-count">${s.count}</span>
-    </div>`;
-  }).join("");
-
-  return `
-    <div class="ts-section">
-      <div class="helper">${t("tslot.title")}</div>
-      ${bars}
-      <div class="ts-preferred">${t("tslot.preferred")}: ${t("tslot." + data.preferredSlot)}</div>
-    </div>
-  `;
-}
-
-function renderStreakBadges() {
-  const data = calcStreakBadges(state.records);
-  if (!data) return "";
-
-  const badgeItems = data.badges.map((b) => {
-    const cls = b.earned ? "sb-earned" : "sb-locked";
-    const label = t("sbadge.days").replace("{n}", String(b.days));
-    return `<div class="sb-badge ${cls}" title="${label}"><span class="sb-icon">${b.earned ? b.icon : "🔒"}</span><span class="sb-label">${label}</span></div>`;
-  }).join("");
-
-  return `
-    <div class="sb-section">
-      <div class="helper">${t("sbadge.title")}</div>
-      <div class="sb-grid">${badgeItems}</div>
-      <div class="sb-stats">
-        <span>${t("sbadge.current")}: ${data.currentStreak}${t("sbadge.days").replace("{n}", "").trim()}</span>
-        <span>${t("sbadge.longest")}: ${data.longestStreak}${t("sbadge.days").replace("{n}", "").trim()}</span>
-      </div>
-    </div>
-  `;
-}
-
-function renderProgressTimeline() {
-  const goalWeight = Number(state.settings.goalWeight);
-  const data = calcProgressTimeline(state.records, goalWeight);
-  if (!data || data.events.length < 2) return "";
-
-  const icons = { start: "🏁", milestone: "📍", best: "⭐", current: "📌" };
-  const items = data.events.map((e) => {
-    const label = t("ptl." + e.type);
-    const icon = icons[e.type] || "📍";
-    return `<div class="ptl-item">
-      <div class="ptl-dot">${icon}</div>
-      <div class="ptl-content">
-        <span class="ptl-date">${e.dt.slice(5).replace("-", "/")}</span>
-        <span class="ptl-wt">${e.wt}kg</span>
-        <span class="ptl-type">${label}</span>
-      </div>
-    </div>`;
-  }).join("");
-
-  const sign = data.totalChange > 0 ? "+" : "";
-  const changeCls = data.totalChange < 0 ? "ptl-loss" : data.totalChange > 0 ? "ptl-gain" : "";
-
-  return `
-    <div class="ptl-section">
-      <div class="helper">${t("ptl.title")}</div>
-      <div class="ptl-timeline">${items}</div>
-      <div class="ptl-total ${changeCls}">${t("ptl.total")}: ${sign}${data.totalChange}kg</div>
-    </div>
-  `;
-}
-
-function renderForecastConfidence() {
-  const data = calcForecastConfidence(state.records);
-  if (!data) return "";
-
-  const confColor = data.confidence >= 60 ? "var(--ok)" : data.confidence >= 30 ? "var(--warn)" : "var(--muted)";
-  const sign7 = data.forecast7 > data.current ? "+" : "";
-  const sign30 = data.forecast30 > data.current ? "+" : "";
-  const diff7 = +(data.forecast7 - data.current).toFixed(1);
-  const diff30 = +(data.forecast30 - data.current).toFixed(1);
-
-  return `
-    <div class="fc2-section">
-      <div class="helper">${t("fconf.title")}</div>
-      <div class="fc2-grid">
-        <div class="fc2-col">
-          <div class="fc2-label">${t("fconf.7day")}</div>
-          <div class="fc2-val">${data.forecast7}kg</div>
-          <div class="fc2-diff ${diff7 < 0 ? "fc2-down" : diff7 > 0 ? "fc2-up" : ""}">${sign7}${diff7}kg</div>
-        </div>
-        <div class="fc2-col">
-          <div class="fc2-label">${t("fconf.30day")}</div>
-          <div class="fc2-val">${data.forecast30}kg</div>
-          <div class="fc2-diff ${diff30 < 0 ? "fc2-down" : diff30 > 0 ? "fc2-up" : ""}">${sign30}${diff30}kg</div>
-        </div>
-      </div>
-      <div class="fc2-conf">
-        <span>${t("fconf.confidence")}</span>
-        <div class="fc2-conf-track"><div class="fc2-conf-fill" style="width:${data.confidence}%;background:${confColor}"></div></div>
-        <span class="fc2-conf-val" style="color:${confColor}">${data.confidence}%</span>
-      </div>
-    </div>
-  `;
-}
-
-function renderWeightZones() {
-  const goal = Number(state.settings.goalWeight);
-  const data = calcWeightZones(state.records, goal);
-  if (!data) return "";
-
-  return `
-    <div class="wz-section">
-      <div class="helper">${t("wz.title")}</div>
-      <div class="wz-bar-label">${t("wz.all")} (${data.total})</div>
-      <div class="wz-bar">
-        ${data.zones.below.pct > 0 ? `<div class="wz-seg wz-below" style="width:${data.zones.below.pct}%">${data.zones.below.pct}%</div>` : ""}
-        ${data.zones.at.pct > 0 ? `<div class="wz-seg wz-at" style="width:${data.zones.at.pct}%">${data.zones.at.pct}%</div>` : ""}
-        ${data.zones.above.pct > 0 ? `<div class="wz-seg wz-above" style="width:${data.zones.above.pct}%">${data.zones.above.pct}%</div>` : ""}
-      </div>
-      <div class="wz-bar-label">${t("wz.recent")} (${Math.min(30, data.total)})</div>
-      <div class="wz-bar">
-        ${data.recent30.below.pct > 0 ? `<div class="wz-seg wz-below" style="width:${data.recent30.below.pct}%">${data.recent30.below.pct}%</div>` : ""}
-        ${data.recent30.at.pct > 0 ? `<div class="wz-seg wz-at" style="width:${data.recent30.at.pct}%">${data.recent30.at.pct}%</div>` : ""}
-        ${data.recent30.above.pct > 0 ? `<div class="wz-seg wz-above" style="width:${data.recent30.above.pct}%">${data.recent30.above.pct}%</div>` : ""}
-      </div>
-      <div class="wz-legend">
-        <span class="wz-leg-item"><span class="wz-dot wz-below"></span>${t("wz.below")}</span>
-        <span class="wz-leg-item"><span class="wz-dot wz-at"></span>${t("wz.at")}</span>
-        <span class="wz-leg-item"><span class="wz-dot wz-above"></span>${t("wz.above")}</span>
-        <span class="wz-leg-margin">±${data.margin}kg</span>
-      </div>
-    </div>
-  `;
-}
-
-function renderWeightChangeRate() {
-  const data = calcWeightChangeRate(state.records);
-  if (!data) return "";
-
-  const trendLabel = data.trend === "losing" ? t("wcr.losing") : data.trend === "gaining" ? t("wcr.gaining") : t("wcr.stable");
-  const trendColor = data.trend === "losing" ? "var(--ok)" : data.trend === "gaining" ? "var(--warn)" : "var(--muted)";
-
-  const bars = data.windows.map((w) => {
-    const pct = Math.round((Math.abs(w.rate) / data.maxAbsRate) * 100);
-    const color = w.direction === "losing" ? "var(--ok)" : w.direction === "gaining" ? "var(--warn)" : "var(--muted)";
-    const isNeg = w.rate < 0;
-    return `<div class="wcr-col">
-      <div class="wcr-bar-wrap">
-        ${isNeg ? `<div class="wcr-bar wcr-bar-neg" style="height:${pct}%;background:${color}"></div>` : ""}
-        <div class="wcr-zero"></div>
-        ${!isNeg ? `<div class="wcr-bar wcr-bar-pos" style="height:${pct}%;background:${color}"></div>` : ""}
-      </div>
-      <div class="wcr-label">${w.rate > 0 ? "+" : ""}${w.rate}</div>
-    </div>`;
-  }).join("");
-
-  return `
-    <div class="wcr-section">
-      <div class="helper">${t("wcr.title")}</div>
-      <div class="wcr-chart">${bars}</div>
-      <div class="wcr-summary">
-        <span style="color:${trendColor}">${trendLabel}</span>
-        <span class="wcr-avg">${t("wcr.avg")}: ${data.avgRate > 0 ? "+" : ""}${data.avgRate}kg${t("wcr.perWeek")}</span>
-      </div>
-    </div>
-  `;
-}
-
-function renderWeighInConsistency() {
-  const data = calcWeighInConsistency(state.records);
-  if (!data) return "";
-
-  const cadenceLabel = t(`wic.${data.cadenceLabel}`);
-  const scoreColor = data.score >= 70 ? "var(--ok)" : data.score >= 40 ? "var(--warn)" : "var(--muted)";
-
-  return `
-    <div class="wic-section">
-      <div class="helper">${t("wic.title")}</div>
-      <div class="wic-grid">
-        <div class="wic-item">
-          <div class="wic-label">${t("wic.cadence")}</div>
-          <div class="wic-val">${cadenceLabel}</div>
-        </div>
-        <div class="wic-item">
-          <div class="wic-label">${t("wic.avgInterval")}</div>
-          <div class="wic-val">${data.avgInterval} ${t("wic.days")}</div>
-        </div>
-      </div>
-      <div class="wic-score-row">
-        <span>${t("wic.score")}</span>
-        <div class="wic-score-track"><div class="wic-score-fill" style="width:${data.score}%;background:${scoreColor}"></div></div>
-        <span class="wic-score-val" style="color:${scoreColor}">${data.score}%</span>
-      </div>
-    </div>
-  `;
-}
-
-function renderPlateauPeriods() {
-  const data = calcPlateauPeriods(state.records);
-  if (!data) return "";
-
-  const recent = data.plateaus.slice(-3);
-  const rows = recent.map((p) => `
-    <div class="plat-row">
-      <span class="plat-dates">${p.startDt.slice(5)} ~ ${p.endDt.slice(5)}</span>
-      <span class="plat-info">${t("plat.around")}${p.avgWt}kg · ${p.days}${t("plat.days")}</span>
-    </div>
-  `).join("");
-
-  return `
-    <div class="plat-section">
-      <div class="helper">${t("plat.title")}</div>
-      ${rows}
-      <div class="plat-summary">
-        <span>${t("plat.count")}: ${data.plateaus.length}</span>
-        <span>${t("plat.longest")}: ${data.longestDays}${t("plat.days")}</span>
-        ${data.current ? `<span class="plat-active">${t("plat.current")}</span>` : ""}
-      </div>
-    </div>
-  `;
-}
-
-function renderWeightPercentileRank() {
-  const data = calcWeightPercentileRank(state.records);
-  if (!data) return "";
-
-  const pctColor = data.percentile <= 30 ? "var(--ok)" : data.percentile >= 70 ? "var(--warn)" : "var(--accent)";
-  const markerPos = Math.max(2, Math.min(98, data.percentile));
-
-  return `
-    <div class="wpr-section">
-      <div class="helper">${t("wpr.title")}</div>
-      <div class="wpr-main">
-        <span class="wpr-pct" style="color:${pctColor}">${data.percentile}%</span>
-        <span class="wpr-desc">${t("wpr.lower")}</span>
-      </div>
-      <div class="wpr-track">
-        <div class="wpr-q1" style="left:25%"></div>
-        <div class="wpr-q3" style="left:75%"></div>
-        <div class="wpr-marker" style="left:${markerPos}%;background:${pctColor}"></div>
-      </div>
-      <div class="wpr-labels">
-        <span>${data.min}kg</span>
-        <span>${t("wpr.median")}: ${data.median}kg</span>
-        <span>${data.max}kg</span>
-      </div>
-    </div>
-  `;
-}
-
-function renderWeightTrendArrow() {
-  const data = calcWeightTrendArrow(state.records);
-  if (!data) return "";
-
-  const arrows = { up2: "⬆⬆", up1: "⬆", flat: "➡", down1: "⬇", down2: "⬇⬇" };
-  const colors = { up2: "var(--warn)", up1: "var(--warn)", flat: "var(--muted)", down1: "var(--ok)", down2: "var(--ok)" };
-  const label = t(`wta.${data.arrow}`);
-  const sign = data.change > 0 ? "+" : "";
-
-  return `
-    <div class="wta-section">
-      <div class="wta-arrow" style="color:${colors[data.arrow]}">${arrows[data.arrow]}</div>
-      <div class="wta-info">
-        <div class="wta-label">${label}</div>
-        <div class="wta-change">${sign}${data.change}kg${t("wta.inDays")}${data.days}${t("wic.days")}</div>
-      </div>
-    </div>
-  `;
-}
-
-function renderBodyCompositionBreakdown() {
-  const data = calcBodyCompositionBreakdown(state.records);
-  if (!data) return "";
-
-  const fmtSign = (v) => (v > 0 ? "+" : "") + v;
-  const fatColor = data.fatChange <= 0 ? "var(--ok)" : "var(--warn)";
-  const leanColor = data.leanChange >= 0 ? "var(--ok)" : "var(--warn)";
-
-  return `
-    <div class="bcb-section">
-      <div class="helper">${t("bcb.title")}</div>
-      <table class="bcb-table">
-        <thead><tr><th></th><th>${t("bcb.start")}</th><th>${t("bcb.now")}</th><th>${t("bcb.change")}</th></tr></thead>
-        <tbody>
-          <tr>
-            <td class="bcb-label">${t("bcb.fatMass")}</td>
-            <td>${data.first.fatMass}kg</td>
-            <td>${data.current.fatMass}kg</td>
-            <td style="color:${fatColor}">${fmtSign(data.fatChange)}kg</td>
-          </tr>
-          <tr>
-            <td class="bcb-label">${t("bcb.leanMass")}</td>
-            <td>${data.first.leanMass}kg</td>
-            <td>${data.current.leanMass}kg</td>
-            <td style="color:${leanColor}">${fmtSign(data.leanChange)}kg</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  `;
-}
-
-function renderWeeklyReportCard() {
-  const goal = Number(state.settings.goalWeight);
-  const data = calcWeeklyReportCard(state.records, goal);
-  if (!data) return "";
-
-  const gradeColors = { A: "var(--ok)", B: "#4caf50", C: "var(--warn)", D: "#ff9800", F: "#f44336" };
-  const color = gradeColors[data.grade] || "var(--muted)";
-
-  const bar = (label, val) => `
-    <div class="wrc-row">
-      <span class="wrc-label">${label}</span>
-      <div class="wrc-bar-track"><div class="wrc-bar-fill" style="width:${val}%;background:${val >= 70 ? "var(--ok)" : val >= 40 ? "var(--warn)" : "var(--muted)"}"></div></div>
-      <span class="wrc-val">${val}</span>
-    </div>`;
-
-  return `
-    <div class="wrc-section">
-      <div class="helper">${t("wrc.title")}</div>
-      <div class="wrc-grade" style="color:${color}">${data.grade}</div>
-      <div class="wrc-score">${data.score}/100 · ${data.weekRecords}/7 ${t("wrc.days")}</div>
-      ${bar(t("wrc.consistency"), data.consistency)}
-      ${bar(t("wrc.goal"), data.goalProgress)}
-      ${bar(t("wrc.stability"), data.stability)}
-    </div>
-  `;
-}
-
-function renderNoteWordFrequency() {
-  const data = calcNoteWordFrequency(state.records);
-  if (!data) return "";
-
-  const maxCount = data.words[0].count;
-  const tags = data.words.map((w) => {
-    const size = 0.7 + (w.count / maxCount) * 0.6;
-    const opacity = 0.5 + (w.count / maxCount) * 0.5;
-    return `<span class="nwf-word" style="font-size:${size}rem;opacity:${opacity}" title="${w.count}${t("nwf.times")}">${w.text}</span>`;
-  }).join("");
-
-  return `
-    <div class="nwf-section">
-      <div class="helper">${t("nwf.title")} <span class="nwf-count">(${data.totalNotes} ${t("nwf.notes")})</span></div>
-      <div class="nwf-cloud">${tags}</div>
-    </div>
-  `;
-}
-
-function renderGoalMilestones() {
-  const goal = Number(state.settings.goalWeight);
-  const milestones = calcGoalMilestones(state.records, goal);
-  if (!milestones || !Array.isArray(milestones) || milestones.length === 0) return "";
-
-  const startWt = state.records.length > 0 ? state.records[0].wt : 0;
-
-  const steps = milestones.map((m) => `
-    <div class="gm-step ${m.reached ? "gm-done" : ""}">
-      <div class="gm-dot">${m.reached ? "✔" : ""}</div>
-      <div class="gm-pct">${m.pct}%</div>
-      <div class="gm-wt">${m.targetWeight}kg</div>
-    </div>
-  `).join("");
-
-  return `
-    <div class="gm-section">
-      <div class="helper">${t("gm.title")}</div>
-      <div class="gm-track">
-        <div class="gm-line"></div>
-        ${steps}
-      </div>
-      <div class="gm-range">
-        <span>${t("gm.start")}: ${startWt}kg</span>
-        <span>${t("gm.goal")}: ${goal}kg</span>
-      </div>
-    </div>
-  `;
-}
-
-function renderRecentEntries() {
-  const entries = getRecentEntries(state.records, 5);
-  if (entries.length === 0) return "";
-  const sourceIcons = { manual: "✏️", voice: "🎤", photo: "📷", quick: "⚡", import: "📥" };
-  const rows = entries.map((e) => {
-    const icon = sourceIcons[e.source] || "✏️";
-    const changeStr = e.change !== null
-      ? `<span class="recent-change ${e.change < 0 ? "down" : e.change > 0 ? "up" : ""}">${e.change > 0 ? "+" : ""}${e.change.toFixed(1)}</span>`
-      : "";
-    return `<div class="recent-row">${icon} <span class="recent-date">${e.dt.slice(5).replace("-", "/")}</span><span class="recent-wt">${e.wt.toFixed(1)}kg</span>${changeStr}</div>`;
-  }).join("");
-  return `
-    <div class="recent-entries">
-      <div class="helper">${t("recent.title")}</div>
-      ${rows}
-    </div>
-  `;
-}
-
-function renderDashboard() {
-  const dash = calcDashboardSummary(state.records, Number(state.profile.heightCm));
-  if (!dash) return "";
-  const changeSign = dash.change > 0 ? "+" : "";
-  const changeCls = dash.change < 0 ? "dash-down" : dash.change > 0 ? "dash-up" : "";
-  return `
-    <div class="dash-grid">
-      <div class="dash-card">
-        <div class="dash-label">${t("dash.weight")}</div>
-        <div class="dash-value">${dash.weight.toFixed(1)}<small>kg</small></div>
-      </div>
-      <div class="dash-card ${changeCls}">
-        <div class="dash-label">${t("dash.change")}</div>
-        <div class="dash-value">${changeSign}${dash.change.toFixed(1)}<small>kg</small></div>
-      </div>
-      <div class="dash-card">
-        <div class="dash-label">${t("dash.bmi")}</div>
-        <div class="dash-value">${dash.bmi !== null ? dash.bmi.toFixed(1) : "—"}</div>
-      </div>
-      <div class="dash-card">
-        <div class="dash-label">${t("dash.streak")}</div>
-        <div class="dash-value">${t("dash.days").replace("{n}", dash.streak)}</div>
-      </div>
-    </div>
-  `;
-}
-
-function renderDataFreshness() {
-  const fresh = calcDataFreshness(state.records);
-  if (!fresh) return "";
-  if (fresh.level === "today") return "";
-  let msg;
-  if (fresh.level === "recent") {
-    msg = t("fresh.recent").replace("{days}", fresh.daysSince).replace("{weight}", fresh.lastWeight.toFixed(1));
-  } else if (fresh.level === "stale") {
-    msg = t("fresh.stale").replace("{days}", fresh.daysSince);
-  } else {
-    msg = t("fresh.veryStale").replace("{days}", fresh.daysSince);
-  }
-  const cls = fresh.level === "veryStale" ? "fresh-warn" : fresh.level === "stale" ? "fresh-nudge" : "fresh-info";
-  return `<div class="freshness-banner ${cls}">${msg}</div>`;
-}
-
-function renderMultiPeriodRate() {
-  const data = calcMultiPeriodRate(state.records);
-  if (!data) return "";
-  const hasAny = data.periods.some((p) => p.hasData);
-  if (!hasAny) return "";
-  const cols = data.periods.map((p) => {
-    if (!p.hasData) {
-      return `<div class="mpr-col"><div class="mpr-label">${t("multiRate.days").replace("{days}", p.days)}</div><div class="mpr-value">${t("multiRate.noData")}</div></div>`;
-    }
-    const sign = p.change > 0 ? "+" : "";
-    const cls = p.change < -0.1 ? "mpr-down" : p.change > 0.1 ? "mpr-up" : "mpr-flat";
-    const wsign = p.weeklyRate > 0 ? "+" : "";
-    return `<div class="mpr-col ${cls}">
-      <div class="mpr-label">${t("multiRate.days").replace("{days}", p.days)}</div>
-      <div class="mpr-value">${sign}${p.change.toFixed(1)}kg</div>
-      <div class="mpr-weekly">${wsign}${p.weeklyRate.toFixed(1)}kg/w</div>
-    </div>`;
-  }).join("");
-  return `
-    <div class="mpr-section">
-      <div class="helper">${t("multiRate.title")}</div>
-      <div class="mpr-grid">${cols}</div>
-    </div>
-  `;
-}
-
-function renderRecordMilestone() {
-  const ms = calcRecordMilestone(state.records.length);
-  if (!ms) return "";
-  if (ms.reached) {
-    return `<div class="milestone-banner milestone-reached">${t("milestone.reached").replace("{count}", ms.reached)}</div>`;
-  }
-  if (ms.remaining <= 5) {
-    return `<div class="milestone-banner milestone-close">${t("milestone.next").replace("{next}", ms.next).replace("{remaining}", ms.remaining)}</div>`;
-  }
-  return "";
 }
 
 function renderRecordingTime() {
@@ -3861,106 +1706,6 @@ function renderRecordingTime() {
       <div class="helper hint-small" style="margin-top:4px;">${t("timeStats.most").replace("{period}", t("timeStats." + timeStats.mostCommon))}</div>
     </div>
   `;
-}
-
-function renderAICoach() {
-  const goalWeight = Number(state.settings.goalWeight);
-  const report = generateAICoachReport(state.records, state.profile, goalWeight);
-  if (report.grade === "new" && state.records.length < 2) {
-    return `
-    <section class="ai-coach-panel panel">
-      <div class="ai-coach-header">
-        <div class="ai-coach-icon">🤖</div>
-        <div>
-          <h2>${t("ai.title")}</h2>
-          <p class="helper">${t("ai.subtitle")}</p>
-        </div>
-      </div>
-      <div class="ai-coach-empty">
-        <div class="ai-empty-icon">📊</div>
-        <p>${t("ai.advice.start")}</p>
-      </div>
-    </section>`;
-  }
-
-  const gradeColors = { excellent: "var(--ok)", good: "var(--ok)", fair: "var(--warn)", needsWork: "var(--warn)", critical: "var(--error)" };
-  const gradeColor = gradeColors[report.grade] || "var(--muted)";
-  const scoreAngle = (report.score / 100) * 360;
-
-  return `
-    <section class="ai-coach-panel panel">
-      <div class="ai-coach-header">
-        <div class="ai-coach-icon">🤖</div>
-        <div>
-          <h2>${t("ai.title")}</h2>
-          <p class="helper">${t("ai.subtitle")}</p>
-        </div>
-        <div class="ai-score-ring" style="--score-angle: ${scoreAngle}deg; --score-color: ${gradeColor}">
-          <span class="ai-score-value">${report.score}</span>
-          <span class="ai-score-label">${t("ai.grade." + report.grade)}</span>
-        </div>
-      </div>
-
-      ${report.weeklyReport ? `
-      <div class="ai-weekly-report">
-        <h3>${t("ai.weeklyReport")}</h3>
-        <div class="ai-weekly-grid">
-          <div class="ai-weekly-stat">
-            <span class="ai-weekly-label">${t("ai.weeklyAvg")}</span>
-            <span class="ai-weekly-value">${report.weeklyReport.avg}kg</span>
-          </div>
-          ${report.weeklyReport.change !== null ? `
-          <div class="ai-weekly-stat">
-            <span class="ai-weekly-label">${t("ai.weeklyChange")}</span>
-            <span class="ai-weekly-value ${report.weeklyReport.change > 0 ? "positive" : report.weeklyReport.change < 0 ? "negative" : ""}">${report.weeklyReport.change > 0 ? "+" : ""}${report.weeklyReport.change}kg</span>
-          </div>` : ""}
-          <div class="ai-weekly-stat">
-            <span class="ai-weekly-label">${t("ai.weeklyRange")}</span>
-            <span class="ai-weekly-value">${report.weeklyReport.range}kg</span>
-          </div>
-          <div class="ai-weekly-stat">
-            <span class="ai-weekly-label">${t("ai.weeklyEntries")}</span>
-            <span class="ai-weekly-value">${report.weeklyReport.entries}</span>
-          </div>
-        </div>
-      </div>` : ""}
-
-      ${report.highlights.length ? `
-      <div class="ai-section ai-highlights">
-        <h3>${t("ai.highlights")}</h3>
-        <div class="ai-items">
-          ${report.highlights.map(h => `<div class="ai-item ai-highlight">${t("ai.highlight." + h)}</div>`).join("")}
-        </div>
-      </div>` : ""}
-
-      ${report.risks.length ? `
-      <div class="ai-section ai-risks">
-        <h3>${t("ai.risks")}</h3>
-        <div class="ai-items">
-          ${report.risks.map(r => `<div class="ai-item ai-risk">${t("ai.risk." + r)}</div>`).join("")}
-        </div>
-      </div>` : ""}
-
-      ${report.advices.length ? `
-      <div class="ai-section ai-advices">
-        <h3>${t("ai.advice")}</h3>
-        <div class="ai-items">
-          ${report.advices.map(a => `<div class="ai-item ai-advice-item">${t("ai.advice." + a)}</div>`).join("")}
-        </div>
-      </div>` : ""}
-
-      ${report.prediction ? `
-      <div class="ai-section ai-prediction">
-        <h3>${t("ai.prediction.title")}</h3>
-        <div class="ai-prediction-content">
-          ${report.prediction.achieved ? t("ai.prediction.achieved")
-            : report.prediction.noTrend ? t("ai.prediction.noTrend")
-            : report.prediction.insufficient ? t("ai.prediction.insufficient")
-            : `<div class="ai-prediction-days">${t("ai.prediction.goalDays").replace("{days}", report.prediction.days)}</div>
-               <div class="ai-prediction-date">${t("ai.prediction.goalDate").replace("{date}", report.prediction.predictedDate)}</div>`}
-        </div>
-      </div>` : ""}
-    </section>`;
 }
 
 function renderStability() {
@@ -3993,7 +1738,7 @@ function renderConsistencyStreak() {
       <div class="consistency-display">
         <span class="consistency-badge${cs.streak >= 5 ? " great" : ""}">${cs.streak >= 5 ? "🎯" : "📊"} ${t("consistency.current").replace("{days}", cs.streak).replace("{tol}", cs.tolerance)}</span>
         ${cs.best > cs.streak ? `<span class="helper hint-small">${t("consistency.best").replace("{days}", cs.best)}</span>` : ""}
-        ${cs.streak >= 5 ? `<span class="helper hint-small" style="color:var(--ok);font-weight:600;">${t("consistency.great")}</span>` : ""}
+        ${cs.streak >= 5 ? `<span class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("consistency.great")}</span>` : ""}
       </div>
     </div>
   `;
@@ -4003,10 +1748,10 @@ function renderBMIDistribution() {
   const dist = calcBMIDistribution(state.records);
   if (!dist) return "";
   const zones = [
-    { key: "under", color: "var(--accent-3)" },
-    { key: "normal", color: "var(--ok)" },
-    { key: "over", color: "var(--warn)" },
-    { key: "obese", color: "var(--error)" },
+    { key: "under", color: "var(--accent-3, #3b82f6)" },
+    { key: "normal", color: "var(--ok, #10b981)" },
+    { key: "over", color: "var(--warn, #f59e0b)" },
+    { key: "obese", color: "var(--error, #ef4444)" },
   ];
   const bars = zones
     .filter((z) => dist[z.key].pct > 0)
@@ -4039,7 +1784,7 @@ function renderWeightPercentile() {
         <div class="percentile-details">
           <div class="percentile-label">${t("percentile.value").replace("{pct}", pctl.percentile)}</div>
           <div class="helper hint-small">${t("percentile.rank").replace("{rank}", pctl.rank).replace("{total}", pctl.total)}</div>
-          ${pctl.percentile <= 10 ? `<div class="helper hint-small" style="color:var(--ok);font-weight:600;">${t("percentile.best")}</div>` : ""}
+          ${pctl.percentile <= 10 ? `<div class="helper hint-small" style="color:var(--ok,#10b981);font-weight:600;">${t("percentile.best")}</div>` : ""}
         </div>
       </div>
     </div>
@@ -4125,10 +1870,6 @@ function renderRecordList() {
     }
   }
 
-  if (hasFilter && displayed.length === 0) {
-    return `<div class="empty-state"><div class="helper">${t("records.noMatch")}</div></div>`;
-  }
-
   // Build dt→index map for O(1) lookup instead of O(n) indexOf
   const dtIndex = new Map(state.records.map((r, i) => [r.dt, i]));
   return displayed.map((record) => {
@@ -4158,67 +1899,25 @@ function renderPickerDecOptions(selected) {
 }
 
 function bindEvents() {
-  // Footer navigation
-  app.querySelectorAll("[data-footer-target]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const target = document.getElementById(btn.dataset.footerTarget);
-      if (target) {
-        target.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-      app.querySelectorAll(".footer-nav-item").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-    });
-  });
-
-  // Arrow key navigation for tablists (WCAG requirement)
-  app.querySelectorAll('[role="tablist"]').forEach((tablist) => {
-    tablist.addEventListener("keydown", (e) => {
-      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-      const tabs = [...tablist.querySelectorAll('[role="tab"]')];
-      const idx = tabs.indexOf(document.activeElement);
-      if (idx === -1) return;
-      e.preventDefault();
-      const next = e.key === "ArrowRight" ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
-      tabs[next].focus();
-      tabs[next].click();
+  // Bottom navigation
+  app.querySelectorAll("[data-nav]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeTab = button.dataset.nav;
+      render();
+      window.scrollTo(0, 0);
     });
   });
 
   app.querySelectorAll("[data-mode]").forEach((button) => {
     button.addEventListener("click", () => {
-      if (voiceActive && button.dataset.mode !== "voice") {
-        recognition?.stop();
-        recognition = null;
-        voiceActive = false;
-      }
       activeEntryMode = button.dataset.mode;
       render();
-      // Focus primary input in the selected mode
-      if (activeEntryMode === "manual") {
-        document.getElementById("pickerInt")?.focus();
-      } else if (activeEntryMode === "voice") {
-        app.querySelector("[data-action='toggle-voice']")?.focus();
-      } else if (activeEntryMode === "photo") {
-        (app.querySelector("[data-action='pick-native-photo']") || app.querySelector("label[for='photoInput']"))?.focus();
-      }
     });
   });
 
   app.querySelector('[data-action="save-profile"]')?.addEventListener("click", saveProfile);
   app.querySelector('[data-action="save-settings"]')?.addEventListener("click", saveSettings);
   app.querySelector('[data-action="save-record"]')?.addEventListener("click", saveRecordFromPicker);
-  app.addEventListener("click", (e) => {
-    if (e.target.closest('[data-action="confirm-save"]')) {
-      const container = document.querySelector(".validate-warnings");
-      if (container) { container.style.display = "none"; container.innerHTML = ""; }
-      saveRecordFromPicker();
-    }
-    if (e.target.closest('[data-action="dismiss-warning"]')) {
-      const container = document.querySelector(".validate-warnings");
-      if (container) { container.style.display = "none"; container.innerHTML = ""; }
-      validationBypass = false;
-    }
-  });
   app.querySelector('[data-action="export-data"]')?.addEventListener("click", exportData);
   app.querySelector('[data-action="reset-data"]')?.addEventListener("click", resetData);
   app.querySelector('[data-action="pick-native-photo"]')?.addEventListener("click", pickNativePhoto);
@@ -4238,21 +1937,13 @@ function bindEvents() {
     showAdvancedAnalytics = !showAdvancedAnalytics;
     render();
   });
-  app.querySelector('[data-action="copy-summary"]')?.addEventListener("click", async (e) => {
-    const text = e.target.dataset.text;
-    try {
-      await navigator.clipboard.writeText(text);
-      e.target.textContent = t("share.copied");
-      clearTimeout(e.target._copyTimer);
-      e.target._copyTimer = setTimeout(() => { e.target.textContent = t("share.btn"); }, 2000);
-    } catch { /* clipboard not available */ }
-  });
   app.querySelector("#recordSearch")?.addEventListener("input", (e) => {
     recordSearchQuery = e.target.value;
-    const pos = e.target.selectionStart;
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
+      const pos = e.target.selectionStart;
       render();
+      // Restore focus and cursor position after render
       const input = document.getElementById("recordSearch");
       if (input) { input.focus(); input.selectionStart = input.selectionEnd = pos; }
     }, 150);
@@ -4288,9 +1979,7 @@ function bindEvents() {
   app.querySelector('[data-action="google-backup"]')?.addEventListener("click", googleBackup);
   app.querySelector('[data-action="google-restore"]')?.addEventListener("click", googleRestore);
   app.querySelector('[data-action="undo"]')?.addEventListener("click", undoLastSave);
-  const zoomEl = app.querySelector('[data-action="zoom-photo"]');
-  zoomEl?.addEventListener("click", handlePhotoZoom);
-  zoomEl?.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handlePhotoZoom(); } });
+  app.querySelector('[data-action="zoom-photo"]')?.addEventListener("click", handlePhotoZoom);
   app.querySelector('[data-action="cal-prev"]')?.addEventListener("click", () => {
     calendarMonth--;
     if (calendarMonth < 0) { calendarMonth = 11; calendarYear--; }
@@ -4318,7 +2007,6 @@ function bindEvents() {
   app.querySelectorAll("[data-quick-adj]").forEach((button) => {
     button.addEventListener("click", () => {
       const adj = parseFloat(button.dataset.quickAdj);
-      if (!Number.isFinite(adj)) return;
       quickWeight = Math.round((quickWeight + adj) * 10) / 10;
       quickWeight = Math.max(20, Math.min(300, quickWeight));
       const display = document.getElementById("quickDisplay");
@@ -4329,7 +2017,6 @@ function bindEvents() {
   app.querySelectorAll("[data-pick-weight]").forEach((button) => {
     button.addEventListener("click", () => {
       const w = parseFloat(button.dataset.pickWeight);
-      if (!Number.isFinite(w)) return;
       state.form.pickerInt = Math.floor(w);
       state.form.pickerDec = Math.round((w - Math.floor(w)) * 10);
       render();
@@ -4347,7 +2034,7 @@ function bindEvents() {
     button.addEventListener("click", () => {
       const key = button.dataset.dateShortcut;
       if (key === "yesterday") {
-        const d = new Date(todayLocal() + "T00:00:00");
+        const d = new Date();
         d.setDate(d.getDate() - 1);
         state.form.date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       } else {
@@ -4359,12 +2046,9 @@ function bindEvents() {
 
   app.querySelectorAll("[data-delete-date]").forEach((button) => {
     button.addEventListener("click", () => {
-      const dt = button.dataset.deleteDate;
-      const rec = state.records.find((r) => r.dt === dt);
-      const detail = rec ? `${dt} (${rec.wt.toFixed(1)}kg)` : dt;
-      if (!window.confirm(t("confirm.deleteRecord") + "\n" + detail)) return;
+      if (!window.confirm(t("confirm.deleteRecord"))) return;
       lastUndoState = { records: [...state.records], quickWeight };
-      state.records = state.records.filter((r) => r.dt !== dt);
+      state.records = state.records.filter((r) => r.dt !== button.dataset.deleteDate);
       persist();
       showUndoSnackbar(t("records.deleted"));
     });
@@ -4392,12 +2076,6 @@ function bindEvents() {
       render();
     });
   });
-  app.querySelectorAll("[data-quick-note]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.form.note = button.dataset.quickNote;
-      render();
-    });
-  });
 
   app.querySelectorAll("input, select").forEach((element) => {
     element.addEventListener("input", handleFieldInput);
@@ -4416,35 +2094,22 @@ function handleFieldInput(event) {
   const { name, value } = event.target;
 
   if (["name", "heightCm", "age", "gender"].includes(name)) {
-    if (name === "heightCm" && value !== "") {
-      const h = Number(value);
-      if (!Number.isFinite(h) || h < 50 || h > 300) return;
-    }
-    if (name === "age" && value !== "") {
-      const a = Number(value);
-      if (!Number.isFinite(a) || a < 1 || a > 150 || !Number.isInteger(a)) return;
-    }
     state.profile = { ...state.profile, [name]: value };
-    persist();
     if (name === "heightCm") render();
     return;
   }
 
   if (name === "pickerInt") {
-    const v = parseInt(value, 10);
-    if (!Number.isFinite(v)) return;
-    state.form.pickerInt = v;
+    state.form.pickerInt = parseInt(value, 10);
     state.form.weight = `${state.form.pickerInt}.${state.form.pickerDec}`;
-    scheduleRender();
+    render();
     return;
   }
 
   if (name === "pickerDec") {
-    const v = parseInt(value, 10);
-    if (!Number.isFinite(v)) return;
-    state.form.pickerDec = v;
+    state.form.pickerDec = parseInt(value, 10);
     state.form.weight = `${state.form.pickerInt}.${state.form.pickerDec}`;
-    scheduleRender();
+    render();
     return;
   }
 
@@ -4456,49 +2121,34 @@ function handleFieldInput(event) {
   if (name === "language") {
     state.settings.language = value;
     t = createTranslator(value);
-    persist();
     render();
     return;
   }
 
   if (name === "theme" || name === "chartStyle") {
     state.settings[name] = value;
-    persist();
     render();
     return;
   }
 
   if (name === "adPreviewEnabled") {
     state.settings.adPreviewEnabled = value === "true";
-    persist();
     render();
     return;
   }
 
   if (name === "goalWeight") {
-    if (value !== "" && value != null) {
-      const gw = parseFloat(value);
-      if (!Number.isFinite(gw) || gw < 20 || gw > 300) {
-        setStatus(t("validate.goalWeight"), "error");
-        return;
-      }
-      state.settings.goalWeight = gw;
-    } else {
-      state.settings.goalWeight = "";
-    }
-    persist();
+    state.settings.goalWeight = value;
     return;
   }
 
   if (name === "reminderEnabled") {
     state.settings.reminderEnabled = value === "true";
-    persist();
     return;
   }
 
   if (name === "reminderTime") {
     state.settings.reminderTime = value;
-    persist();
     return;
   }
 
@@ -4561,11 +2211,7 @@ function checkRainbow(newWeight) {
   }
 }
 
-let _saveLock = false;
 function saveRecordFromPicker() {
-  if (_saveLock) return;
-  _saveLock = true;
-  setTimeout(() => { _saveLock = false; }, 300);
   const weight = state.form.pickerInt + state.form.pickerDec / 10;
   state.form.weight = weight.toFixed(1);
   saveRecordWithWeight(weight, activeEntryMode);
@@ -4577,39 +2223,16 @@ function quickSaveRecord() {
 
 let lastUndoState = null;
 let undoTimer = null;
-let validationBypass = false;
 
 function saveRecordWithWeight(weight, source) {
   const weightResult = validateWeight(String(weight));
   if (!weightResult.valid) {
-    validationBypass = false;
     setStatus(t(weightResult.error || "entry.noWeight"), "error");
     return;
   }
 
-  // Entry validation warnings (skip if user already confirmed)
-  if (!validationBypass && state.records.length > 0) {
-    const warnings = validateWeightEntry(weightResult.weight, state.records);
-    if (warnings.length > 0) {
-      const container = document.querySelector(".validate-warnings");
-      if (container) {
-        const msgs = warnings.map((w) => {
-          if (w.type === "largeDiff") return escHtml(t("validate.largeDiff").replace("{diff}", w.diff).replace("{previous}", w.previous).replace("{date}", w.date));
-          if (w.type === "outsideRange") return escHtml(t("validate.outsideRange").replace("{min}", w.min).replace("{max}", w.max));
-          return "";
-        }).filter(Boolean);
-        container.innerHTML = `<div class="validate-warning-box"><p class="validate-warning-title">${escHtml(t("validate.title"))}</p>${msgs.map((m) => `<p class="validate-warning-msg">${m}</p>`).join("")}<div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="btn ghost validate-confirm" data-action="confirm-save">${escHtml(t("entry.save"))}</button><button type="button" class="btn ghost" data-action="dismiss-warning">${escHtml(t("camera.cancel"))}</button></div></div>`;
-        container.style.display = "block";
-        validationBypass = true;
-        return;
-      }
-    }
-  }
-  validationBypass = false;
-
   const bfResult = validateBodyFat(state.form.bodyFat);
   if (!bfResult.valid) {
-    validationBypass = false;
     setStatus(t(bfResult.error), "error");
     return;
   }
@@ -4644,9 +2267,6 @@ function saveRecordWithWeight(weight, source) {
   const updated = upsertRecord(state.records, record);
   state.records = trimRecords(updated, MAX_RECORDS);
   quickWeight = weightResult.weight;
-  if (imagePreviewUrl && imagePreviewUrl.startsWith("blob:")) {
-    URL.revokeObjectURL(imagePreviewUrl);
-  }
   imagePreviewUrl = "";
   detectedWeights = [];
   activeEntryMode = "manual";
@@ -4661,13 +2281,10 @@ function saveRecordWithWeight(weight, source) {
     note: "",
   };
   if (!persist()) {
-    validationBypass = false;
     setStatus(t("status.storageError"), "error");
     return;
   }
   if (navigator.vibrate) navigator.vibrate(50);
-  const vwContainer = document.querySelector(".validate-warnings");
-  if (vwContainer) { vwContainer.style.display = "none"; vwContainer.innerHTML = ""; }
   showUndoSnackbar(`${t("entry.saved")} · ${record.wt.toFixed(1)}kg`);
   // Scroll to chart after save
   setTimeout(() => {
@@ -4697,8 +2314,6 @@ function undoLastSave() {
   if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
   persist();
   setStatus(t("undo.done"));
-  render();
-  drawChart();
 }
 
 async function preprocessImageForOCR(source) {
@@ -4773,47 +2388,32 @@ async function handlePhotoSelection(event) {
   state.form.imageName = file.name;
   detectedWeights = [];
 
-  const photoBtn = app.querySelector('[data-action="pick-native-photo"]') || app.querySelector('label[for="photoInput"]');
-  if (photoBtn) photoBtn.classList.add("loading");
-  setStatus(t("status.photoAnalyzing"));
-  render();
+  const candidates = await detectWeightsFromImage(file);
+  detectedWeights = candidates;
+  const picked = pickWeightCandidate(candidates, state.records.at(-1)?.wt ?? null);
+  if (picked) {
+    state.form.weight = picked.toFixed(1);
+    state.form.pickerInt = Math.floor(picked);
+    state.form.pickerDec = Math.round((picked - Math.floor(picked)) * 10);
+  }
 
-  try {
-    const candidates = await detectWeightsFromImage(file);
-    detectedWeights = candidates;
-    const picked = pickWeightCandidate(candidates, state.records.at(-1)?.wt ?? null);
-    if (picked) {
-      state.form.weight = picked.toFixed(1);
-      state.form.pickerInt = Math.floor(picked);
-      state.form.pickerDec = Math.round((picked - Math.floor(picked)) * 10);
-    }
-
-    if (candidates.length > 0) {
-      setStatus(t("status.photoReady"));
-    } else if (supportsTextDetection) {
-      setStatus(t("status.photoNoDetection"));
-    } else {
-      setStatus(t("entry.photoFallback"));
-    }
-  } catch {
-    detectedWeights = [];
-    setStatus(t("status.photoNoDetection"), "error");
-  } finally {
-    if (photoBtn) photoBtn.classList.remove("loading");
+  if (candidates.length > 0) {
+    setStatus(t("status.photoReady"));
+  } else if (supportsTextDetection) {
+    setStatus(t("status.photoNoDetection"));
+  } else {
+    setStatus(t("entry.photoFallback"));
   }
   render();
 }
 
 async function pickNativePhoto() {
-  const photoBtn = app.querySelector('[data-action="pick-native-photo"]');
-  if (photoBtn) photoBtn.classList.add("loading");
   try {
     const permissions = await Camera.checkPermissions();
     if (permissions.photos === "denied" || permissions.camera === "denied") {
       const requested = await Camera.requestPermissions({ permissions: ["photos", "camera"] });
       if (requested.photos === "denied" || requested.camera === "denied") {
         setStatus(t("status.permissionDenied"), "error");
-        if (photoBtn) photoBtn.classList.remove("loading");
         return;
       }
     }
@@ -4829,17 +2429,13 @@ async function pickNativePhoto() {
       promptLabelPicture: t("camera.picture"),
     });
 
-    if (imagePreviewUrl && imagePreviewUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(imagePreviewUrl);
-    }
     imagePreviewUrl = photo.webPath || "";
     state.form.imageName = photo.path?.split("/").pop() || "camera-photo.jpeg";
     detectedWeights = [];
 
     if (photo.webPath) {
       try {
-        const response = await fetchWithTimeout(photo.webPath);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const response = await fetch(photo.webPath);
         const blob = await response.blob();
         const candidates = await detectWeightsFromImage(blob);
         detectedWeights = candidates;
@@ -4858,11 +2454,9 @@ async function pickNativePhoto() {
     setStatus(detectedWeights.length ? t("status.photoReady") : t("status.photoNoDetection"));
   } catch {
     setStatus(t("status.permissionDenied"), "error");
-    if (photoBtn) photoBtn.classList.remove("loading");
     return;
   }
 
-  if (photoBtn) photoBtn.classList.remove("loading");
   render();
 }
 
@@ -4910,15 +2504,9 @@ async function toggleVoiceInput() {
     render();
   };
 
-  recognition.onerror = (e) => {
+  recognition.onerror = () => {
     voiceActive = false;
-    try { recognition.abort(); } catch { /* already stopped */ }
-    if (e.error === "no-speech") {
-      setStatus(t("status.voiceNoSpeech"), "warn");
-    } else {
-      setStatus(t("status.voiceError"), "error");
-    }
-    render();
+    setStatus(t("status.voiceError"), "error");
   };
 
   recognition.onend = () => {
@@ -4926,11 +2514,7 @@ async function toggleVoiceInput() {
     render();
   };
 
-  try { recognition.start(); } catch {
-    voiceActive = false;
-    setStatus(t("entry.voiceUnsupported"), "error");
-    render();
-  }
+  recognition.start();
 }
 
 async function toggleNativeVoiceInput() {
@@ -5054,14 +2638,13 @@ function handleCSVImport(e) {
       e.target.value = "";
       return;
     }
-    const prevRecords = [...state.records];
     let merged = [...state.records];
     for (const rec of records) {
       merged = upsertRecord(merged, rec);
     }
     merged = trimRecords(merged);
     state.records = merged;
-    if (!persist()) { state.records = prevRecords; setStatus(t("status.storageError"), "error"); e.target.value = ""; return; }
+    persist();
     let msg = t("import.csv.success").replace("{count}", records.length);
     if (errors.length) {
       msg += " " + t("import.csv.errors").replace("{count}", errors.length);
@@ -5069,10 +2652,6 @@ function handleCSVImport(e) {
     setStatus(msg);
     e.target.value = "";
     render();
-  };
-  reader.onerror = () => {
-    setStatus(t("import.error"), "error");
-    e.target.value = "";
   };
   reader.readAsText(file);
 }
@@ -5114,23 +2693,15 @@ function downloadFile(content, filename, mimeType) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
-  document.body.appendChild(anchor);
   anchor.click();
-  document.body.removeChild(anchor);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  URL.revokeObjectURL(url);
 }
 
 async function shareChart() {
   const canvas = document.getElementById("chart");
   if (!canvas) return;
-  const shareBtn = app.querySelector('[data-action="share-chart"]');
-  if (shareBtn?.disabled) return;
-  if (shareBtn) { shareBtn.disabled = true; shareBtn.classList.add("loading"); }
   try {
-    const blob = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("toBlob timeout")), 5000);
-      canvas.toBlob((b) => { clearTimeout(timer); resolve(b); }, "image/png");
-    });
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
     if (!blob) { setStatus(t("share.error"), "error"); return; }
     if (navigator.share && navigator.canShare) {
       const file = new File([blob], "weight-chart.png", { type: "image/png" });
@@ -5146,15 +2717,11 @@ async function shareChart() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `weight-chart-${todayLocal()}.png`;
-    document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    URL.revokeObjectURL(url);
     setStatus(t("share.done"));
   } catch {
     setStatus(t("share.error"), "error");
-  } finally {
-    if (shareBtn) { shareBtn.disabled = false; shareBtn.classList.remove("loading"); }
   }
 }
 
@@ -5218,9 +2785,7 @@ function handleImportData(event) {
         return;
       }
 
-      const validImportRecords = data.records.filter((r) =>
-        r.dt && /^\d{4}-\d{2}-\d{2}$/.test(r.dt) && Number.isFinite(r.wt) && r.wt >= 20 && r.wt <= 300
-      );
+      const validImportRecords = data.records.filter((r) => r.dt && Number.isFinite(r.wt));
       if (!validImportRecords.length) {
         setStatus(t("import.csv.empty"), "error");
         return;
@@ -5228,10 +2793,6 @@ function handleImportData(event) {
 
       if (!window.confirm(t("import.confirm").replace("{count}", validImportRecords.length))) return;
 
-      // Snapshot state before import so we can rollback on persist failure
-      const prevRecords = [...state.records];
-      const prevSettings = { ...state.settings };
-      const prevProfile = { ...state.profile };
       const beforeCount = state.records.length;
       // Merge records by date (imported records fill gaps, don't overwrite)
       for (const record of validImportRecords) {
@@ -5240,26 +2801,12 @@ function handleImportData(event) {
       state.records = trimRecords(state.records, MAX_RECORDS);
       const newCount = state.records.length - beforeCount;
 
-      // Import settings if present
-      if (data.settings) {
-        if (data.settings.goalWeight != null && Number.isFinite(Number(data.settings.goalWeight))) {
-          state.settings.goalWeight = data.settings.goalWeight;
-        }
-        if (data.settings.theme && THEME_LIST.some((th) => th.id === data.settings.theme)) {
-          state.settings.theme = data.settings.theme;
-        }
-      }
-
-      // Import profile if present and current one is empty (sanitize)
+      // Import profile if present and current one is empty
       if (data.profile && !state.profile.name) {
-        state.profile = sanitizeProfile({ ...createDefaultProfile(), ...data.profile });
+        state.profile = { ...state.profile, ...data.profile };
       }
 
       if (!persist()) {
-        // Rollback in-memory state to match localStorage
-        state.records = prevRecords;
-        state.settings = prevSettings;
-        state.profile = prevProfile;
         setStatus(t("status.storageError"), "error");
         return;
       }
@@ -5279,7 +2826,6 @@ function resetData() {
     ? `${t("confirm.reset")}\n\n(${state.records.length} ${t("chart.records")})`
     : t("confirm.reset");
   if (!window.confirm(msg)) return;
-  if (!window.confirm(t("confirm.resetFinal"))) return;
 
   state = {
     ...loadState(),
@@ -5299,9 +2845,6 @@ function resetData() {
   quickWeight = 65.0;
   voiceTranscript = "";
   detectedWeights = [];
-  if (imagePreviewUrl && imagePreviewUrl.startsWith("blob:")) {
-    URL.revokeObjectURL(imagePreviewUrl);
-  }
   imagePreviewUrl = "";
   activeEntryMode = "manual";
   showAllRecords = false;
@@ -5324,22 +2867,12 @@ function resetData() {
     return;
   }
 
-  // Clear active timers
-  if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
-  if (reminderTimer) { clearInterval(reminderTimer); reminderTimer = null; }
-  if (searchDebounceTimer) { clearTimeout(searchDebounceTimer); searchDebounceTimer = null; }
-  lastUndoState = null;
-  lastNotifiedDate = "";
-
   setStatus(t("status.reset"));
-  render();
-  drawChart();
 }
 
 function drawChart() {
   const canvas = document.getElementById("chart");
   if (!canvas) return;
-  if (canvas._tooltipTimer) { clearTimeout(canvas._tooltipTimer); canvas._tooltipTimer = null; }
 
   // Fix DPI scaling for retina displays
   const dpr = window.devicePixelRatio || 1;
@@ -5361,8 +2894,7 @@ function drawChart() {
   let chartRecords = state.records;
   if (chartPeriod !== "all") {
     const days = parseInt(chartPeriod, 10);
-    if (Number.isNaN(days)) return;
-    const d = new Date(todayLocal() + "T00:00:00");
+    const d = new Date();
     d.setDate(d.getDate() - days);
     const cutoff = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     chartRecords = state.records.filter((r) => r.dt >= cutoff);
@@ -5404,8 +2936,7 @@ function drawChart() {
     context.stroke();
 
     // Y-axis labels
-    const weightVal = max - (index / 4) * range;
-    const weightLabel = weightVal % 1 === 0 ? String(Math.round(weightVal)) : weightVal.toFixed(1);
+    const weightLabel = (max - (index / 4) * range).toFixed(1);
     context.fillStyle = cs.getPropertyValue("--muted").trim() || "#6b7280";
     context.font = "11px sans-serif";
     context.textAlign = "right";
@@ -5501,10 +3032,10 @@ function drawChart() {
       movingAvg.push(sum / windowSize);
     }
     context.save();
-    context.setLineDash([6, 5]);
+    context.setLineDash([4, 4]);
     context.strokeStyle = cs.getPropertyValue("--accent-3").trim() || "#0ea5e9";
-    context.lineWidth = 1.8;
-    context.globalAlpha = 0.65;
+    context.lineWidth = 1.5;
+    context.globalAlpha = 0.6;
     context.beginPath();
     movingAvg.forEach((avg, i) => {
       const x = toX(i);
@@ -5594,14 +3125,12 @@ function drawChart() {
   context.fillStyle = cs.getPropertyValue("--muted").trim() || "#6b7280";
   context.font = "12px sans-serif";
   context.textAlign = "center";
-  const labelCount = chartRecords.length > 60 ? 5 : chartRecords.length > 20 ? 4 : 3;
-  const labelIndices = Array.from({ length: labelCount }, (_, i) =>
-    Math.round(i * (chartRecords.length - 1) / (labelCount - 1))
-  ).filter((v, i, a) => a.indexOf(v) === i);
-  labelIndices.forEach((index) => {
-    const record = chartRecords[index];
-    context.fillText(record.dt.slice(5), toX(index), height - 8);
-  });
+  [0, Math.floor((chartRecords.length - 1) / 2), chartRecords.length - 1]
+    .filter((value, index, array) => array.indexOf(value) === index)
+    .forEach((index) => {
+      const record = chartRecords[index];
+      context.fillText(record.dt.slice(5), toX(index), height - 8);
+    });
 
   // Touch/click/hover tooltip - store handlers to avoid listener leak
   if (canvas._chartClickHandler) {
@@ -5641,7 +3170,7 @@ function drawChart() {
     canvas._tooltipTimer = setTimeout(() => {
       const tip = document.getElementById("chartTooltip");
       if (tip) tip.style.display = "none";
-    }, 3500);
+    }, 3000);
   };
   canvas._chartMoveHandler = (e) => { showTooltipForEvent(e); };
   canvas._chartLeaveHandler = () => {
@@ -5667,7 +3196,7 @@ function drawChart() {
     canvas._tooltipTimer = setTimeout(() => {
       const tip = document.getElementById("chartTooltip");
       if (tip) tip.style.display = "none";
-    }, 3500);
+    }, 2000);
   };
   canvas.addEventListener("touchmove", canvas._chartTouchHandler, { passive: false });
   canvas.addEventListener("touchend", canvas._chartTouchEndHandler);
@@ -5724,11 +3253,6 @@ function saveReminder() {
       initReminder();
       setStatus(t("reminder.saved"));
       render();
-    }).catch(() => {
-      state.settings.reminderEnabled = false;
-      setStatus(t("reminder.denied"), "error");
-      persist();
-      render();
     });
     return;
   }
@@ -5759,6 +3283,8 @@ function initReminder() {
   if (!state.settings.reminderEnabled || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
 
+  let lastNotifiedDate = "";
+
   reminderTimer = setInterval(() => {
     const now = new Date();
     const todayStr = todayLocal();
@@ -5781,12 +3307,6 @@ function initReminder() {
 // --- Google Drive Integration ---
 const GOOGLE_CLIENT_ID = window.__GOOGLE_CLIENT_ID__ || "";
 const BACKUP_FILENAME = "weight-rainbow-backup.json";
-const DRIVE_TIMEOUT = 30000;
-function fetchWithTimeout(url, opts = {}) {
-  const ctrl = new AbortController();
-  const id = setTimeout(() => ctrl.abort(), DRIVE_TIMEOUT);
-  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(id));
-}
 let gTokenClient = null;
 let gToken = null;
 let gTokenExpiresAt = 0;
@@ -5810,10 +3330,7 @@ function googleGetToken() {
   return new Promise((resolve, reject) => {
     const c = googleAuth();
     if (!c) { reject(new Error("not_configured")); return; }
-    if (gToken && Date.now() < gTokenExpiresAt) { resolve(gToken); return; }
-    const timeout = setTimeout(() => reject(new Error("auth_timeout")), DRIVE_TIMEOUT);
     c.callback = (r) => {
-      clearTimeout(timeout);
       if (r.error) reject(new Error(r.error));
       else {
         gToken = r.access_token;
@@ -5821,15 +3338,15 @@ function googleGetToken() {
         resolve(r.access_token);
       }
     };
-    c.requestAccessToken();
+    if (gToken && Date.now() < gTokenExpiresAt) resolve(gToken);
+    else c.requestAccessToken();
   });
 }
 
 async function googleBackup() {
   if (!GOOGLE_CLIENT_ID) { setStatus(t("google.notConfigured"), "error"); return; }
-  const backupBtn = app.querySelector('[data-action="google-backup"]');
-  if (backupBtn?.disabled) return;
-  if (backupBtn) { backupBtn.disabled = true; backupBtn.classList.add("loading"); }
+  const btn = app.querySelector('[data-action="google-backup"]');
+  btn?.classList.add("loading");
   try {
     const tk = await googleGetToken();
     const data = {
@@ -5837,10 +3354,19 @@ async function googleBackup() {
       records: state.records.map((r) => ({
         dt: r.dt, wt: r.wt, bmi: r.bmi, bf: r.bf ?? null, source: r.source, note: r.note ?? "", createdAt: r.createdAt,
       })),
-      settings: { ...state.settings },
-      profile: { ...state.profile },
+      profile: {
+        name: state.profile.name,
+        heightCm: state.profile.heightCm,
+        age: state.profile.age,
+        gender: state.profile.gender,
+      },
+      settings: {
+        goalWeight: state.settings.goalWeight,
+        theme: state.settings.theme,
+        language: state.settings.language,
+      },
     };
-    const sr = await fetchWithTimeout(
+    const sr = await fetch(
       `https://www.googleapis.com/drive/v3/files?q=name='${BACKUP_FILENAME}'+and+trashed=false&spaces=appDataFolder&fields=files(id)`,
       { headers: { Authorization: `Bearer ${tk}` } },
     );
@@ -5850,7 +3376,7 @@ async function googleBackup() {
     const bd = JSON.stringify(data, null, 2);
     let ur;
     if (ex) {
-      ur = await fetchWithTimeout(
+      ur = await fetch(
         `https://www.googleapis.com/upload/drive/v3/files/${ex.id}?uploadType=media`,
         { method: "PATCH", headers: { Authorization: `Bearer ${tk}`, "Content-Type": "application/json" }, body: bd },
       );
@@ -5860,7 +3386,7 @@ async function googleBackup() {
         `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
         JSON.stringify({ name: BACKUP_FILENAME, mimeType: "application/json", parents: ["appDataFolder"] }) +
         `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${bd}\r\n--${boundary}--`;
-      ur = await fetchWithTimeout(
+      ur = await fetch(
         "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
         { method: "POST", headers: { Authorization: `Bearer ${tk}`, "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipartBody },
       );
@@ -5870,18 +3396,17 @@ async function googleBackup() {
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
   } finally {
-    if (backupBtn) { backupBtn.disabled = false; backupBtn.classList.remove("loading"); }
+    btn?.classList.remove("loading");
   }
 }
 
 async function googleRestore() {
   if (!GOOGLE_CLIENT_ID) { setStatus(t("google.notConfigured"), "error"); return; }
-  const restoreBtn = app.querySelector('[data-action="google-restore"]');
-  if (restoreBtn?.disabled) return;
-  if (restoreBtn) { restoreBtn.disabled = true; restoreBtn.classList.add("loading"); }
+  const btn = app.querySelector('[data-action="google-restore"]');
+  btn?.classList.add("loading");
   try {
     const tk = await googleGetToken();
-    const sr = await fetchWithTimeout(
+    const sr = await fetch(
       `https://www.googleapis.com/drive/v3/files?q=name='${BACKUP_FILENAME}'+and+trashed=false&spaces=appDataFolder&fields=files(id)`,
       { headers: { Authorization: `Bearer ${tk}` } },
     );
@@ -5889,20 +3414,15 @@ async function googleRestore() {
     const sd = await sr.json();
     const f = sd.files?.[0];
     if (!f) { setStatus(t("google.noData"), "error"); return; }
-    const cr = await fetchWithTimeout(
+    const cr = await fetch(
       `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
       { headers: { Authorization: `Bearer ${tk}` } },
     );
     if (!cr.ok) throw new Error("drive_error");
-    let bd;
-    try { bd = await cr.json(); } catch { throw new Error("drive_error"); }
+    const bd = await cr.json();
     if (!bd.records?.length) { setStatus(t("google.noData"), "error"); return; }
     const validBackupRecords = bd.records.filter((r) => r.dt && Number.isFinite(r.wt));
-    if (!validBackupRecords.length) { setStatus(t("google.noData"), "error"); return; }
     if (!window.confirm(t("google.restoreConfirm") + ` (${validBackupRecords.length} ${t("chart.records")})`)) return;
-    const prevRecords = [...state.records];
-    const prevSettings = { ...state.settings };
-    const prevProfile = { ...state.profile };
     const beforeCount = state.records.length;
     let m = [...state.records];
     for (const r of validBackupRecords) {
@@ -5910,29 +3430,18 @@ async function googleRestore() {
     }
     state.records = trimRecords(m, MAX_RECORDS);
     const newCount = state.records.length - beforeCount;
-    if (bd.settings) {
-      if (bd.settings.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;
-      if (bd.settings.theme) state.settings.theme = bd.settings.theme;
-      if (bd.settings.reminderEnabled != null) state.settings.reminderEnabled = bd.settings.reminderEnabled;
-      if (bd.settings.reminderTime) state.settings.reminderTime = bd.settings.reminderTime;
-    }
-    // Import profile if present and current one is empty (sanitize)
+    if (bd.settings?.goalWeight != null) state.settings.goalWeight = bd.settings.goalWeight;
+    // Import profile if present and current one is empty
     if (bd.profile && !state.profile.name && !state.profile.heightCm) {
-      state.profile = sanitizeProfile({ ...createDefaultProfile(), ...bd.profile });
+      state.profile = { ...createDefaultProfile(), ...bd.profile };
     }
-    if (!persist()) {
-      state.records = prevRecords;
-      state.settings = prevSettings;
-      state.profile = prevProfile;
-      setStatus(t("status.storageError"), "error");
-      return;
-    }
+    if (!persist()) { setStatus(t("status.storageError"), "error"); return; }
     setStatus(t("google.restoreDone") + ` (${validBackupRecords.length} ${t("chart.records")}${newCount > 0 ? `, +${newCount} ${t("import.new")}` : ""})`);
     render();
   } catch (e) {
     setStatus(e.message === "not_configured" ? t("google.notConfigured") : t("google.error"), "error");
   } finally {
-    if (restoreBtn) { restoreBtn.disabled = false; restoreBtn.classList.remove("loading"); }
+    btn?.classList.remove("loading");
   }
 }
 
@@ -5951,18 +3460,16 @@ if (GOOGLE_CLIENT_ID) {
 function handlePhotoZoom() {
   if (!imagePreviewUrl) return;
   const ov = document.createElement("div");
-  ov.style.cssText = "position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.85);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;cursor:zoom-out;animation:fadeIn 0.2s ease-out";
+  ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out";
   ov.setAttribute("role", "dialog");
-  ov.setAttribute("aria-modal", "true");
   ov.setAttribute("aria-label", t("photo.zoomHint"));
   const im = document.createElement("img");
   im.src = imagePreviewUrl;
   im.alt = t("entry.photoPreview");
-  im.style.cssText = "max-width:95vw;max-height:95dvh;object-fit:contain;border-radius:12px";
+  im.style.cssText = "max-width:95vw;max-height:95vh;object-fit:contain;border-radius:12px";
   ov.appendChild(im);
   ov.tabIndex = -1;
-  const triggerEl = document.activeElement;
-  const dismiss = () => { ov.remove(); document.removeEventListener("keydown", onKey); if (triggerEl && document.contains(triggerEl)) triggerEl.focus(); };
+  const dismiss = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
   const onKey = (e) => { if (e.key === "Escape") dismiss(); };
   ov.addEventListener("click", dismiss);
   document.addEventListener("keydown", onKey);
@@ -5975,12 +3482,6 @@ let resizeTimer;
 window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(drawChart, 150);
-});
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") {
-    scheduleRender();
-    drawChart();
-  }
 });
 window.addEventListener("beforeunload", () => {
   if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
@@ -5995,17 +3496,11 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && voiceActive) {
     event.preventDefault();
     void toggleVoiceInput();
-  } else if (event.key === "Escape" && rainbowVisible) {
-    rainbowVisible = false;
-    document.getElementById("rainbowOverlay")?.remove();
   }
 
-  // Ctrl/Cmd+Z to undo last save
-  if ((event.metaKey || event.ctrlKey) && event.key === "z" && !event.shiftKey) {
-    if (lastUndoState) {
-      event.preventDefault();
-      undoLastSave();
-    }
+  if (event.key === "Escape" && rainbowVisible) {
+    rainbowVisible = false;
+    document.getElementById("rainbowOverlay")?.remove();
   }
 
   // Ctrl/Cmd+K to focus search
@@ -6015,27 +3510,6 @@ window.addEventListener("keydown", (event) => {
     if (searchInput) {
       searchInput.focus();
       searchInput.select();
-    } else if (state.records.length <= 3) {
-      setStatus(t("records.searchMinRecords"), "warn");
     }
-  }
-});
-
-// Scroll-to-top button visibility (throttled)
-let scrollTicking = false;
-window.addEventListener("scroll", () => {
-  if (!scrollTicking) {
-    scrollTicking = true;
-    requestAnimationFrame(() => {
-      const btn = document.getElementById("scrollTopBtn");
-      if (btn) btn.classList.toggle("visible", window.scrollY > 400);
-      scrollTicking = false;
-    });
-  }
-}, { passive: true });
-
-document.addEventListener("click", (e) => {
-  if (e.target.id === "scrollTopBtn" || e.target.closest("#scrollTopBtn")) {
-    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 });
