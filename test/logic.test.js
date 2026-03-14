@@ -124,6 +124,7 @@ import {
   calcQuickWeightPresets,
   calcRecordCompleteness,
   calcWeightPace,
+  calcWeightSmoothness,
   THEME_LIST,
   MAX_RECORDS,
   WEIGHT_RANGE,
@@ -9204,5 +9205,68 @@ describe("calcWeightPace", () => {
     const result = calcWeightPace(records, 65);
     expect(result.direction).toBe("gain");
     expect(result.pace).toBe("too_fast");
+  });
+});
+
+describe("calcWeightSmoothness", () => {
+  it("returns null for insufficient data", () => {
+    expect(calcWeightSmoothness(null)).toBeNull();
+    expect(calcWeightSmoothness([])).toBeNull();
+    expect(calcWeightSmoothness([
+      { dt: "2025-01-01", wt: 70 },
+      { dt: "2025-01-02", wt: 69 },
+    ])).toBeNull();
+  });
+
+  it("returns high score for perfectly linear data", () => {
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: +(70 - i * 0.1).toFixed(1),
+    }));
+    const result = calcWeightSmoothness(records);
+    expect(result).not.toBeNull();
+    expect(result.score).toBeGreaterThanOrEqual(90);
+    expect(result.rating).toBe("very_smooth");
+  });
+
+  it("returns lower score for noisy data", () => {
+    const records = Array.from({ length: 14 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: +(70 + (i % 2 === 0 ? 1 : -1) * 0.8).toFixed(1),
+    }));
+    const result = calcWeightSmoothness(records);
+    expect(result).not.toBeNull();
+    expect(result.score).toBeLessThan(70);
+  });
+
+  it("returns score between 0 and 100", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 + Math.sin(i) * 0.5,
+    }));
+    const result = calcWeightSmoothness(records);
+    expect(result.score).toBeGreaterThanOrEqual(0);
+    expect(result.score).toBeLessThanOrEqual(100);
+  });
+
+  it("includes trendSlope and avgDailyNoise", () => {
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70 - i * 0.05,
+    }));
+    const result = calcWeightSmoothness(records);
+    expect(result).toHaveProperty("trendSlope");
+    expect(result).toHaveProperty("avgDailyNoise");
+    expect(result.trendSlope).toBeLessThan(0);
+  });
+
+  it("assigns correct rating levels", () => {
+    // Constant weight = very smooth
+    const records = Array.from({ length: 10 }, (_, i) => ({
+      dt: `2025-01-${String(i + 1).padStart(2, "0")}`,
+      wt: 70,
+    }));
+    const result = calcWeightSmoothness(records);
+    expect(["very_smooth", "smooth"]).toContain(result.rating);
   });
 });

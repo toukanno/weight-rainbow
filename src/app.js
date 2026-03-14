@@ -127,6 +127,7 @@ import {
   calcQuickWeightPresets,
   calcRecordCompleteness,
   calcWeightPace,
+  calcWeightSmoothness,
 } from "./logic.js";
 import { createTranslator } from "./i18n.js";
 import { NativeSpeechRecognition } from "./native-speech.js";
@@ -878,6 +879,7 @@ function render() {
                 ${renderPredictionAccuracy()}
                 ${renderDailyChangeDist()}
                 ${renderRecordCompleteness()}
+                ${renderWeightSmoothness()}
               </div>
               ` : ""}
             </div>
@@ -3102,6 +3104,29 @@ function renderWeightPace() {
         <div class="wp-badge" style="background:color-mix(in srgb, ${paceColor} 15%, transparent);color:${paceColor}">${paceLabel}</div>
       </div>
       ${data.pace !== "maintaining" ? `<div class="wp-range">${t("wpace.range").replace("{min}", String(data.healthyMin)).replace("{max}", String(data.healthyMax))}</div>` : ""}
+    </div>
+  `;
+}
+
+function renderWeightSmoothness() {
+  const data = calcWeightSmoothness(state.records);
+  if (!data) return "";
+
+  const color = data.score >= 70 ? "var(--ok)" : data.score >= 50 ? "var(--warn)" : "var(--error)";
+  const ratingLabel = t("wsm." + data.rating);
+
+  return `
+    <div class="wsm-section">
+      <div class="helper">${t("wsm.title")}</div>
+      <div class="wsm-meter">
+        <div class="wsm-score" style="color:${color}">${data.score}</div>
+        <div class="wsm-details">
+          <div class="wsm-rating" style="color:${color}">${ratingLabel}</div>
+          <div class="wsm-noise">${t("wsm.noise")}: ±${data.avgDailyNoise}kg</div>
+        </div>
+      </div>
+      <div class="wsm-bar-track"><div class="wsm-bar-fill" style="width:${data.score}%;background:${color}"></div></div>
+      ${data.score < 70 ? `<div class="wsm-tip">${t("wsm.tip")}</div>` : ""}
     </div>
   `;
 }

@@ -4083,3 +4083,51 @@ export function calcWeightPace(records, goalWeight) {
 
   return { weeklyRate, direction, pace, healthyMin, healthyMax };
 }
+
+/**
+ * Calculate weight measurement smoothness score.
+ * Measures how consistent day-to-day changes are relative to the overall trend.
+ * Low noise = consistent measurement conditions; high noise = erratic.
+ * Returns { score (0–100), avgDailyNoise, trendSlope, rating }
+ * rating: "very_smooth" | "smooth" | "normal" | "noisy" | "erratic"
+ */
+export function calcWeightSmoothness(records) {
+  if (!records || records.length < 7) return null;
+
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-30);
+  if (recent.length < 7) return null;
+
+  // Calculate trend slope via simple linear regression
+  const n = recent.length;
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+  for (let i = 0; i < n; i++) {
+    sumX += i;
+    sumY += recent[i].wt;
+    sumXY += i * recent[i].wt;
+    sumX2 += i * i;
+  }
+  const trendSlope = +((n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX)).toFixed(4);
+
+  // Calculate noise: deviation from trend for each point
+  const intercept = (sumY - trendSlope * sumX) / n;
+  let totalNoise = 0;
+  for (let i = 0; i < n; i++) {
+    const expected = intercept + trendSlope * i;
+    totalNoise += Math.abs(recent[i].wt - expected);
+  }
+  const avgDailyNoise = +(totalNoise / n).toFixed(3);
+
+  // Score: 100 = perfectly smooth, 0 = very noisy
+  // Baseline: 0.3kg noise is average for daily weighing
+  const score = Math.max(0, Math.min(100, Math.round(100 - (avgDailyNoise / 0.6) * 100)));
+
+  let rating;
+  if (score >= 90) rating = "very_smooth";
+  else if (score >= 70) rating = "smooth";
+  else if (score >= 50) rating = "normal";
+  else if (score >= 30) rating = "noisy";
+  else rating = "erratic";
+
+  return { score, avgDailyNoise, trendSlope, rating };
+}
