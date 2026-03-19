@@ -973,11 +973,15 @@
         align-items: center;
         gap: 8px;
         flex-wrap: wrap;
-        padding: 6px 10px;
-        border-radius: 8px;
-        background: color-mix(in srgb, var(--surface-strong) 60%, transparent);
+        padding: 10px 12px;
+        border-radius: 16px;
+        border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--border));
+        background:
+          linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 55%),
+          color-mix(in srgb, var(--surface-strong) 82%, transparent);
         font-size: 0.8rem;
         margin-bottom: 8px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
       }
       .entry-preview-diff {
         font-weight: 700;
@@ -995,8 +999,8 @@
         flex-wrap: wrap;
         gap: 4px 8px;
         align-items: center;
-        padding: 6px 10px;
-        border-radius: 8px;
+        padding: 10px 12px;
+        border-radius: 16px;
         background: color-mix(in srgb, var(--warn, #f59e0b) 12%, transparent);
         border: 1px solid color-mix(in srgb, var(--warn, #f59e0b) 30%, transparent);
         font-size: 0.8rem;
@@ -2312,7 +2316,7 @@
       .date-shortcut {
         padding: 6px 12px;
         min-height: 44px;
-        border-radius: 8px;
+        border-radius: 999px;
         border: 1px solid var(--border);
         background: var(--surface);
         color: var(--muted);
@@ -2339,8 +2343,22 @@
         margin-top: 16px;
         padding: 18px;
         border-radius: 20px;
-        background: linear-gradient(135deg, var(--surface-strong), var(--surface));
+        background:
+          radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 18%, transparent), transparent 34%),
+          linear-gradient(135deg, var(--surface-strong), var(--surface));
         border: 1px solid var(--border);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .quick-section::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 18px;
+        right: 18px;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 55%, white), transparent);
       }
 
       .quick-display {
@@ -3813,7 +3831,25 @@
       /* Input tab header (SmartDiet style) */
       .input-header {
         text-align: center;
-        padding: 16px 16px 8px;
+        padding: 20px 18px 16px;
+        margin-bottom: 12px;
+        border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--border));
+        border-radius: 28px;
+        background:
+          radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 14%, transparent), transparent 34%),
+          radial-gradient(circle at top right, color-mix(in srgb, var(--accent-3) 16%, transparent), transparent 32%),
+          color-mix(in srgb, var(--surface-strong) 88%, transparent);
+        box-shadow: var(--shadow);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .input-header::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 34%);
+        pointer-events: none;
       }
 
       .input-title {
@@ -3821,6 +3857,8 @@
         font-weight: 700;
         margin: 0 !important;
         letter-spacing: -0.01em;
+        position: relative;
+        z-index: 1;
       }
 
       .input-current-weight {
@@ -3832,11 +3870,15 @@
         -webkit-text-fill-color: transparent;
         background-clip: text;
         margin: 4px 0;
+        position: relative;
+        z-index: 1;
       }
 
       .input-diff {
         font-size: 1.1rem;
         font-weight: 700;
+        position: relative;
+        z-index: 1;
       }
       .input-diff.positive { color: var(--warn, #f59e0b); }
       .input-diff.negative { color: var(--ok, #10b981); }
@@ -3848,22 +3890,36 @@
         gap: 10px;
         margin-top: 6px;
         flex-wrap: wrap;
+        position: relative;
+        z-index: 1;
       }
 
       .streak-badge-sm {
         font-size: 0.75rem;
         font-weight: 700;
         color: var(--accent);
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--surface-strong) 80%, transparent);
+        border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
       }
       .streak-badge-sm.rainbow { color: var(--ok, #10b981); }
 
       .trend-sm {
         font-size: 0.85rem;
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--surface-strong) 80%, transparent);
+        border: 1px solid var(--border);
       }
 
       .freshness-sm {
         font-size: 0.72rem;
         color: var(--muted);
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--surface-strong) 80%, transparent);
+        border: 1px solid var(--border);
       }
 
       .motivation-sm {
@@ -3871,6 +3927,9 @@
         color: var(--accent);
         font-weight: 600;
         margin-top: 6px !important;
+        margin-bottom: 0;
+        position: relative;
+        z-index: 1;
       }
 
       .weight-field-main {
@@ -3882,19 +3941,24 @@
         padding: 16px !important;
         font-size: 1.1rem !important;
         border-radius: 20px !important;
+        letter-spacing: 0.01em;
       }
 
       .save-meta {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        min-height: 22px;
       }
 
       .goal-mini {
-        padding: 12px 16px;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 16px;
+        padding: 14px 16px;
+        background:
+          linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%),
+          var(--surface);
+        border: 1px solid color-mix(in srgb, var(--accent) 12%, var(--border));
+        border-radius: 20px;
+        box-shadow: 0 16px 34px color-mix(in srgb, var(--accent) 10%, transparent);
       }
 
       .goal-mini-label {
@@ -3922,6 +3986,11 @@
         .app-shell.tab-layout {
           width: calc(100% - 16px);
           padding: 8px 0 80px;
+        }
+
+        .input-header {
+          padding: 18px 14px 14px;
+          border-radius: 24px;
         }
       }
     </style>
