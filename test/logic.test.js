@@ -148,11 +148,9 @@ import {
   calcShareText,
   calcEntryCountByMonth,
   calcDailyFluctuation,
-  calcGoalCountdown,
   calcWeekOverWeek,
   calcTrendSummary,
   calcTrackingAnniversary,
-  calcWeightConfidence,
   calcMonthlyChange,
   calcWeightSparkline,
   calcDataCompleteness,
@@ -480,6 +478,16 @@ describe("calcStreak", () => {
       { dt: today, wt: 69 },
     ];
     expect(calcStreak(records)).toBe(1);
+  });
+
+  it("counts streaks longer than 365 days", () => {
+    const records = Array.from({ length: 366 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      return { dt: d.toISOString().slice(0, 10), wt: 70 };
+    }).reverse();
+
+    expect(calcStreak(records)).toBe(366);
   });
 });
 
@@ -1603,6 +1611,13 @@ describe("parseCSVImport edge cases", () => {
     const result = parseCSVImport(csv);
     expect(result.records.length).toBe(0);
     expect(result.errors.length).toBe(1);
+  });
+
+  it("rejects calendar-invalid dates", () => {
+    const csv = "date,weight\n2025-02-30,70\n";
+    const result = parseCSVImport(csv);
+    expect(result.records.length).toBe(0);
+    expect(result.errors).toEqual(['Row 2: invalid date "2025-02-30"']);
   });
 });
 
@@ -10555,6 +10570,18 @@ describe("calcShareText", () => {
     const result = calcShareText(mkRecords([70, 71, 72]), 65, 170);
     expect(result.totalRecords).toBe(3);
   });
+
+  it("reports streaks longer than 365 days", () => {
+    const latest = new Date("2026-03-19T00:00:00");
+    const records = Array.from({ length: 366 }, (_, i) => {
+      const d = new Date(latest);
+      d.setDate(d.getDate() - (365 - i));
+      return { dt: d.toISOString().slice(0, 10), wt: 70 - i * 0.01 };
+    });
+
+    const result = calcShareText(records, 65, 170);
+    expect(result.streak).toBe(366);
+  });
 });
 
 describe("calcEntryCountByMonth", () => {
@@ -11200,4 +11227,3 @@ describe("calcPersonalBest", () => {
     expect(result.distFromHigh).toBe(10);
   });
 });
-

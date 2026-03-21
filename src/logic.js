@@ -35,6 +35,26 @@ function daysAgoStr(days) {
   return localDateStr(d);
 }
 
+function countConsecutiveDateSet(dateSet, startDate) {
+  let streak = 0;
+  const cursor = new Date(startDate);
+
+  while (true) {
+    const dateStr = localDateStr(cursor);
+    if (!dateSet.has(dateStr)) break;
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  return streak;
+}
+
+function isValidISODate(dateStr) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const parsed = new Date(`${dateStr}T00:00:00`);
+  return Number.isFinite(parsed.getTime()) && localDateStr(parsed) === dateStr;
+}
+
 export function normalizeNumericInput(value) {
   return String(value ?? "")
     .trim()
@@ -317,21 +337,14 @@ export function calcGoalMilestones(records, goalWeight) {
 export function calcStreak(records) {
   if (!records.length) return 0;
   const dates = new Set(records.map((r) => r.dt));
-  let streak = 0;
-  const today = new Date();
-  for (let i = 0; i < 365; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const dateStr = localDateStr(d);
-    if (dates.has(dateStr)) {
-      streak++;
-    } else {
-      // Allow gap of today if no record yet today
-      if (i === 0) continue;
-      break;
-    }
+  const startDate = new Date();
+
+  // Allow today to be missing if the user has not recorded yet.
+  if (!dates.has(localDateStr(startDate))) {
+    startDate.setDate(startDate.getDate() - 1);
   }
-  return streak;
+
+  return countConsecutiveDateSet(dates, startDate);
 }
 
 export function calcWeightTrend(records, days = 7) {
@@ -692,7 +705,7 @@ export function parseCSVImport(csvText) {
     const dt = row[0]?.trim();
     const wt = Number(row[1]?.trim());
 
-    if (!dt || !/^\d{4}-\d{2}-\d{2}$/.test(dt) || isNaN(new Date(dt + "T00:00:00").getTime())) {
+    if (!dt || !isValidISODate(dt)) {
       errors.push(`Row ${i + 1}: invalid date "${row[0]}"`);
       continue;
     }
@@ -5070,15 +5083,7 @@ export function calcShareText(records, goalWeight, heightCm) {
   const sign = change > 0 ? "+" : "";
 
   const dates = new Set(sorted.map((r) => r.dt));
-  let streak = 0;
-  const latestDate = new Date(latest.dt);
-  for (let i = 0; i < 365; i++) {
-    const d = new Date(latestDate);
-    d.setDate(d.getDate() - i);
-    const ds = d.toISOString().slice(0, 10);
-    if (dates.has(ds)) streak++;
-    else if (i > 0) break;
-  }
+  const streak = countConsecutiveDateSet(dates, new Date(`${latest.dt}T00:00:00`));
 
   let bmi = null;
   if (heightCm && heightCm > 0) {
@@ -5393,4 +5398,3 @@ export function calcPersonalBest(records) {
 
   return { allTimeLow, allTimeHigh, currentWt, isNewLow, isNewHigh, distFromLow, distFromHigh, lowDt, highDt };
 }
-

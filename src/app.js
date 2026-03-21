@@ -184,9 +184,16 @@ function applySystemTheme() {
   }
 }
 if (window.matchMedia) {
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  const handleThemeChange = () => {
     if (state.settings.autoTheme) { applySystemTheme(); render(); }
-  });
+  };
+
+  if (typeof mediaQuery.addEventListener === "function") {
+    mediaQuery.addEventListener("change", handleThemeChange);
+  } else if (typeof mediaQuery.addListener === "function") {
+    mediaQuery.addListener(handleThemeChange);
+  }
   applySystemTheme();
 }
 
@@ -2801,7 +2808,7 @@ function downloadFile(content, filename, mimeType) {
   anchor.href = url;
   anchor.download = filename;
   anchor.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 async function shareChart() {
@@ -2825,7 +2832,7 @@ async function shareChart() {
     a.href = url;
     a.download = `weight-chart-${todayLocal()}.png`;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     setStatus(t("share.done"));
   } catch {
     setStatus(t("share.error"), "error");
