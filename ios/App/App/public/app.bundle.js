@@ -792,6 +792,22 @@ function daysAgoStr(days2) {
   d.setDate(d.getDate() - days2);
   return localDateStr(d);
 }
+function countConsecutiveDateSet(dateSet, startDate) {
+  let streak = 0;
+  const cursor = new Date(startDate);
+  while (true) {
+    const dateStr = localDateStr(cursor);
+    if (!dateSet.has(dateStr)) break;
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+function isValidISODate(dateStr) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const parsed = /* @__PURE__ */ new Date(`${dateStr}T00:00:00`);
+  return Number.isFinite(parsed.getTime()) && localDateStr(parsed) === dateStr;
+}
 function normalizeNumericInput(value) {
   return String(value ?? "").trim().replace(/[０-９]/g, (char) => String(char.charCodeAt(0) - 65296)).replace(/[．，]/g, ".").replace(/,/g, ".").replace(/\s+/g, "");
 }
@@ -1024,20 +1040,11 @@ function calcGoalMilestones(records, goalWeight) {
 function calcStreak(records) {
   if (!records.length) return 0;
   const dates = new Set(records.map((r) => r.dt));
-  let streak = 0;
-  const today = /* @__PURE__ */ new Date();
-  for (let i = 0; i < 365; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const dateStr = localDateStr(d);
-    if (dates.has(dateStr)) {
-      streak++;
-    } else {
-      if (i === 0) continue;
-      break;
-    }
+  const startDate = /* @__PURE__ */ new Date();
+  if (!dates.has(localDateStr(startDate))) {
+    startDate.setDate(startDate.getDate() - 1);
   }
-  return streak;
+  return countConsecutiveDateSet(dates, startDate);
 }
 function calcWeightTrend(records, days2 = 7) {
   if (records.length < 2) return null;
@@ -1347,7 +1354,7 @@ function parseCSVImport(csvText) {
     if (row.length === 1 && !row[0].trim()) continue;
     const dt = row[0]?.trim();
     const wt = Number(row[1]?.trim());
-    if (!dt || !/^\d{4}-\d{2}-\d{2}$/.test(dt) || isNaN((/* @__PURE__ */ new Date(dt + "T00:00:00")).getTime())) {
+    if (!dt || !isValidISODate(dt)) {
       errors.push(`Row ${i + 1}: invalid date "${row[0]}"`);
       continue;
     }
@@ -2155,6 +2162,323 @@ function calcStreakRewards(records) {
   else if (streak >= 3) level = "beginner";
   return { streak, level, earned, next, nextRemaining, totalRecords: records.length };
 }
+function calcWeightConfidence(records) {
+  if (records.length < 7) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-30);
+  if (recent.length < 7) return null;
+  const firstDate = /* @__PURE__ */ new Date(recent[0].dt + "T00:00:00");
+  const xs = recent.map((r) => (/* @__PURE__ */ new Date(r.dt + "T00:00:00") - firstDate) / 864e5);
+  const ys = recent.map((r) => r.wt);
+  const n = xs.length;
+  const sumX = xs.reduce((a, b) => a + b, 0);
+  const sumY = ys.reduce((a, b) => a + b, 0);
+  const sumXY = xs.reduce((a, x, i) => a + x * ys[i], 0);
+  const sumX2 = xs.reduce((a, x) => a + x * x, 0);
+  const denom = n * sumX2 - sumX * sumX;
+  if (denom === 0) return null;
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  const residuals = xs.map((x, i) => ys[i] - (intercept + slope * x));
+  const residualSq = residuals.reduce((a, r) => a + r * r, 0);
+  const stdDev = Math.sqrt(residualSq / (n - 2));
+  const latest = recent[recent.length - 1].wt;
+  const lastDay = xs[xs.length - 1];
+  const forecasts = [7, 14, 30].map((days2) => {
+    const futureX = lastDay + days2;
+    const predicted = intercept + slope * futureX;
+    const margin = stdDev * 1.96;
+    return {
+      days: days2,
+      predicted: Math.round(predicted * 10) / 10,
+      low: Math.round((predicted - margin) * 10) / 10,
+      high: Math.round((predicted + margin) * 10) / 10,
+      margin: Math.round(margin * 10) / 10
+    };
+  });
+  const ssTotal = ys.reduce((a, y) => a + (y - sumY / n) ** 2, 0);
+  const r2 = ssTotal > 0 ? 1 - residualSq / ssTotal : 0;
+  let confidence = "low";
+  if (r2 > 0.7 && n >= 14) confidence = "high";
+  else if (r2 > 0.4 && n >= 7) confidence = "medium";
+  return {
+    dailyRate: Math.round(slope * 100) / 100,
+    weeklyRate: Math.round(slope * 7 * 100) / 100,
+    stdDev: Math.round(stdDev * 100) / 100,
+    confidence,
+    r2: Math.round(r2 * 100) / 100,
+    forecasts,
+    latest,
+    dataPoints: n
+  };
+}
+function calcGoalCountdown(records, goalWeight) {
+  if (!goalWeight || records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1].wt;
+  const remaining = Math.round((latest - goalWeight) * 10) / 10;
+  const absRemaining = Math.abs(remaining);
+  const first = sorted[0].wt;
+  const isLossGoal = first > goalWeight;
+  if (absRemaining < 0.1 || isLossGoal && latest <= goalWeight || !isLossGoal && latest >= goalWeight) {
+    return { reached: true, latest, goal: goalWeight, remaining: 0, pct: 100 };
+  }
+  const totalToLose = first - goalWeight;
+  const lost = first - latest;
+  const pct = totalToLose !== 0 ? Math.max(0, Math.min(100, Math.round(lost / totalToLose * 100))) : 0;
+  const recent = sorted.slice(-14);
+  let etaDays = null;
+  if (recent.length >= 3) {
+    const daySpan = Math.max(1, Math.round((/* @__PURE__ */ new Date(recent[recent.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(recent[0].dt + "T00:00:00")) / 864e5));
+    const rate = (recent[recent.length - 1].wt - recent[0].wt) / daySpan;
+    if (rate < -0.01 && remaining > 0) {
+      etaDays = Math.ceil(remaining / Math.abs(rate));
+    } else if (rate > 0.01 && remaining < 0) {
+      etaDays = Math.ceil(absRemaining / rate);
+    }
+  }
+  return {
+    reached: false,
+    latest,
+    goal: goalWeight,
+    remaining,
+    absRemaining,
+    pct,
+    etaDays,
+    direction: remaining > 0 ? "lose" : "gain"
+  };
+}
+function calcShareText(records, goalWeight, heightCm) {
+  if (!records || records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const first = sorted[0];
+  const latest = sorted[sorted.length - 1];
+  const change = +(latest.wt - first.wt).toFixed(1);
+  const days2 = Math.max(1, Math.round((new Date(latest.dt) - new Date(first.dt)) / 864e5));
+  const sign = change > 0 ? "+" : "";
+  const dates = new Set(sorted.map((r) => r.dt));
+  const streak = countConsecutiveDateSet(dates, /* @__PURE__ */ new Date(`${latest.dt}T00:00:00`));
+  let bmi = null;
+  if (heightCm && heightCm > 0) {
+    const hm = heightCm / 100;
+    bmi = +(latest.wt / (hm * hm)).toFixed(1);
+  }
+  let goalPct = null;
+  if (goalWeight && goalWeight > 0 && Math.abs(first.wt - goalWeight) > 0.5) {
+    const total = first.wt - goalWeight;
+    const progress = first.wt - latest.wt;
+    goalPct = Math.max(0, Math.min(100, Math.round(progress / total * 100)));
+  }
+  return {
+    currentWt: +latest.wt.toFixed(1),
+    startWt: +first.wt.toFixed(1),
+    change,
+    sign,
+    days: days2,
+    streak,
+    bmi,
+    goalPct,
+    totalRecords: sorted.length
+  };
+}
+function calcEntryCountByMonth(records, numMonths = 6) {
+  if (!records || records.length < 1) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latest = sorted[sorted.length - 1].dt;
+  const latestDate = new Date(latest);
+  const months2 = [];
+  for (let i = numMonths - 1; i >= 0; i--) {
+    const d = new Date(latestDate.getFullYear(), latestDate.getMonth() - i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    const count = sorted.filter((r) => r.dt.startsWith(ym)).length;
+    months2.push({ yearMonth: ym, count, daysInMonth });
+  }
+  const maxCount = Math.max(...months2.map((m) => m.count), 1);
+  return { months: months2, maxCount };
+}
+function calcDailyFluctuation(records) {
+  if (!records || records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const fluctuations = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const diff = Math.abs(sorted[i].wt - sorted[i - 1].wt);
+    fluctuations.push({
+      dt: sorted[i].dt,
+      change: Math.round(diff * 100) / 100
+    });
+  }
+  const values = fluctuations.map((f) => f.change);
+  const avg = Math.round(values.reduce((a, b) => a + b, 0) / values.length * 100) / 100;
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const stableDays = values.filter((v) => v <= 0.3).length;
+  const stablePct = Math.round(stableDays / values.length * 100);
+  return {
+    avgFluctuation: avg,
+    maxFluctuation: Math.round(max * 100) / 100,
+    minFluctuation: Math.round(min * 100) / 100,
+    fluctuations: fluctuations.slice(-14),
+    stableDays,
+    stablePct,
+    totalDays: values.length
+  };
+}
+function calcWeekOverWeek(records) {
+  if (!records || records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latestDate = /* @__PURE__ */ new Date(sorted[sorted.length - 1].dt + "T00:00:00");
+  const day = latestDate.getDay();
+  const diffToMon = day === 0 ? 6 : day - 1;
+  const thisMonday = new Date(latestDate);
+  thisMonday.setDate(thisMonday.getDate() - diffToMon);
+  const lastMonday = new Date(thisMonday);
+  lastMonday.setDate(lastMonday.getDate() - 7);
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const thisMon = fmt(thisMonday);
+  const lastMon = fmt(lastMonday);
+  const thisWeek = sorted.filter((r) => r.dt >= thisMon);
+  const lastWeek = sorted.filter((r) => r.dt >= lastMon && r.dt < thisMon);
+  if (thisWeek.length === 0 || lastWeek.length === 0) return null;
+  const avg = (arr) => Math.round(arr.reduce((s, r) => s + r.wt, 0) / arr.length * 10) / 10;
+  const thisWeekAvg = avg(thisWeek);
+  const lastWeekAvg = avg(lastWeek);
+  const change = Math.round((thisWeekAvg - lastWeekAvg) * 10) / 10;
+  const direction = change < 0 ? "down" : change > 0 ? "up" : "flat";
+  return { thisWeekAvg, lastWeekAvg, change, direction, thisWeekCount: thisWeek.length, lastWeekCount: lastWeek.length };
+}
+function calcTrendSummary(records) {
+  if (!records || records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latestDt = sorted[sorted.length - 1].dt;
+  const latestDate = /* @__PURE__ */ new Date(latestDt + "T00:00:00");
+  const cutoff = new Date(latestDate);
+  cutoff.setDate(cutoff.getDate() - 7);
+  const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+  const recent = sorted.filter((r) => r.dt >= cutoffStr);
+  if (recent.length < 2) {
+    return { status: "insufficient", changeKg: 0, days: 0, latestWt: sorted[sorted.length - 1].wt, avgWt: sorted[sorted.length - 1].wt };
+  }
+  const first = recent[0].wt;
+  const last = recent[recent.length - 1].wt;
+  const changeKg = Math.round((last - first) * 10) / 10;
+  const daySpan = Math.max(1, Math.round((/* @__PURE__ */ new Date(recent[recent.length - 1].dt + "T00:00:00") - /* @__PURE__ */ new Date(recent[0].dt + "T00:00:00")) / 864e5));
+  const dailyRate = changeKg / daySpan;
+  const avgWt = Math.round(recent.reduce((s, r) => s + r.wt, 0) / recent.length * 10) / 10;
+  let status;
+  if (dailyRate <= -0.15) status = "losing_fast";
+  else if (dailyRate < -0.03) status = "losing";
+  else if (dailyRate <= 0.03) status = "stable";
+  else if (dailyRate < 0.15) status = "gaining";
+  else status = "gaining_fast";
+  return { status, changeKg, days: daySpan, latestWt: last, avgWt };
+}
+function calcTrackingAnniversary(records) {
+  if (!records || records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const firstDt = sorted[0].dt;
+  const latestDt = sorted[sorted.length - 1].dt;
+  const first = /* @__PURE__ */ new Date(firstDt + "T00:00:00");
+  const latest = /* @__PURE__ */ new Date(latestDt + "T00:00:00");
+  const totalDays = Math.round((latest - first) / 864e5);
+  const milestones = [7, 30, 60, 90, 180, 365, 730, 1095];
+  let milestone = null;
+  let nextMilestone = milestones[0];
+  for (const m of milestones) {
+    if (totalDays >= m) {
+      milestone = m;
+    } else {
+      nextMilestone = m;
+      break;
+    }
+  }
+  if (totalDays >= milestones[milestones.length - 1]) {
+    nextMilestone = null;
+  }
+  const nextMilestoneDays = nextMilestone != null ? nextMilestone - totalDays : null;
+  return { totalDays, milestone, nextMilestone, nextMilestoneDays, firstDt, latestDt };
+}
+function calcMonthlyChange(records, numMonths = 3) {
+  if (!records || records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latestDate = /* @__PURE__ */ new Date(sorted[sorted.length - 1].dt + "T00:00:00");
+  const months2 = [];
+  for (let i = numMonths - 1; i >= 0; i--) {
+    const d = new Date(latestDate.getFullYear(), latestDate.getMonth() - i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const monthRecords = sorted.filter((r) => r.dt.startsWith(ym));
+    if (monthRecords.length < 2) {
+      months2.push({ yearMonth: ym, startWt: null, endWt: null, change: null });
+      continue;
+    }
+    const startWt = monthRecords[0].wt;
+    const endWt = monthRecords[monthRecords.length - 1].wt;
+    const change = Math.round((endWt - startWt) * 10) / 10;
+    months2.push({ yearMonth: ym, startWt, endWt, change });
+  }
+  const withChange = months2.filter((m) => m.change !== null);
+  const bestMonth = withChange.length > 0 ? withChange.reduce((a, b) => a.change < b.change ? a : b).yearMonth : null;
+  const worstMonth = withChange.length > 0 ? withChange.reduce((a, b) => a.change > b.change ? a : b).yearMonth : null;
+  return { months: months2, bestMonth, worstMonth };
+}
+function calcWeightSparkline(records, count = 10) {
+  if (!records || records.length < 3) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const recent = sorted.slice(-count);
+  const values = recent.map((r) => r.wt);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min;
+  const bars = "\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588";
+  const sparkline = values.map((v) => {
+    if (range === 0) return bars[3];
+    const idx = Math.min(7, Math.floor((v - min) / range * 7.99));
+    return bars[idx];
+  }).join("");
+  return { sparkline, min: Math.round(min * 10) / 10, max: Math.round(max * 10) / 10, values };
+}
+function calcDataCompleteness(records, totalDays = 30) {
+  if (!records || records.length === 0) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const latestDate = /* @__PURE__ */ new Date(sorted[sorted.length - 1].dt + "T00:00:00");
+  const cutoff = new Date(latestDate);
+  cutoff.setDate(cutoff.getDate() - totalDays + 1);
+  const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+  const uniqueDays = new Set(sorted.filter((r) => r.dt >= cutoffStr).map((r) => r.dt));
+  const recordedDays = uniqueDays.size;
+  const pct = Math.round(recordedDays / totalDays * 100);
+  let grade;
+  if (pct >= 90) grade = "A";
+  else if (pct >= 70) grade = "B";
+  else if (pct >= 50) grade = "C";
+  else if (pct >= 30) grade = "D";
+  else grade = "F";
+  return { recordedDays, totalDays, pct, grade };
+}
+function calcPersonalBest(records) {
+  if (!records || records.length < 2) return null;
+  const sorted = [...records].sort((a, b) => a.dt.localeCompare(b.dt));
+  const currentWt = sorted[sorted.length - 1].wt;
+  let allTimeLow = Infinity;
+  let allTimeHigh = -Infinity;
+  let lowDt = "";
+  let highDt = "";
+  for (const r of sorted) {
+    if (r.wt < allTimeLow) {
+      allTimeLow = r.wt;
+      lowDt = r.dt;
+    }
+    if (r.wt > allTimeHigh) {
+      allTimeHigh = r.wt;
+      highDt = r.dt;
+    }
+  }
+  const isNewLow = currentWt <= allTimeLow;
+  const isNewHigh = currentWt >= allTimeHigh;
+  const distFromLow = Math.round((currentWt - allTimeLow) * 10) / 10;
+  const distFromHigh = Math.round((allTimeHigh - currentWt) * 10) / 10;
+  return { allTimeLow, allTimeHigh, currentWt, isNewLow, isNewHigh, distFromLow, distFromHigh, lowDt, highDt };
+}
 
 // src/i18n.js
 var translations = {
@@ -2731,7 +3055,68 @@ var translations = {
     "nav.entry": "\u8A18\u9332",
     "nav.chart": "\u63A8\u79FB",
     "nav.records": "\u4E00\u89A7",
-    "nav.settings": "\u8A2D\u5B9A"
+    "nav.settings": "\u8A2D\u5B9A",
+    "sht.title": "\u9032\u6357\u30B7\u30A7\u30A2",
+    "sht.btn": "\u30B3\u30D4\u30FC",
+    "sht.copied": "\u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F\uFF01",
+    "sht.current": "\u73FE\u5728",
+    "sht.change": "\u5909\u5316",
+    "sht.days": "\u65E5\u9593",
+    "sht.streak": "\u9023\u7D9A\u8A18\u9332",
+    "sht.goal": "\u76EE\u6A19\u9054\u6210\u7387",
+    "ecm.title": "\u6708\u5225\u8A18\u9332\u6570",
+    "ecm.entries": "\u4EF6",
+    "dfl.title": "\u65E5\u3005\u306E\u5909\u52D5",
+    "dfl.avg": "\u5E73\u5747\u5909\u52D5",
+    "dfl.max": "\u6700\u5927\u5909\u52D5",
+    "dfl.stable": "\u5B89\u5B9A\u65E5",
+    "dfl.hint": "\xB10.3kg\u4EE5\u5185\u306E\u65E5\u3092\u5B89\u5B9A\u65E5\u3068\u30AB\u30A6\u30F3\u30C8",
+    "gcd.title": "\u76EE\u6A19\u30AB\u30A6\u30F3\u30C8\u30C0\u30A6\u30F3",
+    "gcd.remaining": "\u6B8B\u308A",
+    "gcd.rate": "\u65E5\u3042\u305F\u308A",
+    "gcd.eta": "\u9054\u6210\u4E88\u5B9A",
+    "gcd.reached": "\u76EE\u6A19\u9054\u6210\uFF01",
+    "gcd.notrend": "\u30C8\u30EC\u30F3\u30C9\u8A08\u7B97\u4E2D\u2026",
+    "gcd.wrong": "\u9006\u65B9\u5411\u306E\u30C8\u30EC\u30F3\u30C9",
+    "wow.title": "\u5148\u9031\u3068\u306E\u6BD4\u8F03",
+    "wow.this": "\u4ECA\u9031",
+    "wow.last": "\u5148\u9031",
+    "wow.change": "\u5909\u5316",
+    "trs.title": "\u6700\u8FD1\u306E\u30C8\u30EC\u30F3\u30C9",
+    "trs.losing_fast": "\u9806\u8ABF\u306B\u6E1B\u91CF\u4E2D\uFF01",
+    "trs.losing": "\u5C11\u3057\u305A\u3064\u6E1B\u91CF\u4E2D",
+    "trs.stable": "\u4F53\u91CD\u306F\u5B89\u5B9A\u3057\u3066\u3044\u307E\u3059",
+    "trs.gaining": "\u5C11\u3057\u5897\u52A0\u50BE\u5411",
+    "trs.gaining_fast": "\u5897\u52A0\u30DA\u30FC\u30B9\u304C\u901F\u3081\u3067\u3059",
+    "trs.insufficient": "\u30C7\u30FC\u30BF\u53CE\u96C6\u4E2D\u2026",
+    "trs.in": "\u76F4\u8FD1",
+    "trs.days": "\u65E5\u9593",
+    "tka.title": "\u8A18\u9332\u306E\u6B69\u307F",
+    "tka.days": "\u65E5\u76EE",
+    "tka.m7": "1\u9031\u9593\u9054\u6210",
+    "tka.m30": "1\u30F6\u6708\u9054\u6210",
+    "tka.m60": "2\u30F6\u6708\u9054\u6210",
+    "tka.m90": "3\u30F6\u6708\u9054\u6210",
+    "tka.m180": "\u534A\u5E74\u9054\u6210",
+    "tka.m365": "1\u5E74\u9054\u6210",
+    "tka.m730": "2\u5E74\u9054\u6210",
+    "tka.m1095": "3\u5E74\u9054\u6210",
+    "tka.next": "\u6B21\u306E\u30DE\u30A4\u30EB\u30B9\u30C8\u30FC\u30F3\u307E\u3067",
+    "wcf.title": "\u63A8\u5B9A\u4F53\u91CD\u30EC\u30F3\u30B8",
+    "wcf.range": "\u7BC4\u56F2",
+    "wcf.sd": "\u6A19\u6E96\u504F\u5DEE",
+    "wcf.hint": "\u76F4\u8FD1\u306E\u8A18\u9332\u304B\u3089\u7B97\u51FA",
+    "mch.title": "\u6708\u5225\u4F53\u91CD\u5909\u5316",
+    "mch.nodata": "\u30C7\u30FC\u30BF\u4E0D\u8DB3",
+    "spk.title": "\u4F53\u91CD\u30B9\u30D1\u30FC\u30AF\u30E9\u30A4\u30F3",
+    "dcp.title": "\u8A18\u9332\u306E\u5145\u5B9F\u5EA6",
+    "dcp.days": "\u65E5\u8A18\u9332",
+    "dcp.of": "/",
+    "pb.title": "\u81EA\u5DF1\u30D9\u30B9\u30C8",
+    "pb.low": "\u6700\u8EFD\u91CF",
+    "pb.high": "\u6700\u91CD\u91CF",
+    "pb.newlow": "\u81EA\u5DF1\u30D9\u30B9\u30C8\u66F4\u65B0\uFF01",
+    "pb.from": "\u6700\u8EFD\u91CF\u307E\u3067"
   },
   en: {
     "app.title": "Rainbow Weight Log",
@@ -3306,7 +3691,68 @@ var translations = {
     "nav.entry": "Record",
     "nav.chart": "Trends",
     "nav.records": "List",
-    "nav.settings": "Settings"
+    "nav.settings": "Settings",
+    "sht.title": "Share Progress",
+    "sht.btn": "Copy",
+    "sht.copied": "Copied!",
+    "sht.current": "Current",
+    "sht.change": "Change",
+    "sht.days": "days",
+    "sht.streak": "Streak",
+    "sht.goal": "Goal progress",
+    "ecm.title": "Monthly Entries",
+    "ecm.entries": "entries",
+    "dfl.title": "Daily Fluctuation",
+    "dfl.avg": "Avg fluctuation",
+    "dfl.max": "Max fluctuation",
+    "dfl.stable": "Stable days",
+    "dfl.hint": "Days within \xB10.3kg counted as stable",
+    "gcd.title": "Goal Countdown",
+    "gcd.remaining": "Remaining",
+    "gcd.rate": "/day",
+    "gcd.eta": "Est. date",
+    "gcd.reached": "Goal reached!",
+    "gcd.notrend": "Calculating trend\u2026",
+    "gcd.wrong": "Trend moving away",
+    "wow.title": "Week over Week",
+    "wow.this": "This week",
+    "wow.last": "Last week",
+    "wow.change": "Change",
+    "trs.title": "Recent Trend",
+    "trs.losing_fast": "Great progress losing weight!",
+    "trs.losing": "Gradually losing weight",
+    "trs.stable": "Weight is stable",
+    "trs.gaining": "Slight upward trend",
+    "trs.gaining_fast": "Gaining weight quickly",
+    "trs.insufficient": "Collecting data\u2026",
+    "trs.in": "Last",
+    "trs.days": "days",
+    "tka.title": "Tracking Journey",
+    "tka.days": "days",
+    "tka.m7": "1 week reached",
+    "tka.m30": "1 month reached",
+    "tka.m60": "2 months reached",
+    "tka.m90": "3 months reached",
+    "tka.m180": "6 months reached",
+    "tka.m365": "1 year reached",
+    "tka.m730": "2 years reached",
+    "tka.m1095": "3 years reached",
+    "tka.next": "Next milestone in",
+    "wcf.title": "Estimated Weight Range",
+    "wcf.range": "Range",
+    "wcf.sd": "Std dev",
+    "wcf.hint": "Based on recent readings",
+    "mch.title": "Monthly Weight Change",
+    "mch.nodata": "Not enough data",
+    "spk.title": "Weight Sparkline",
+    "dcp.title": "Recording Score",
+    "dcp.days": "days recorded",
+    "dcp.of": "/",
+    "pb.title": "Personal Best",
+    "pb.low": "All-time low",
+    "pb.high": "All-time high",
+    "pb.newlow": "New personal best!",
+    "pb.from": "From lowest"
   }
 };
 function createTranslator(language) {
@@ -23901,12 +24347,18 @@ function applySystemTheme() {
   }
 }
 if (window.matchMedia) {
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  const handleThemeChange = () => {
     if (state.settings.autoTheme) {
       applySystemTheme();
       render();
     }
-  });
+  };
+  if (typeof mediaQuery.addEventListener === "function") {
+    mediaQuery.addEventListener("change", handleThemeChange);
+  } else if (typeof mediaQuery.addListener === "function") {
+    mediaQuery.addListener(handleThemeChange);
+  }
   applySystemTheme();
 }
 function loadState() {
@@ -24266,6 +24718,17 @@ function render() {
           ${renderCalorieEstimate()}
           ${renderBodyFatStats()}
           ${renderShareProgress()}
+          ${renderEntryCountByMonth()}
+          ${renderDailyFluctuation()}
+          ${renderGoalCountdown()}
+          ${renderWeekOverWeek()}
+          ${renderTrendSummary()}
+          ${renderTrackingAnniversary()}
+          ${renderWeightConfidence()}
+          ${renderMonthlyChange()}
+          ${renderWeightSparkline()}
+          ${renderDataCompleteness()}
+          ${renderPersonalBest()}
           ${state.records.length >= 3 ? `
           <div class="analytics-toggle-section">
             <button type="button" class="btn ghost full-width-btn" data-action="toggle-analytics">
@@ -24487,20 +24950,16 @@ function render() {
       <!-- Bottom Tab Bar -->
       <nav class="bottom-tabs" role="tablist" aria-label="Navigation">
         <button type="button" class="bottom-tab ${activeTab === "input" ? "active" : ""}" data-tab="input" role="tab" aria-selected="${activeTab === "input"}">
-          <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16m8-8H4"/></svg>
+          <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
           <span class="bottom-tab-label">${t("tab.input")}</span>
-        </button>
-        <button type="button" class="bottom-tab ${activeTab === "graph" ? "active" : ""}" data-tab="graph" role="tab" aria-selected="${activeTab === "graph"}">
-          <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          <span class="bottom-tab-label">${t("tab.graph")}</span>
         </button>
         <button type="button" class="bottom-tab ${activeTab === "calendar" ? "active" : ""}" data-tab="calendar" role="tab" aria-selected="${activeTab === "calendar"}">
           <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           <span class="bottom-tab-label">${t("tab.calendar")}</span>
         </button>
-        <button type="button" class="bottom-tab ${activeTab === "records" ? "active" : ""}" data-tab="records" role="tab" aria-selected="${activeTab === "records"}">
-          <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-          <span class="bottom-tab-label">${t("tab.records")}</span>
+        <button type="button" class="bottom-tab ${activeTab === "graph" ? "active" : ""}" data-tab="graph" role="tab" aria-selected="${activeTab === "graph"}">
+          <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></svg>
+          <span class="bottom-tab-label">${t("tab.graph")}</span>
         </button>
         <button type="button" class="bottom-tab ${activeTab === "settings" ? "active" : ""}" data-tab="settings" role="tab" aria-selected="${activeTab === "settings"}">
           <svg class="bottom-tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -25298,6 +25757,216 @@ function renderShareProgress() {
     </div>
   `;
 }
+function renderEntryCountByMonth() {
+  const data = calcEntryCountByMonth(state.records);
+  if (!data) return "";
+  const bars = data.months.map((m) => {
+    const pct = Math.round(m.count / data.maxCount * 100);
+    const label = m.yearMonth.slice(5);
+    return `<div class="ecm-col">
+      <div class="ecm-bar-wrap"><div class="ecm-bar" style="height:${pct}%"></div></div>
+      <div class="ecm-count">${m.count}</div>
+      <div class="ecm-label">${label}</div>
+    </div>`;
+  }).join("");
+  return `
+    <div class="ecm-section">
+      <div class="helper">${t("ecm.title")}</div>
+      <div class="ecm-chart">${bars}</div>
+    </div>
+  `;
+}
+function renderDailyFluctuation() {
+  const data = calcDailyFluctuation(state.records);
+  if (!data) return "";
+  const barMax = data.maxFluctuation || 1;
+  const bars = data.fluctuations.map((f) => {
+    const pct = Math.round(f.change / barMax * 100);
+    const color = f.change <= 0.3 ? "var(--accent)" : f.change <= 0.5 ? "var(--warning, orange)" : "var(--danger, #ef4444)";
+    return `<div class="dfl-bar" style="height:${pct}%;background:${color}" title="${f.dt}: ${f.change}kg"></div>`;
+  }).join("");
+  return `
+    <div class="dfl-section">
+      <div class="helper">${t("dfl.title")}</div>
+      <div class="dfl-stats">
+        <span>${t("dfl.avg")}: ${data.avgFluctuation}kg</span>
+        <span>${t("dfl.max")}: ${data.maxFluctuation}kg</span>
+        <span>${t("dfl.stable")}: ${data.stablePct}%</span>
+      </div>
+      <div class="dfl-chart">${bars}</div>
+      <div class="helper" style="font-size:0.6rem;margin-top:4px">${t("dfl.hint")}</div>
+    </div>
+  `;
+}
+function renderGoalCountdown() {
+  const goal = Number(state.settings.goalWeight);
+  if (!goal) return "";
+  const data = calcGoalCountdown(state.records, goal);
+  if (!data) return "";
+  if (data.reached) {
+    return `<div class="gcd-section"><div class="helper">${t("gcd.title")}</div><div class="gcd-reached">${t("gcd.reached")}</div></div>`;
+  }
+  const arrow = data.direction === "lose" ? "\u2193" : "\u2191";
+  let etaText;
+  if (data.etaDays != null) {
+    etaText = `${t("gcd.eta")}: ~${data.etaDays}${t("sht.days")}`;
+  } else {
+    etaText = t("gcd.notrend");
+  }
+  return `
+    <div class="gcd-section">
+      <div class="helper">${t("gcd.title")}</div>
+      <div class="gcd-main">
+        <span class="gcd-arrow">${arrow}</span>
+        <span class="gcd-remaining">${t("gcd.remaining")} ${data.absRemaining}kg</span>
+      </div>
+      <div class="gcd-progress">
+        <div class="gcd-bar" style="width:${data.pct}%"></div>
+      </div>
+      <div class="gcd-detail">
+        <span>${data.latest}kg \u2192 ${data.goal}kg</span>
+        <span>${etaText}</span>
+      </div>
+    </div>
+  `;
+}
+function renderWeekOverWeek() {
+  const data = calcWeekOverWeek(state.records);
+  if (!data) return "";
+  const sign = data.change > 0 ? "+" : "";
+  const cls = data.direction === "down" ? "loss" : data.direction === "up" ? "gain" : "neutral";
+  return `
+    <div class="wow-section">
+      <div class="helper">${t("wow.title")}</div>
+      <div class="wow-grid">
+        <div class="wow-col">
+          <div class="wow-label">${t("wow.last")}</div>
+          <div class="wow-val">${data.lastWeekAvg}kg</div>
+          <div class="wow-count">(${data.lastWeekCount})</div>
+        </div>
+        <div class="wow-arrow ${cls}">${sign}${data.change}kg</div>
+        <div class="wow-col">
+          <div class="wow-label">${t("wow.this")}</div>
+          <div class="wow-val">${data.thisWeekAvg}kg</div>
+          <div class="wow-count">(${data.thisWeekCount})</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function renderTrendSummary() {
+  const data = calcTrendSummary(state.records);
+  if (!data) return "";
+  const icons = { losing_fast: "\u{1F525}", losing: "\u{1F4C9}", stable: "\u2696\uFE0F", gaining: "\u{1F4C8}", gaining_fast: "\u26A0\uFE0F", insufficient: "\u{1F4CA}" };
+  const icon = icons[data.status] || "";
+  const msg = t(`trs.${data.status}`);
+  const detail = data.status !== "insufficient" ? `${t("trs.in")}${data.days}${t("trs.days")}: ${data.changeKg > 0 ? "+" : ""}${data.changeKg}kg` : "";
+  return `
+    <div class="trs-section">
+      <div class="helper">${t("trs.title")}</div>
+      <div class="trs-card trs-${data.status}">
+        <span class="trs-icon">${icon}</span>
+        <div class="trs-text">
+          <div class="trs-msg">${msg}</div>
+          ${detail ? `<div class="trs-detail">${detail}</div>` : ""}
+        </div>
+      </div>
+    </div>
+  `;
+}
+function renderTrackingAnniversary() {
+  const data = calcTrackingAnniversary(state.records);
+  if (!data || !data.milestone) return "";
+  const badge = t(`tka.m${data.milestone}`);
+  const nextText = data.nextMilestoneDays != null ? `${t("tka.next")} ${data.nextMilestoneDays}${t("tka.days")}` : "";
+  return `
+    <div class="tka-section">
+      <div class="helper">${t("tka.title")}</div>
+      <div class="tka-card">
+        <div class="tka-days">${data.totalDays}${t("tka.days")}</div>
+        <div class="tka-badge">${badge}</div>
+        ${nextText ? `<div class="tka-next">${nextText}</div>` : ""}
+      </div>
+    </div>
+  `;
+}
+function renderWeightConfidence() {
+  const data = calcWeightConfidence(state.records);
+  if (!data) return "";
+  const f7 = data.forecasts[0];
+  return `
+    <div class="wcf-section">
+      <div class="helper">${t("wcf.title")}</div>
+      <div class="wcf-card">
+        <div class="wcf-center">${data.latest}kg</div>
+        <div class="wcf-range">${t("wcf.range")}: ${f7.low}kg ~ ${f7.high}kg</div>
+        <div class="wcf-sd">${t("wcf.sd")}: \xB1${data.stdDev}kg</div>
+      </div>
+      <div class="helper" style="font-size:0.6rem;margin-top:4px">${t("wcf.hint")}</div>
+    </div>
+  `;
+}
+function renderMonthlyChange() {
+  const data = calcMonthlyChange(state.records);
+  if (!data) return "";
+  const rows = data.months.map((m) => {
+    const label = m.yearMonth.slice(5);
+    if (m.change === null) return `<div class="mch-row"><span class="mch-label">${label}</span><span class="mch-val mch-na">${t("mch.nodata")}</span></div>`;
+    const cls = m.change < 0 ? "loss" : m.change > 0 ? "gain" : "neutral";
+    const sign = m.change > 0 ? "+" : "";
+    return `<div class="mch-row"><span class="mch-label">${label}</span><span class="mch-val ${cls}">${sign}${m.change}kg</span></div>`;
+  }).join("");
+  return `
+    <div class="mch-section">
+      <div class="helper">${t("mch.title")}</div>
+      <div class="mch-list">${rows}</div>
+    </div>
+  `;
+}
+function renderWeightSparkline() {
+  const data = calcWeightSparkline(state.records);
+  if (!data) return "";
+  return `
+    <div class="spk-section">
+      <div class="helper">${t("spk.title")}</div>
+      <div class="spk-line">${data.sparkline}</div>
+      <div class="spk-range">${data.min}kg \u2014 ${data.max}kg</div>
+    </div>
+  `;
+}
+function renderDataCompleteness() {
+  const data = calcDataCompleteness(state.records);
+  if (!data) return "";
+  const color = data.grade === "A" ? "var(--accent)" : data.grade === "B" ? "var(--accent)" : data.grade === "C" ? "var(--warning, orange)" : "var(--danger, #ef4444)";
+  return `
+    <div class="dcp-section">
+      <div class="helper">${t("dcp.title")}</div>
+      <div class="dcp-card">
+        <div class="dcp-grade" style="color:${color}">${data.grade}</div>
+        <div class="dcp-info">
+          <div class="dcp-pct">${data.pct}%</div>
+          <div class="dcp-detail">${data.recordedDays}${t("dcp.of")}${data.totalDays}${t("dcp.days")}</div>
+        </div>
+        <div class="dcp-bar-wrap"><div class="dcp-bar" style="width:${data.pct}%;background:${color}"></div></div>
+      </div>
+    </div>
+  `;
+}
+function renderPersonalBest() {
+  const data = calcPersonalBest(state.records);
+  if (!data) return "";
+  return `
+    <div class="pb-section">
+      <div class="helper">${t("pb.title")}</div>
+      <div class="pb-card">
+        ${data.isNewLow ? `<div class="pb-new">${t("pb.newlow")}</div>` : ""}
+        <div class="pb-row"><span>${t("pb.low")}</span><span class="pb-val">${data.allTimeLow}kg <span class="pb-dt">(${data.lowDt})</span></span></div>
+        <div class="pb-row"><span>${t("pb.high")}</span><span class="pb-val">${data.allTimeHigh}kg</span></div>
+        ${!data.isNewLow ? `<div class="pb-dist">${t("pb.from")}: +${data.distFromLow}kg</div>` : ""}
+      </div>
+    </div>
+  `;
+}
 function renderRecordList() {
   let filtered = filterRecords(state.records, recordSearchQuery);
   filtered = filterRecordsByDateRange(filtered, recordDateFrom, recordDateTo);
@@ -26069,7 +26738,7 @@ function downloadFile(content, filename, mimeType) {
   anchor.href = url;
   anchor.download = filename;
   anchor.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1e3);
 }
 async function shareChart() {
   const canvas = document.getElementById("chart");
@@ -26094,7 +26763,7 @@ async function shareChart() {
     a.href = url;
     a.download = `weight-chart-${todayLocal()}.png`;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1e3);
     setStatus(t("share.done"));
   } catch {
     setStatus(t("share.error"), "error");
