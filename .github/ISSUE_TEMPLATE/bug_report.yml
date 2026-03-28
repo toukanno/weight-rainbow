@@ -1,0 +1,52 @@
+name: Bug Report / 不具合報告
+description: Report a bug in Rainbow Weight Log
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened? / 何が起きましたか？
+      placeholder: Describe the bug clearly.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / 再現手順
+      placeholder: |
+        1. Go to ...
+        2. Tap ...
+        3. See error
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform / プラットフォーム
+      options:
+        - iOS App
+        - Web (Safari)
+        - Web (Chrome)
+        - Web (Other)
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device / 端末
+      placeholder: e.g. iPhone 15, iPad Air 5
+  - type: input
+    id: os_version
+    attributes:
+      label: OS Version / OSバージョン
+      placeholder: e.g. iOS 17.4
+  - type: input
+    id: app_version
+    attributes:
+      label: App Version / アプリバージョン
+      placeholder: e.g. 1.0.0
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / スクリーンショット
+      placeholder: Drag and drop images here if applicable.
