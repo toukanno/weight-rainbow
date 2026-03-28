@@ -7,7 +7,7 @@
 - Secondary Category: Lifestyle
 - Content Rights: No third-party protected content
 - Age Rating: 4+
-- SKU: choose an internal identifier such as `rainbow-weight-log-ios`
+- SKU: rainbow-weight-log-ios
 
 ## Promotional Text
 Track weight with photo, voice, or manual entry while keeping your personal data on this device.
@@ -37,15 +37,16 @@ weight,bmi,health,tracker,wellness,local,privacy,scale
 - Health or fitness claims: Wellness reference only, not medical diagnosis
 - User content handling: Photo and voice are used only for input assistance and are not uploaded
 
-## URLs You Need To Provide
-- Support URL: your production support page
-- Marketing URL: optional
-- Privacy Policy URL: your public privacy policy page
+## URLs
+- Support URL: https://toukanno.github.io/weight-rainbow/support.html
+- Privacy Policy URL: https://toukanno.github.io/weight-rainbow/privacy-policy.html
+- Marketing URL: (optional, omit if you do not have a product site yet)
 
-## URL requirements
-- Support URL should explain how users contact you and where release notes or help live
-- Privacy Policy URL should be public, stable, and explicitly state that the current build stores data locally on device
-- Marketing URL can be omitted if you do not have a product site yet
+## URL notes
+- Both pages are hosted via GitHub Pages from the `docs/` directory
+- To enable GitHub Pages: go to repo Settings > Pages > Source: Deploy from a branch > Branch: main, folder: /docs
+- Support URL explains how users contact you and where release notes or help live
+- Privacy Policy URL is public, stable, and explicitly states that data is stored locally on device
 
 ## Review information to prepare
 - Contact first name / last name
@@ -59,7 +60,7 @@ weight,bmi,health,tracker,wellness,local,privacy,scale
   - No ad SDK, ATT prompt, or tracking is included in this build
 
 ## Remaining fill-ins before submission
-- Replace the placeholder Support URL with the real production page
-- Replace the placeholder Privacy Policy URL with the real public page
+- Enable GitHub Pages on the repository (Settings > Pages > main branch, /docs folder)
+- Confirm the Support URL and Privacy Policy URL are accessible
 - Confirm whether you want to provide a Marketing URL
 - Confirm the final app name shown in App Store Connect matches the localized display name strategy

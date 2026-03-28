@@ -1,0 +1,26 @@
+name: Feature Request / 機能要望
+description: Suggest a new feature for Rainbow Weight Log
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / 困っていること
+      placeholder: What problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution / 提案する解決策
+      placeholder: Describe what you'd like to happen.
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform / プラットフォーム
+      options:
+        - Both / 両方
+        - iOS App
+        - Web
