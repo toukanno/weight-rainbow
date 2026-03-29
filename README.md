@@ -193,6 +193,7 @@ weight-rainbow/
 | `npm run check` | テスト + 構文チェック |
 | `npm run native:sync` | Web ビルド + Capacitor iOS 同期 |
 | `npm run native:open` | Xcode でプロジェクトを開く |
+| `npm run release:ios:check` | iOS リリース前の事前チェック（バージョン整合・必須ファイル・URL形式） |
 
 ## テスト
 
@@ -211,6 +212,7 @@ npm test
 - [App Store Connect メタデータ](./docs/app-store-connect-metadata.md)
 - [Apple レビュー用ノート](./docs/apple-review-notes.md)
 - [提出チェックリスト](./docs/submission-checklist.md)
+- [iOSリリース実行ランブック（日本語）](./docs/ios-release-runbook-ja.md)
 
 ---
 
