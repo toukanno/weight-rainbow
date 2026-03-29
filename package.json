@@ -9,7 +9,8 @@
     "test:watch": "vitest",
     "check": "npm test && node --check src/app.js && node --check src/logic.js && node --check src/i18n.js && node --check scripts/prepare-web.mjs",
     "native:sync": "npm run prepare:web && npx cap sync ios",
-    "native:open": "npx cap open ios"
+    "native:open": "npx cap open ios",
+    "release:ios:check": "node scripts/release-readiness.mjs"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",

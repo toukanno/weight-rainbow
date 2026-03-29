@@ -34,6 +34,13 @@
 - [ ] Verify App Privacy answers match the final wrapper and any future ad SDK choice
 - [ ] Confirm the app is allowed for Apple Silicon Macs as a Designed for iPad app unless a dedicated Catalyst/macOS target is later added
 
+
+## Automated preflight (recommended)
+- [ ] `npm run check`
+- [ ] `npm run native:sync`
+- [ ] `npm run release:ios:check`
+- [ ] Open `ios/App` in Xcode and run one local `Product > Build` before Archive
+
 ## Before archive
 - [ ] `sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer` has been run on the release Mac
 - [ ] Xcode target `App` has the correct Team (F6WLVDWAYF), bundle identifier (com.weightrainbow.app), version (1.0.0), and build number (1)
